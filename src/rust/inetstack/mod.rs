@@ -66,14 +66,6 @@ pub struct SharedInetStack(SharedObject<InetStack>);
 impl SharedInetStack {
     pub fn new<P: PhysicalLayer>(
         config: &Config,
-        runtime: SharedDemiRuntime,
-        layer1_endpoint: P,
-    ) -> Result<Self, Fail> {
-        SharedInetStack::new_test(config, runtime, layer1_endpoint)
-    }
-
-    pub fn new_test<P: PhysicalLayer>(
-        config: &Config,
         mut runtime: SharedDemiRuntime,
         layer1_endpoint: P,
     ) -> Result<Self, Fail> {

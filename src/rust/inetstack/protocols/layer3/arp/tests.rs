@@ -214,6 +214,6 @@ fn build_arp_query(local_mac: &MacAddress, local_ipv4: &Ipv4Addr, remote_ipv4: &
 
 /// Creates a new engine.
 fn new_engine(now: Instant, config_path: &str) -> Result<SharedEngine> {
-    let layer1_endpoint: SharedTestPhysicalLayer = SharedTestPhysicalLayer::new_test(now);
+    let layer1_endpoint: SharedTestPhysicalLayer = SharedTestPhysicalLayer::new(now);
     Ok(SharedEngine::new(config_path, layer1_endpoint, now)?)
 }

@@ -51,7 +51,7 @@ impl SharedEngine {
     pub fn new(config_path: &str, layer1_endpoint: SharedTestPhysicalLayer, now: Instant) -> Result<Self, Fail> {
         let config: Config = Config::new(config_path.to_string())?;
         let runtime: SharedDemiRuntime = SharedDemiRuntime::new(now);
-        let transport: SharedInetStack = SharedInetStack::new_test(&config, runtime.clone(), layer1_endpoint.clone())?;
+        let transport: SharedInetStack = SharedInetStack::new(&config, runtime.clone(), layer1_endpoint.clone())?;
 
         Ok(Self(SharedObject::new(Engine {
             libos: SharedNetworkLibOS::<SharedInetStack>::new(runtime, transport),
