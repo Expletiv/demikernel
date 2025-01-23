@@ -35,13 +35,13 @@ pub struct DummyLibOS(SharedNetworkLibOS<SharedInetStack>);
 
 impl DummyLibOS {
     /// Initializes the libOS.
-    pub fn new_test(config_path: &str, tx: Sender<DemiBuffer>, rx: Receiver<DemiBuffer>) -> Result<Self, Fail> {
+    pub fn new(config_path: &str, tx: Sender<DemiBuffer>, rx: Receiver<DemiBuffer>) -> Result<Self, Fail> {
         let config: Config = Config::new(config_path.to_string())?;
         let runtime: SharedDemiRuntime = SharedDemiRuntime::default();
         let network: SharedDummyRuntime = SharedDummyRuntime::new(rx, tx);
 
         logging::initialize();
-        let transport = SharedInetStack::new_test(&config, runtime.clone(), network)?;
+        let transport = SharedInetStack::new(&config, runtime.clone(), network)?;
         Ok(Self(SharedNetworkLibOS::<SharedInetStack>::new(runtime, transport)))
     }
 

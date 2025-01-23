@@ -163,7 +163,7 @@ impl Simulation {
     ) -> Result<Simulation> {
         let now: Instant = Instant::now();
 
-        let test_rig: SharedTestPhysicalLayer = SharedTestPhysicalLayer::new_test(now);
+        let test_rig: SharedTestPhysicalLayer = SharedTestPhysicalLayer::new(now);
         let local: SharedEngine = SharedEngine::new(test_helpers::ALICE_CONFIG_PATH, test_rig, now)?;
 
         info!("Local: sockaddr={:?}, macaddr={:?}", local_ipv4, local_mac);

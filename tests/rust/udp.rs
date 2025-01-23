@@ -113,7 +113,7 @@ mod test {
     #[test]
     fn udp_setup() -> Result<()> {
         let (tx, rx): (Sender<DemiBuffer>, Receiver<DemiBuffer>) = crossbeam_channel::unbounded();
-        let mut libos: DummyLibOS = match DummyLibOS::new_test(ALICE_CONFIG_PATH, tx, rx) {
+        let mut libos: DummyLibOS = match DummyLibOS::new(ALICE_CONFIG_PATH, tx, rx) {
             Ok(libos) => libos,
             Err(e) => anyhow::bail!("Could not create inetstack: {:?}", e),
         };
@@ -129,7 +129,7 @@ mod test {
     #[test]
     fn udp_connect_loopback() -> Result<()> {
         let (tx, rx): (Sender<DemiBuffer>, Receiver<DemiBuffer>) = crossbeam_channel::unbounded();
-        let mut libos: DummyLibOS = match DummyLibOS::new_test(ALICE_CONFIG_PATH, tx, rx) {
+        let mut libos: DummyLibOS = match DummyLibOS::new(ALICE_CONFIG_PATH, tx, rx) {
             Ok(libos) => libos,
             Err(e) => anyhow::bail!("Could not create inetstack: {:?}", e),
         };
@@ -177,7 +177,7 @@ mod test {
         let alice_barrier: Arc<Barrier> = bob_barrier.clone();
 
         let alice: JoinHandle<Result<()>> = thread::Builder::new().name(format!("alice")).spawn(move || {
-            let mut libos: DummyLibOS = match DummyLibOS::new_test(ALICE_CONFIG_PATH, alice_tx, bob_rx) {
+            let mut libos: DummyLibOS = match DummyLibOS::new(ALICE_CONFIG_PATH, alice_tx, bob_rx) {
                 Ok(libos) => libos,
                 Err(e) => anyhow::bail!("Could not create inetstack: {:?}", e),
             };
@@ -246,7 +246,7 @@ mod test {
         })?;
 
         let bob: JoinHandle<Result<()>> = thread::Builder::new().name(format!("bob")).spawn(move || {
-            let mut libos: DummyLibOS = match DummyLibOS::new_test(BOB_CONFIG_PATH, bob_tx, alice_rx) {
+            let mut libos: DummyLibOS = match DummyLibOS::new(BOB_CONFIG_PATH, bob_tx, alice_rx) {
                 Ok(libos) => libos,
                 Err(e) => anyhow::bail!("Could not create inetstack: {:?}", e),
             };
@@ -336,7 +336,7 @@ mod test {
         let alice_barrier: Arc<Barrier> = bob_barrier.clone();
 
         let alice: JoinHandle<Result<()>> = thread::Builder::new().name(format!("alice")).spawn(move || {
-            let mut libos: DummyLibOS = match DummyLibOS::new_test(ALICE_CONFIG_PATH, alice_tx, bob_rx) {
+            let mut libos: DummyLibOS = match DummyLibOS::new(ALICE_CONFIG_PATH, alice_tx, bob_rx) {
                 Ok(libos) => libos,
                 Err(e) => anyhow::bail!("Could not create inetstack: {:?}", e),
             };
@@ -405,7 +405,7 @@ mod test {
         })?;
 
         let bob = thread::Builder::new().name(format!("bob")).spawn(move || {
-            let mut libos: DummyLibOS = match DummyLibOS::new_test(ALICE_CONFIG_PATH, bob_tx, alice_rx) {
+            let mut libos: DummyLibOS = match DummyLibOS::new(ALICE_CONFIG_PATH, bob_tx, alice_rx) {
                 Ok(libos) => libos,
                 Err(e) => anyhow::bail!("Could not create inetstack: {:?}", e),
             };
