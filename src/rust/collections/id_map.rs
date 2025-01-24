@@ -5,8 +5,18 @@
 // Imports
 //======================================================================================================================
 
+//! The "direct-mapping" feature is used to expose internal ids directly to the user. This is useful for debugging and
+//! testing purposes. BEWARE: Turning on this feature will have a performance impact.
+
+use ::std::hash::Hash;
+
+#[cfg(not(feature = "direct-mapping"))]
 use ::rand::{rngs::SmallRng, RngCore, SeedableRng};
-use ::std::{collections::HashMap, hash::Hash};
+#[cfg(not(feature = "direct-mapping"))]
+use ::std::collections::HashMap;
+
+#[cfg(feature = "direct-mapping")]
+use std::marker::PhantomData;
 
 //======================================================================================================================
 // Constants
@@ -18,22 +28,24 @@ use ::std::{collections::HashMap, hash::Hash};
 /// Direct vs indirect mapping: 152 for direct, indirect is below.
 /// Randomize vs non random: 332ns vs 154ns
 
-/// This flag controls whether we actually use a mapping or just directly expose internal IDs.
-/// We should eventually set this using an environment variable.
-const DIRECT_MAPPING: bool = false;
 /// This flag controls how the ids are allocated, either randomly or in a Fibonacci sequence.
+#[cfg(not(feature = "direct-mapping"))]
 #[cfg(debug_assertions)]
 const RANDOMIZE: bool = true;
+#[cfg(not(feature = "direct-mapping"))]
 #[cfg(not(debug_assertions))]
 const RANDOMIZE: bool = false;
 
 /// Arbitrary size chosen to pre-allocate the hashmap. This improves performance by 6ns on average on our scheduler
 /// insert benchmark.
+#[cfg(not(feature = "direct-mapping"))]
 const DEFAULT_SIZE: usize = 1024;
 
 /// Seed for the random number generator used to generate tokens.
 /// This value was chosen arbitrarily.
+#[cfg(not(feature = "direct-mapping"))]
 const SCHEDULER_SEED: u64 = 42;
+#[cfg(not(feature = "direct-mapping"))]
 const MAX_RETRIES_ID_ALLOC: usize = 500;
 
 //======================================================================================================================
@@ -43,6 +55,7 @@ const MAX_RETRIES_ID_ALLOC: usize = 500;
 /// This data structure is a general-purpose map for obfuscating ids from external modules. It takes an external id type
 /// and an internal id type and translates between the two. The ID types must be basic types that can be converted back
 /// and forth between u64 and therefore each other.
+#[cfg(not(feature = "direct-mapping"))]
 #[derive(Debug)]
 pub struct IdMap<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Copy> {
     /// Map between external and internal ids.
@@ -52,66 +65,39 @@ pub struct IdMap<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Int
     /// For non-random id generation, we keep the last 2 id numbers for a Fibonacci calculation.
     last_id: u64,
     current_id: u64,
-    #[cfg(test)]
-    /// For direct mapping, we keep track of the total number of mappings with a counter.
-    num_mappings: usize,
+}
+
+#[cfg(feature = "direct-mapping")]
+#[derive(Debug)]
+pub struct IdMap<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Copy> {
+    _phantom: PhantomData<(E, I)>,
 }
 
 //======================================================================================================================
 // Associate Functions
 //======================================================================================================================
 
+#[cfg(not(feature = "direct-mapping"))]
 impl<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Copy> IdMap<E, I> {
-    /// Retrieve a mapping for this external id if it exists. If we are using a direct mapping, this operation always
-    /// succeeds, so DO NOT use this function to check for the existance of a particular key. We expect the user to use
-    /// nother data structure for validity.
     pub fn get(&self, external_id: &E) -> Option<I> {
-        // If we are not obfuscating ids, just return the external id.
-        if DIRECT_MAPPING {
-            Some(<E as Into<u64>>::into(*external_id).into())
-        } else {
-            self.ids.get(external_id).copied()
-        }
+        self.ids.get(external_id).copied()
     }
 
     #[allow(dead_code)]
-    /// Insert a mapping between a specified external and internal id. If we are using a direct mapping,
-    /// then this is a no op.
+    /// Insert a mapping between a specified external and internal id.
     pub fn insert(&mut self, external_id: E, internal_id: I) -> Option<I> {
-        if DIRECT_MAPPING {
-            #[cfg(test)]
-            {
-                self.num_mappings = self.num_mappings + 1;
-            }
-            None
-        } else {
-            self.ids.insert(external_id, internal_id)
-        }
+        self.ids.insert(external_id, internal_id)
     }
 
     /// Remove a mapping between a specificed external and internal id. If the mapping exists, then return the internal
-    /// id mapped to the external id. If we are using a direct mapping, then this is a no op.
+    /// id mapped to the external id.
     pub fn remove(&mut self, external_id: &E) -> Option<I> {
-        if DIRECT_MAPPING {
-            #[cfg(test)]
-            {
-                self.num_mappings = self.num_mappings - 1;
-            }
-            Some(<E as Into<u64>>::into(*external_id).into())
-        } else {
-            self.ids.remove(external_id)
-        }
+        self.ids.remove(external_id)
     }
 
     /// Generate a new id and insert the mapping to the internal id. If the id is currently in use, keep generating
-    /// until we find an unused id (up to a maximum number of tries). If we are using a direct mapping, then just
-    /// return the internal id without generating a new id or inserting a mapping.
+    /// until we find an unused id (up to a maximum number of tries).
     pub fn insert_with_new_id(&mut self, internal_id: I) -> E {
-        // If we are not obfuscating ids, just return the external id.
-        if DIRECT_MAPPING {
-            return E::from(internal_id.into());
-        }
-
         if RANDOMIZE {
             // Otherwise, allocate a new external id.
             for _ in 0..MAX_RETRIES_ID_ALLOC {
@@ -142,11 +128,25 @@ impl<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Cop
 
     #[cfg(test)]
     pub fn len(&self) -> usize {
-        if DIRECT_MAPPING {
-            self.num_mappings
-        } else {
-            self.ids.len()
-        }
+        self.ids.len()
+    }
+}
+
+#[cfg(feature = "direct-mapping")]
+impl<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Copy> IdMap<E, I> {
+    #[inline(always)]
+    pub fn get(&self, external_id: &E) -> Option<I> {
+        Some(<E as Into<u64>>::into(*external_id).into())
+    }
+
+    #[inline(always)]
+    pub fn remove(&mut self, external_id: &E) -> Option<I> {
+        Some(<E as Into<u64>>::into(*external_id).into())
+    }
+
+    #[inline(always)]
+    pub fn insert_with_new_id(&mut self, internal_id: I) -> E {
+        E::from(internal_id.into())
     }
 }
 
@@ -154,7 +154,7 @@ impl<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Cop
 // Trait Implementations
 //======================================================================================================================
 
-/// A default implementation for the external to internal id map.
+#[cfg(not(feature = "direct-mapping"))]
 impl<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Copy> Default for IdMap<E, I> {
     fn default() -> Self {
         Self {
@@ -163,8 +163,13 @@ impl<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Cop
             rng: SmallRng::seed_from_u64(SCHEDULER_SEED),
             last_id: 1,
             current_id: 2,
-            #[cfg(test)]
-            num_mappings: 0,
         }
+    }
+}
+
+#[cfg(feature = "direct-mapping")]
+impl<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Copy> Default for IdMap<E, I> {
+    fn default() -> Self {
+        Self { _phantom: PhantomData }
     }
 }

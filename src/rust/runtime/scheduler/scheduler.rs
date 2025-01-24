@@ -125,6 +125,7 @@ impl Scheduler {
         }
     }
 
+    #[cfg(not(feature = "direct-mapping"))]
     #[cfg(test)]
     pub fn num_tasks(&self) -> usize {
         let mut num_tasks: usize = 0;

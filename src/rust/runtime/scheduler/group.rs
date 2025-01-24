@@ -191,6 +191,7 @@ impl TaskGroup {
         }
     }
 
+    #[cfg(not(feature = "direct-mapping"))]
     #[cfg(test)]
     pub fn num_tasks(&self) -> usize {
         self.ids.len()
