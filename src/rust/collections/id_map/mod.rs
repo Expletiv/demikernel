@@ -20,11 +20,9 @@ const RANDOMIZE: bool = true;
 const RANDOMIZE: bool = false;
 
 pub struct IdMap<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Copy> {
-    /// Map between external and internal ids.
-    #[cfg(feature = "direct-mapping")]
-    num_entries: usize,
     #[cfg(feature = "direct-mapping")]
     _phantom: PhantomData<(E, I)>,
+    /// Map between external and internal ids.
     #[cfg(not(feature = "direct-mapping"))]
     ids: HashMap<E, I>,
     /// Small random number generator for external ids.
