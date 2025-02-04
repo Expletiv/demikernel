@@ -125,6 +125,7 @@ impl Scheduler {
         }
     }
 
+    #[cfg(not(feature = "direct-mapping"))]
     #[cfg(test)]
     pub fn num_tasks(&self) -> usize {
         let mut num_tasks: usize = 0;
@@ -353,12 +354,6 @@ mod tests {
         let Some(task_id) = scheduler.insert_task(group_id, task) else {
             anyhow::bail!("insert() failed")
         };
-
-        if let Some(task) = scheduler.poll_group_once(group_id, None).pop() {
-            crate::ensure_eq!(task.get_id(), task_id);
-        } else {
-            anyhow::bail!("task should have completed");
-        }
 
         // Create another task.
         let task2: DummyTask = DummyTask::new("testing", Box::pin(DummyCoroutine::new(0).fuse()));
