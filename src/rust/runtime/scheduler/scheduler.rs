@@ -367,7 +367,7 @@ mod tests {
     }
 
     #[bench]
-    fn benchmark_insert(b: &mut Bencher) {
+    fn insert_bench(b: &mut Bencher) {
         let mut scheduler: Scheduler = Scheduler::default();
         let group_id: TaskId = scheduler.create_group();
 
@@ -382,7 +382,7 @@ mod tests {
     }
 
     #[bench]
-    fn benchmark_poll_one_task(b: &mut Bencher) {
+    fn poll_one_task_bench(b: &mut Bencher) {
         let mut scheduler: Scheduler = Scheduler::default();
         let group_id: TaskId = scheduler.create_group();
 
@@ -403,7 +403,7 @@ mod tests {
     }
 
     #[bench]
-    fn benchmark_poll_many_tasks_until_done(b: &mut Bencher) {
+    fn poll_many_tasks_until_done_bench(b: &mut Bencher) {
         let mut scheduler: Scheduler = Scheduler::default();
         let group_id: TaskId = scheduler.create_group();
 

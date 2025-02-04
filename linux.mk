@@ -168,6 +168,9 @@ clean-examples-rust:
 # Benchmarks
 #=======================================================================================================================
 
+bench:
+	$(CARGO) bench $(CARGO_FEATURES) $(CARGO_FLAGS) -- --nocapture
+
 all-benchmarks-c: all-libs
 	$(MAKE) -C benchmarks all
 
