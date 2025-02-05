@@ -40,11 +40,6 @@ impl<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Cop
         warn!("Could not find a valid task id");
         None
     }
-
-    #[cfg(test)]
-    pub fn len(&self) -> usize {
-        self.ids.len()
-    }
 }
 
 //======================================================================================================================
