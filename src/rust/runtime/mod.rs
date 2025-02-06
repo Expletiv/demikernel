@@ -586,14 +586,14 @@ mod tests {
     }
 
     #[bench]
-    fn benchmark_insert_io_coroutine(b: &mut Bencher) {
+    fn insert_io_coroutine_bench(b: &mut Bencher) {
         let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
 
         b.iter(|| runtime.insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(10).fuse())));
     }
 
     #[bench]
-    fn benchmark_insert_background_coroutine(b: &mut Bencher) {
+    fn insert_background_coroutine_bench(b: &mut Bencher) {
         let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
 
         b.iter(|| {
@@ -605,7 +605,7 @@ mod tests {
     }
 
     #[bench]
-    fn benchmark_run_any_fine(b: &mut Bencher) {
+    fn wait_any_nonpolling_coroutine_bench(b: &mut Bencher) {
         const NUM_TASKS: usize = 1024;
         let mut qts: [QToken; NUM_TASKS] = [QToken::from(0); NUM_TASKS];
         let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
@@ -621,7 +621,7 @@ mod tests {
     }
 
     #[bench]
-    fn benchmark_run_any_background_long(b: &mut Bencher) {
+    fn wait_any_io_polling_coroutine_bench(b: &mut Bencher) {
         const NUM_TASKS: usize = 1024;
         let mut qts: [QToken; NUM_TASKS] = [QToken::from(0); NUM_TASKS];
         let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
