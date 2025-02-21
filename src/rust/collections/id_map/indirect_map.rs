@@ -10,6 +10,9 @@
 const DEFAULT_SIZE: usize = 1024;
 /// An arbitrary upper bound to find a unique id.
 const MAX_RETRIES_ID_ALLOC: usize = 500;
+/// Seed for the random number generator.
+#[cfg(debug_assertions)]
+const RNG_SEED: u64 = 42;
 
 //======================================================================================================================
 // Associate Functions
@@ -40,6 +43,17 @@ impl<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Cop
         warn!("Could not find a valid task id");
         None
     }
+
+    #[cfg(debug_assertions)]
+    fn generate_id(&mut self) -> u64 {
+        self.rng.next_u64()
+    }
+
+    #[cfg(not(debug_assertions))]
+    fn generate_id(&mut self) -> u64 {
+        self.current_id = self.current_id.wrapping_add(1);
+        self.current_id
+    }
 }
 
 //======================================================================================================================
@@ -51,9 +65,10 @@ impl<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Cop
         Self {
             // Don't need to pre-allocate, the overhead is a 6ns on the scheduler insert benchmark.
             ids: HashMap::<E, I>::with_capacity(DEFAULT_SIZE),
-            rng: SmallRng::seed_from_u64(ID_SEED),
-            last_id: 1,
-            current_id: 2,
+            #[cfg(debug_assertions)]
+            rng: SmallRng::seed_from_u64(RNG_SEED),
+            #[cfg(not(debug_assertions))]
+            current_id: 1,
         }
     }
 }
