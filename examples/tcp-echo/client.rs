@@ -113,11 +113,17 @@ impl TcpEchoClient {
                     let time_elapsed: f64 = (Instant::now() - last_log).as_secs() as f64;
                     let rps: f64 = self.nechoed as f64 / time_elapsed;
                     println!(
-                        "INFO: {:?} requests, {:2?} rps, p50 {:?} ns, p99 {:?} ns",
+                        "INFO: {:?} requests, {:2?} rps, p50: {:?} ns, p90: {:?} ns, p99: {:?} ns, p99.9: {:?} ns, p99.99: {:?} ns, p99.999: {:?} ns, p99.9999: {:?} ns, p100: {:?} ns",
                         self.nechoed,
                         rps,
-                        self.stats.percentile(0.50)?.unwrap().start(),
-                        self.stats.percentile(0.99)?.unwrap().start(),
+                        self.stats.percentile(50f64)?.unwrap().start(),
+                        self.stats.percentile(90f64)?.unwrap().start(),
+                        self.stats.percentile(99f64)?.unwrap().start(),
+                        self.stats.percentile(99.9f64)?.unwrap().start(),
+                        self.stats.percentile(99.99f64)?.unwrap().start(),
+                        self.stats.percentile(99.999f64)?.unwrap().start(),
+                        self.stats.percentile(99.9999f64)?.unwrap().start(),
+                        self.stats.percentile(100f64)?.unwrap().start(),
                     );
                     last_log = Instant::now();
                     self.nechoed = 0;
