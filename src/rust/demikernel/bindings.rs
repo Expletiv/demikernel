@@ -473,8 +473,6 @@ pub extern "C" fn demi_wait_next_n(
     qr_written: *mut c_int,
     timeout: *const libc::timespec,
 ) -> c_int {
-    trace!("demi_wait_next_n() {:?} {:?} {:?}", qr_out, qr_out_size, timeout);
-
     // Check for invalid storage location for queue result.
     if qr_out.is_null() {
         warn!("qr_out is a null pointer");
@@ -512,7 +510,9 @@ pub extern "C" fn demi_wait_next_n(
     let ret: Result<i32, Fail> = do_syscall(|libos| match libos.wait_next_n(wait_callback, duration) {
         Ok(()) => 0,
         Err(e) => {
-            trace!("demi_wait_any() failed: {:?}", e);
+            if e.errno != libc::ETIMEDOUT {
+                trace!("demi_wait_any() failed: {:?}", e)
+            };
             e.errno
         },
     });
