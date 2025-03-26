@@ -8,11 +8,13 @@
 +.0 TCP > S seq 0(0) win 65535 <mss 1450, wscale 0>
 // Receive SYN-ACK segment.
 +.1 TCP < S. seq 0(0) ack 1 win 65535 <mss 1450, wscale 0>
-// Send ACK on SYN-ACK segment.
-+.0 TCP > . seq 1(0) ack 1 win 65535 <nop>
 
 // Succeed to establish connection.
 +.0 wait(500, ...) = 0
+
+// Send ACK on SYN-ACK segment.
++.0 TCP > . seq 1(0) ack 1 win 65535 <nop>
+
 
 // Send data.
 +.1 write(500, ..., 1000) = 1000
@@ -23,14 +25,15 @@
 // Receive out of order FIN segment.
 +.1 TCP < F. seq 1001(0) ack 1001 win 65535 <nop>
 
+// Send finished because out of order FIN acked the data .
++.0 wait(500, ...) = 0
+
 // Send ACK packet for out of order data.
 +.0 TCP > . seq 1001(0) ack 1 win 65535 <nop>
 
 // Receive data packet
 +.1 TCP < P. seq 1(1000) ack 1001 win 65535 <nop>
 
-// Send finished.
-+.0 wait(500, ...) = 0
 
 // Send ACK packet for data and FIN.
 +.0 TCP > . seq 1001(0) ack 1002 win 64534 <nop>
