@@ -207,10 +207,8 @@ impl SharedDemiRuntime {
         timeout: Duration,
     ) -> Result<(usize, QToken, QDesc, OperationResult), Fail> {
         // If any are already complete, grab from the completion table, otherwise, make sure it is valid.
-        for (i, qt) in qts.iter().enumerate() {
-            if let Some((qd, result)) = self.completed_tasks.remove(qt) {
-                return Ok((i, *qt, qd, result));
-            } else if self.qtoken_to_scheduler_id.get(qt).is_none() {
+        for qt in qts.iter() {
+            if self.qtoken_to_scheduler_id.get(qt).is_none() {
                 let cause: String = format!("{:?} is not a valid queue token", qt);
                 warn!("wait_any: {}", cause);
                 return Err(Fail::new(libc::EINVAL, &cause));
@@ -221,20 +219,17 @@ impl SharedDemiRuntime {
         // Wait until one of the qts is ready.
         self.wait_next_n(
             |completed_qt, _, _| {
-                if let Some((i, _)) = qts.iter().enumerate().find(|(_, qt)| completed_qt == **qt) {
-                    offset = i;
-                    false
-                } else {
-                    true
-                }
+                qts.iter()
+                    .enumerate()
+                    .find(|(_, qt)| completed_qt == **qt)
+                    .is_none_or(|(i, _)| {
+                        offset = i;
+                        false
+                    })
             },
             timeout,
         )?;
-
-        let (qd, result) = self
-            .completed_tasks
-            .remove(&qts[offset])
-            .expect("this task should have finished");
+        let (qd, result): (QDesc, OperationResult) = self.remove_completed_task(&qts[offset]);
         Ok((offset, qts[offset], qd, result))
     }
 
@@ -246,22 +241,17 @@ impl SharedDemiRuntime {
         mut acceptor: Acceptor,
         timeout: Duration,
     ) -> Result<(), Fail> {
+        // If any are already complete, grab from the completion table, otherwise, make sure it is valid.
+        for (qt, (qd, result)) in self.completed_tasks.iter() {
+            if !acceptor(*qt, *qd, result) {
+                return Ok(());
+            }
+        }
+
         let mut current_time: Instant = self.get_now();
         let deadline_time: Instant = current_time + timeout;
 
-        while {
-            self.wait_next()
-                .into_iter()
-                .fold(true, |prev: bool, mut task: OperationTask| -> bool {
-                    let qt: QToken = expect_some!(task.get_id(), "should have been set on insert").into();
-                    let (qd, result): (QDesc, OperationResult) =
-                        expect_some!(task.get_result(), "coroutine not finished");
-                    let next: bool = prev && acceptor(qt, qd, &result);
-                    self.qtoken_to_scheduler_id.remove(&qt);
-                    self.completed_tasks.insert(qt, (qd, result));
-                    next
-                })
-        } {
+        while self.wait_next_and_check_whether_to_continue(&mut acceptor) {
             if current_time < deadline_time {
                 // Otherwise, move time forward.
                 self.advance_clock_to_now();
@@ -274,11 +264,30 @@ impl SharedDemiRuntime {
         Ok(())
     }
 
-    /// Runs for one clock iteration and returns. Importantly does not set the current time, so can be used for testing.
-    fn wait_next(&mut self) -> Vec<OperationTask> {
+    /// Runs for one clock iteration and returns [true] if the scheduler should continue running and [false] if the
+    /// scheduler should break and return.
+    fn wait_next_and_check_whether_to_continue<Acceptor: FnMut(QToken, QDesc, &OperationResult) -> bool>(
+        &mut self,
+        acceptor: &mut Acceptor,
+    ) -> bool {
         // Run for one quanta and if one of our queue tokens completed, then return.
         self.poll_background_tasks();
-        self.poll_foreground_tasks()
+        for mut task in self.poll_foreground_tasks().into_iter() {
+            let qt: QToken = expect_some!(task.get_id(), "should have been set on insert").into();
+            let (qd, result): (QDesc, OperationResult) = expect_some!(task.get_result(), "coroutine not finished");
+
+            let should_continue: bool = acceptor(qt, qd, &result);
+            self.completed_tasks.insert(qt, (qd, result));
+            if !should_continue {
+                return false;
+            };
+        }
+        true
+    }
+
+    fn remove_completed_task(&mut self, qt: &QToken) -> (QDesc, OperationResult) {
+        self.qtoken_to_scheduler_id.remove(qt);
+        self.completed_tasks.remove(qt).expect("this task should have finished")
     }
 
     /// Allocates a queue of type `T` and returns the associated queue descriptor.
@@ -394,8 +403,10 @@ impl SharedDemiRuntime {
             .scheduler
             .poll_group_until_unrunnable(foreground_group_id, Some(TIMER_RESOLUTION));
 
+        // Reverse this iterator so that we start from the task first inserted into the scheduler.
         completed_tasks
             .into_iter()
+            .rev()
             .filter_map(|boxed_task| -> Option<OperationTask> {
                 let qt: QToken = expect_some!(boxed_task.get_id(), "should have been set on insert").into();
                 trace!(
@@ -580,18 +591,19 @@ pub trait Runtime: Clone + Unpin + 'static {}
 #[cfg(test)]
 mod tests {
     use crate::{
-        expect_ok,
+        ensure_eq, expect_ok,
         runtime::{poll_yield, OperationResult, QDesc, QToken, SharedDemiRuntime},
     };
+    use ::anyhow::Result;
+    use ::futures::FutureExt;
     use ::std::time::Duration;
-    use futures::FutureExt;
-    use test::Bencher;
+    use ::test::Bencher;
 
-    async fn dummy_coroutine(iterations: usize) -> (QDesc, OperationResult) {
+    async fn dummy_coroutine(iterations: usize, qd: QDesc) -> (QDesc, OperationResult) {
         for _ in 0..iterations {
             poll_yield().await;
         }
-        (QDesc::from(0), OperationResult::Close)
+        (qd, OperationResult::Close)
     }
 
     async fn dummy_background_coroutine() {
@@ -600,11 +612,93 @@ mod tests {
         }
     }
 
+    #[test]
+    fn poll_and_wait_for_first_task() -> Result<()> {
+        let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
+
+        let qt: QToken = runtime
+            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
+        let _: QToken = runtime
+            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
+        let _: QToken = runtime
+            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
+
+        let task = runtime.wait(qt, Duration::ZERO)?;
+        ensure_eq!(task.0, QDesc::from(0));
+        Ok(())
+    }
+
+    #[test]
+    fn poll_and_wait_for_middle_task() -> Result<()> {
+        let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
+
+        let _: QToken = runtime
+            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
+        let qt2: QToken = runtime
+            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
+        let _: QToken = runtime
+            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
+
+        let task = runtime.wait(qt2, Duration::ZERO)?;
+        ensure_eq!(task.0, QDesc::from(1));
+        Ok(())
+    }
+
+    #[test]
+    fn poll_and_wait_for_last_task() -> Result<()> {
+        let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
+
+        let _: QToken = runtime
+            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
+        let _: QToken = runtime
+            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
+        let qt3: QToken = runtime
+            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
+
+        let task = runtime.wait(qt3, Duration::ZERO)?;
+        ensure_eq!(task.0, QDesc::from(2));
+        Ok(())
+    }
+
+    #[test]
+    fn poll_and_wait_any_for_first_tasks() -> Result<()> {
+        let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
+
+        let qt: QToken = runtime
+            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
+        let qt2: QToken = runtime
+            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
+        let _: QToken = runtime
+            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
+        let qts: Vec<QToken> = vec![qt, qt2];
+        let task = runtime.wait_any(&qts, Duration::ZERO)?;
+        ensure_eq!(task.2, QDesc::from(0));
+        Ok(())
+    }
+
+    #[test]
+    fn poll_and_wait_any_for_last_tasks() -> Result<()> {
+        let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
+
+        let _: QToken = runtime
+            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
+        let qt2: QToken = runtime
+            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
+        let qt3: QToken = runtime
+            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
+        let qts: Vec<QToken> = vec![qt2, qt3];
+        let task = runtime.wait_any(&qts, Duration::ZERO)?;
+        ensure_eq!(task.2, QDesc::from(1));
+        Ok(())
+    }
+
     #[bench]
     fn insert_io_coroutine_bench(b: &mut Bencher) {
         let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
 
-        b.iter(|| runtime.insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(10).fuse())));
+        b.iter(|| {
+            runtime.insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(10, QDesc::from(0)).fuse()))
+        });
     }
 
     #[bench]
@@ -627,7 +721,10 @@ mod tests {
         // Insert a large number of coroutines.
         for i in 0..NUM_TASKS {
             qts[i] = expect_ok!(
-                runtime.insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1000000000).fuse())),
+                runtime.insert_nonpolling_coroutine(
+                    "dummy coroutine",
+                    Box::pin(dummy_coroutine(1000000000, QDesc::from(0)).fuse())
+                ),
                 "should be able to insert tasks"
             );
         }
