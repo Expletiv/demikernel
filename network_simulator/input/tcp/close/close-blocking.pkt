@@ -8,11 +8,12 @@
 +.0 TCP > S seq 0(0) win 65535 <mss 1450, wscale 0>
 // Receive SYN-ACK packet.
 +.1 TCP < S. seq 0(0) ack 1 win 65535 <mss 1450, wscale 0>
-// Send ACK on SYN-ACK packet.
-+.0 TCP > . seq 1(0) ack 1 win 65535 <nop>
 
 // Succeed to establish connection.
 +.0 wait(500, ...) = 0
+
+// Send ACK on SYN-ACK packet.
++.0 TCP > . seq 1(0) ack 1 win 65535 <nop>
 
 // Succeed to disconnect.
 +.1 close(500) = 0

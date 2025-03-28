@@ -307,7 +307,6 @@ impl Receiver {
         // Send an ack on every FIN. We do this separately here because if the FIN is in order, we ack it after the
         // previous line, otherwise we do not ack the FIN.
         if header.fin {
-            trace!("Acking FIN");
             Sender::send_ack(cb, layer3_endpoint)
         }
 
@@ -320,7 +319,7 @@ impl Receiver {
         } else if has_data {
             // We already owe our peer an ACK (the timer was already running), so cancel the timer and ACK now.
             cb.receiver.ack_deadline_time_secs.set(None);
-            trace!("process_packet(): sending ack on second packet");
+            trace!("process_packet(): sending ack before deadline because another packet arrived");
             Sender::send_ack(cb, layer3_endpoint);
         }
 
