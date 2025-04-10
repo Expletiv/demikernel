@@ -215,8 +215,9 @@ impl SharedDemiRuntime {
             if let Some((qd, result)) = self.completed_results.remove(qt) {
                 return Ok((i, *qt, qd, result));
             }
-            // TODO: Check that the task exists. Unfortunately, we now have three data structures to check for the
-            // qt and I don't think we can do it in an efficient way.
+            if self.qtoken_to_scheduler_id.get(qt).is_none() {
+                return Err(Fail::new(libc::EINVAL, "invalid qtoken"));
+            }
         }
 
         let mut result: Option<(usize, QToken, QDesc, OperationResult)> = None;
@@ -268,6 +269,7 @@ impl SharedDemiRuntime {
             while let Some(mut task) = self.completed_tasks.pop_front() {
                 let qt: QToken = expect_some!(task.get_id(), "should have been set on insert").into();
                 let (qd, result): (QDesc, OperationResult) = expect_some!(task.get_result(), "coroutine not finished");
+                self.qtoken_to_scheduler_id.remove(&qt);
 
                 if !acceptor(qt, qd, result) {
                     return Ok(());
@@ -414,7 +416,6 @@ impl SharedDemiRuntime {
                     qt,
                     boxed_task.get_name()
                 );
-                self.qtoken_to_scheduler_id.remove(&qt);
 
                 // OperationTasks return a value to the application, so we must stash these for later. Otherwise, we
                 // just discard the return value of the completed coroutine.
