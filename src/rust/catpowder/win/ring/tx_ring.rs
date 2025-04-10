@@ -13,7 +13,7 @@ use crate::{
         ring::{generic::XdpRing, umemreg::UmemReg},
         socket::XdpSocket,
     },
-    runtime::{fail::Fail, libxdp, limits, memory::DemiBuffer},
+    runtime::{fail::Fail, libxdp, memory::DemiBuffer},
 };
 use ::std::{cell::RefCell, rc::Rc};
 use std::{
@@ -37,6 +37,8 @@ pub struct TxRing {
     socket: XdpSocket,
     /// Whether to always poke the socket, or only when the ring flag indicates to do so.
     always_poke: bool,
+    /// Interface index for the socket.
+    ifindex: u32,
 }
 
 impl TxRing {
@@ -45,6 +47,7 @@ impl TxRing {
         api: &mut XdpApi,
         length: u32,
         buf_count: u32,
+        mtu: u16,
         ifindex: u32,
         queueid: u32,
         always_poke: bool,
@@ -55,8 +58,7 @@ impl TxRing {
 
         // Create a UMEM region.
         let buf_count: NonZeroU32 = NonZeroU32::try_from(buf_count).map_err(Fail::from)?;
-        let chunk_size: NonZeroU16 =
-            NonZeroU16::try_from(u16::try_from(limits::RECVBUF_SIZE_MAX).map_err(Fail::from)?).map_err(Fail::from)?;
+        let chunk_size: NonZeroU16 = NonZeroU16::try_from(mtu).map_err(Fail::from)?;
         let reserve_count: u32 = length;
         trace!(
             "creating umem region with {} buffers of size {}",
@@ -118,6 +120,7 @@ impl TxRing {
             tx_completion_ring,
             socket,
             always_poke,
+            ifindex,
         })
     }
 
@@ -163,33 +166,43 @@ impl TxRing {
         self.mem.borrow().get_buffer(false)
     }
 
+    fn copy_into_buf(&self, buf: &DemiBuffer) -> Result<DemiBuffer, Fail> {
+        let mut copy: DemiBuffer = self
+            .mem
+            .borrow()
+            .get_buffer(true)
+            .ok_or_else(|| Fail::new(libc::ENOMEM, "out of memory"))?;
+
+        if copy.len() < buf.len() {
+            return Err(Fail::new(libc::EINVAL, "buffer too large"));
+        } else if copy.len() > buf.len() {
+            copy.trim(copy.len() - buf.len())?;
+        }
+
+        unsafe { std::ptr::copy_nonoverlapping(buf.as_ptr(), copy.as_mut_ptr(), buf.len()) };
+        Ok(copy)
+    }
+
+    #[allow(dead_code)]
+    pub fn transmit_copy(&mut self, api: &mut XdpApi, buf: &DemiBuffer) -> Result<(), Fail> {
+        self.transmit_buffer(api, self.copy_into_buf(buf)?)
+    }
+
     pub fn transmit_buffer(&mut self, api: &mut XdpApi, buf: DemiBuffer) -> Result<(), Fail> {
         let buf: DemiBuffer = if !self.mem.borrow().is_data_in_pool(&buf) {
             trace!("copying buffer to umem region");
-            let mut copy: DemiBuffer = self
-                .mem
-                .borrow()
-                .get_buffer(true)
-                .ok_or_else(|| Fail::new(libc::ENOMEM, "out of memory"))?;
-
-            if copy.len() < buf.len() {
-                return Err(Fail::new(libc::EINVAL, "buffer too large"));
-            } else if copy.len() > buf.len() {
-                copy.trim(copy.len() - buf.len())?;
-            }
-
-            unsafe { std::ptr::copy_nonoverlapping(buf.as_ptr(), copy.as_mut_ptr(), buf.len()) };
-            copy
+            self.copy_into_buf(&buf)?
         } else {
             buf
         };
 
         let buf_desc: XSK_BUFFER_DESCRIPTOR = self.mem.borrow().dehydrate_buffer(buf);
         trace!(
-            "transmitting buffer at offset {}, offset {} with length {}",
+            "transmit_buffer(): address={}, offset={}, length={}, ifindex={}",
             unsafe { buf_desc.Address.__bindgen_anon_1.BaseAddress() },
             unsafe { buf_desc.Address.__bindgen_anon_1.Offset() },
-            buf_desc.Length
+            buf_desc.Length,
+            self.ifindex,
         );
 
         let mut idx: u32 = 0;
@@ -222,9 +235,9 @@ impl TxRing {
 
             // Safety: the integers in tx_completion_ring are initialized by the XDP runtime.
             let buf_offset: u64 = unsafe { b.assume_init_read() };
+            trace!("return_buffers(): ifindex={}, offset={}", self.ifindex, buf_offset);
 
             // NB dropping the buffer returns it to the pool.
-            trace!("returning buffer at offset {}", buf_offset);
             if let Err(e) = self.mem.borrow().rehydrate_buffer_offset(buf_offset) {
                 error!("failed to return buffer: {:?}", e);
             }
@@ -233,7 +246,7 @@ impl TxRing {
         }
 
         if returned > 0 {
-            // trace!("returning {} buffers", returned);
+            trace!("returned {} buffers to TxRing interface {}", returned, self.ifindex);
             self.tx_completion_ring.consumer_release(returned);
         }
     }
