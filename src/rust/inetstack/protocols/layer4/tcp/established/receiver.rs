@@ -460,8 +460,10 @@ impl Receiver {
             return Ok(());
         }
         info!("Received RST: remote reset connection");
+        if cb.receiver.fin_seq_no.get().is_none() {
+            cb.receiver.push_fin();
+        }
         cb.state = State::Closed;
-        cb.receiver.push_fin();
         return Err(Fail::new(libc::ECONNRESET, "remote reset connection"));
     }
 
