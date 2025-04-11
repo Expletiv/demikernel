@@ -123,6 +123,7 @@ mod test {
                         anyhow::bail!("accept() has failed")
                     },
                 };
+                alice_barrier.wait();
 
                 // Close connection.
                 safe_close_active(&mut libos, qd)?;
@@ -155,6 +156,7 @@ mod test {
                     },
                 }
 
+                bob_barrier.wait();
                 // Close connection.
                 safe_close_active(&mut libos, sockqd)?;
                 // Sleep for a while to give Alice time to finish.
@@ -205,6 +207,7 @@ mod test {
                         anyhow::bail!("accept() has failed")
                     },
                 };
+                alice_barrier.wait();
 
                 // Close connection.
                 safe_close_active(&mut libos, qd)?;
@@ -240,6 +243,7 @@ mod test {
                     },
                 }
 
+                bob_barrier.wait();
                 // Close connection.
                 safe_close_active(&mut libos, sockqd)?;
                 // Sleep for a while to give Alice time to finish.
@@ -293,6 +297,7 @@ mod test {
                             anyhow::bail!("accept() has failed")
                         },
                     };
+                    alice_barrier.wait();
 
                     // Pop data.
                     let qt: QToken = safe_pop(&mut libos, qd)?;
@@ -336,6 +341,7 @@ mod test {
                             anyhow::bail!("connect() has failed")
                         },
                     }
+                    bob_barrier.wait();
 
                     let buf = libos.prepare_dummy_buffer(32)?;
                     let qt: QToken = safe_push(&mut libos, sockqd, buf)?;
@@ -654,6 +660,7 @@ mod test {
                             anyhow::bail!("accept() has failed")
                         },
                     };
+                    alice_barrier.wait();
 
                     // Close connection.
                     safe_close_active(&mut libos, qd)?;
@@ -697,7 +704,7 @@ mod test {
                         _ => anyhow::bail!("connect() should have timed out"),
                     }
 
-                    // Close connection.
+                    // Create connection.
                     let remote: SocketAddr = SocketAddr::new(ALICE_IP, PORT_NUMBER);
                     let sockqd: QDesc = safe_socket(&mut libos)?;
                     let qt: QToken = safe_connect(&mut libos, sockqd, remote)?;
@@ -710,6 +717,7 @@ mod test {
                             anyhow::bail!("connect() has failed")
                         },
                     }
+                    bob_barrier.wait();
 
                     // Close connection.
                     safe_close_active(&mut libos, sockqd)?;
@@ -763,6 +771,7 @@ mod test {
                             anyhow::bail!("accept() has failed")
                         },
                     };
+                    alice_barrier.wait();
 
                     // Close bad queue descriptor.
                     match libos.async_close(QDesc::from(2000)) {
@@ -807,6 +816,7 @@ mod test {
                             anyhow::bail!("connect() has failed")
                         },
                     }
+                    bob_barrier.wait();
 
                     // Close bad queue descriptor.
                     match libos.async_close(QDesc::from(2000)) {
@@ -875,6 +885,7 @@ mod test {
                             anyhow::bail!("accept() has failed")
                         },
                     };
+                    alice_barrier.wait();
 
                     // Pop data.
                     let qt: QToken = safe_pop(&mut libos, qd)?;
@@ -891,6 +902,7 @@ mod test {
                     // Close connection.
                     safe_close_active(&mut libos, qd)?;
                     safe_close_passive(&mut libos, sockqd)?;
+
                     alice_barrier.wait();
 
                     Ok(())
@@ -919,6 +931,7 @@ mod test {
                             anyhow::bail!("connect() has failed")
                         },
                     }
+                    bob_barrier.wait();
 
                     let bytes = libos.prepare_dummy_buffer(32)?;
                     match libos.push(QDesc::from(2000), &bytes) {
@@ -960,6 +973,7 @@ mod test {
                             anyhow::bail!("push() has failed")
                         },
                     }
+
                     // Close connection.
                     safe_close_active(&mut libos, sockqd)?;
 
@@ -1013,6 +1027,7 @@ mod test {
                             anyhow::bail!("accept() has failed")
                         },
                     };
+                    alice_barrier.wait();
 
                     // Pop from bad socket.
                     match libos.pop(QDesc::from(2000), None) {
@@ -1068,6 +1083,7 @@ mod test {
                         },
                     }
 
+                    bob_barrier.wait();
                     let bytes = libos.prepare_dummy_buffer(32)?;
                     let qt: QToken = safe_push(&mut libos, sockqd, bytes)?;
                     let (_, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
