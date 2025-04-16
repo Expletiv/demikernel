@@ -20,6 +20,7 @@ use ::futures::{pin_mut, select_biased, FutureExt};
 use ::socket2::{Domain, Type};
 use ::std::{
     any::Any,
+    collections::VecDeque,
     net::{SocketAddr, SocketAddrV4},
     ops::{Deref, DerefMut},
 };
@@ -41,6 +42,9 @@ pub struct NetworkQueue<T: NetworkTransport> {
     local: Option<SocketAddr>,
     /// The remote address to which the socket is connected.
     remote: Option<SocketAddr>,
+    /// Queue for outgoing packets. This ensures packets go out in order regardless of the scheduling of the push
+    /// coroutine.
+    push_queue: VecDeque<DemiBuffer>,
     /// Underlying network transport.
     transport: T,
 }
@@ -72,6 +76,7 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
             socket,
             local: None,
             remote: None,
+            push_queue: VecDeque::new(),
             transport: transport.clone(),
         })))
     }
@@ -174,6 +179,7 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
             socket: new_socket,
             local: None,
             remote: Some(saddr),
+            push_queue: VecDeque::new(),
             transport: self.transport.clone(),
         })))
     }
@@ -266,24 +272,30 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
 
     /// Schedule a coroutine to push to this queue. This function contains all of the single-queue,
     /// asynchronous code necessary to run push a buffer and any single-queue functionality after the push completes.
-    pub fn push<F>(&mut self, coroutine_constructor: F) -> Result<QToken, Fail>
+    pub fn push<F>(&mut self, coroutine_constructor: F, buf: DemiBuffer) -> Result<QToken, Fail>
     where
         F: FnOnce() -> Result<QToken, Fail>,
     {
         self.state_machine.may_push()?;
+        self.push_queue.push_back(buf);
         coroutine_constructor()
     }
 
     /// Asynchronously push data to the queue. This function contains all of the single-queue, asynchronous code
     /// necessary to push to the queue and any single-queue functionality after the push completes.
-    pub async fn push_coroutine(&mut self, buf: &mut DemiBuffer, addr: Option<SocketAddr>) -> Result<(), Fail> {
+    pub async fn push_coroutine(&mut self, addr: Option<SocketAddr>) -> Result<(), Fail> {
         self.state_machine.may_push()?;
+
+        let mut buf: DemiBuffer = self
+            .push_queue
+            .pop_front()
+            .expect("push_coroutine(): push queue should not be empty");
 
         let result = {
             let mut state_machine: SocketStateMachine = self.state_machine.clone();
             let mut transport: T = self.transport.clone();
             let state_tracker = state_machine.while_may_push().fuse();
-            let operation = transport.push(&mut self.socket, buf, addr).fuse();
+            let operation = transport.push(&mut self.socket, &mut buf, addr).fuse();
             pin_mut!(state_tracker);
             pin_mut!(operation);
 
