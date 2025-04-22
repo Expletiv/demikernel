@@ -16,7 +16,7 @@ pub mod scheduler;
 pub mod types;
 pub use condition_variable::SharedConditionVariable;
 mod poll;
-mod timer;
+pub mod timer;
 pub use queue::{BackgroundTask, OperationResult, OperationTask, QDesc, QToken, QType};
 pub use scheduler::{SchedulerId, Task};
 
