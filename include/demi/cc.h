@@ -12,6 +12,7 @@
 #define _In_opt_
 #define _In_reads_(s)
 #define _In_reads_bytes_(b)
+#define _Inout_
 #define _Out_
 #define _Out_writes_to_(s, c)
 #define _Deref_pre_z_

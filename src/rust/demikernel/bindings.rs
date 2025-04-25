@@ -395,7 +395,10 @@ pub extern "C" fn demi_wait(qr_out: *mut demi_qresult_t, qt: demi_qtoken_t, time
             0
         },
         Err(e) => {
-            trace!("demi_wait() failed: {:?}", e);
+            // EDTIMEDOUT is not a "failure" per se; don't trace.
+            if e.errno != libc::ETIMEDOUT {
+                trace!("demi_wait() failed: {:?}", e);
+            }
             e.errno
         },
     });
@@ -455,7 +458,10 @@ pub extern "C" fn demi_wait_any(
             0
         },
         Err(e) => {
-            trace!("demi_wait_any() failed: {:?}", e);
+            // EDTIMEDOUT is not a "failure" per se; don't trace.
+            if e.errno != libc::ETIMEDOUT {
+                trace!("demi_wait_any() failed: {:?}", e);
+            }
             e.errno
         },
     });
@@ -510,6 +516,7 @@ pub extern "C" fn demi_wait_next_n(
     let ret: Result<i32, Fail> = do_syscall(|libos| match libos.wait_next_n(wait_callback, duration) {
         Ok(()) => 0,
         Err(e) => {
+            // EDTIMEDOUT is not a "failure" per se; don't trace.
             if e.errno != libc::ETIMEDOUT {
                 trace!("demi_wait_any() failed: {:?}", e)
             };
@@ -638,7 +645,7 @@ pub extern "C" fn demi_setsockopt(
     let ret: Result<(), Fail> = match do_syscall(|libos| libos.set_socket_option(qd.into(), opt)) {
         Ok(result) => result,
         Err(e) => {
-            trace!("demi_getsockopt(): {:?}", e);
+            trace!("demi_setsockopt(): {:?}", e);
             return e.errno;
         },
     };
@@ -646,7 +653,7 @@ pub extern "C" fn demi_setsockopt(
     match ret {
         Ok(_) => 0,
         Err(e) => {
-            trace!("demi_getsockopt(): {:?}", e);
+            trace!("demi_setsockopt(): {:?}", e);
             e.errno
         },
     }
@@ -753,7 +760,7 @@ pub extern "C" fn demi_getpeername(qd: c_int, addr: *mut SockAddr, addrlen: *mut
 
     let expected_len = mem::size_of::<SockAddrIn>() as Socklen;
 
-    if unsafe { *addrlen != expected_len } {
+    if unsafe { *addrlen < expected_len } {
         warn!("demi_getpeername(): addrlen does not match size of SockAddrIn");
         return libc::EINVAL;
     }
