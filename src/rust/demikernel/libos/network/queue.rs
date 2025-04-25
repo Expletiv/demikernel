@@ -26,6 +26,14 @@ use ::std::{
 };
 
 //======================================================================================================================
+// Constants
+//======================================================================================================================
+
+/// The default capacity of the push queue on construction, used to preallocate in order to remove the allocation cost
+/// from the data path.
+const DEFAULT_PUSH_QUEUE_CAPACITY: usize = 16;
+
+//======================================================================================================================
 // Structures
 //======================================================================================================================
 
@@ -44,7 +52,7 @@ pub struct NetworkQueue<T: NetworkTransport> {
     remote: Option<SocketAddr>,
     /// Queue for outgoing packets. This ensures packets go out in order regardless of the scheduling of the push
     /// coroutine.
-    push_queue: VecDeque<DemiBuffer>,
+    push_queue: VecDeque<(DemiBuffer, Option<SocketAddr>)>,
     /// Underlying network transport.
     transport: T,
 }
@@ -76,7 +84,7 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
             socket,
             local: None,
             remote: None,
-            push_queue: VecDeque::new(),
+            push_queue: VecDeque::with_capacity(DEFAULT_PUSH_QUEUE_CAPACITY),
             transport: transport.clone(),
         })))
     }
@@ -179,7 +187,7 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
             socket: new_socket,
             local: None,
             remote: Some(saddr),
-            push_queue: VecDeque::new(),
+            push_queue: VecDeque::with_capacity(DEFAULT_PUSH_QUEUE_CAPACITY),
             transport: self.transport.clone(),
         })))
     }
@@ -272,21 +280,26 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
 
     /// Schedule a coroutine to push to this queue. This function contains all of the single-queue,
     /// asynchronous code necessary to run push a buffer and any single-queue functionality after the push completes.
-    pub fn push<F>(&mut self, coroutine_constructor: F, buf: DemiBuffer) -> Result<QToken, Fail>
+    pub fn push<F>(
+        &mut self,
+        coroutine_constructor: F,
+        buf: DemiBuffer,
+        addr: Option<SocketAddr>,
+    ) -> Result<QToken, Fail>
     where
         F: FnOnce() -> Result<QToken, Fail>,
     {
         self.state_machine.may_push()?;
-        self.push_queue.push_back(buf);
+        self.push_queue.push_back((buf, addr));
         coroutine_constructor()
     }
 
     /// Asynchronously push data to the queue. This function contains all of the single-queue, asynchronous code
     /// necessary to push to the queue and any single-queue functionality after the push completes.
-    pub async fn push_coroutine(&mut self, addr: Option<SocketAddr>) -> Result<(), Fail> {
+    pub async fn push_coroutine(&mut self) -> Result<(), Fail> {
         self.state_machine.may_push()?;
 
-        let mut buf: DemiBuffer = self
+        let (mut buf, addr): (DemiBuffer, Option<SocketAddr>) = self
             .push_queue
             .pop_front()
             .expect("push_coroutine(): push queue should not be empty");
