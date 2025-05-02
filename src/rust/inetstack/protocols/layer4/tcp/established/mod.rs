@@ -35,13 +35,12 @@ use crate::{
         SharedDemiRuntime, SharedObject,
     },
 };
-use ::futures::pin_mut;
-use ::futures::FutureExt;
+use ::futures::{join, pin_mut, FutureExt};
 use ::std::{
     net::SocketAddrV4,
     ops::{Deref, DerefMut},
-    time::Duration,
-    time::Instant,
+    pin::pin,
+    time::{Duration, Instant},
 };
 
 //======================================================================================================================
@@ -206,19 +205,19 @@ impl SharedEstablishedSocket {
     async fn local_close(&mut self) -> Result<(), Fail> {
         // 1. Start close protocol by setting state and sending FIN.
         self.cb.state = State::FinWait1;
-        Sender::push_fin_and_wait_for_ack(&mut self.cb).await?;
 
-        // 2. Got ACK to our FIN. Check if we also received a FIN from remote in the meantime.
-        let state: State = self.cb.state;
-        match state {
-            State::FinWait1 => {
-                self.cb.state = State::FinWait2;
-                // Haven't received a FIN yet from remote, so wait.
-                self.cb.receiver.wait_for_fin().await?;
-            },
-            State::Closing => self.cb.state = State::TimeWait,
-            state => unreachable!("Cannot be in any other state at this point: {:?}", state),
-        };
+        // 2. Wait for FIN and FIN ack.
+        let mut me2: SharedEstablishedSocket = self.clone();
+        let mut me3: SharedEstablishedSocket = self.clone();
+        let wait_for_fin = pin!(me3.cb.receiver.wait_for_fin().fuse());
+        let mut runtime: SharedDemiRuntime = self.runtime.clone();
+        let mut layer3_endpoint: SharedLayer3Endpoint = self.layer3_endpoint.clone();
+        let push_fin_and_wait_for_ack =
+            pin!(Sender::push(&mut me2.cb, &mut layer3_endpoint, &mut runtime, None).fuse());
+        let (result1, result2) = join!(wait_for_fin, push_fin_and_wait_for_ack);
+        result1?;
+        result2?;
+
         // 3. TIMED_WAIT
         debug_assert_eq!(self.cb.state, State::TimeWait);
         trace!("socket options: {:?}", self.cb.socket_options.get_linger());
@@ -232,15 +231,18 @@ impl SharedEstablishedSocket {
         // 0. Move state forward
         self.cb.state = State::LastAck;
         // 1. Send FIN and wait for ack before closing.
-        Sender::push_fin_and_wait_for_ack(&mut self.cb).await?;
-        self.cb.state = State::Closed;
+        let mut runtime: SharedDemiRuntime = self.runtime.clone();
+        let mut layer3_endpoint: SharedLayer3Endpoint = self.layer3_endpoint.clone();
+        Sender::push(&mut self.cb, &mut layer3_endpoint, &mut runtime, None).await?;
+        debug_assert_eq!(self.cb.state, State::Closed);
+
         Ok(())
     }
 
     pub async fn push(&mut self, buf: DemiBuffer) -> Result<(), Fail> {
         let mut runtime: SharedDemiRuntime = self.runtime.clone();
         let mut layer3_endpoint: SharedLayer3Endpoint = self.layer3_endpoint.clone();
-        Sender::push(&mut self.cb, &mut layer3_endpoint, &mut runtime, buf).await
+        Sender::push(&mut self.cb, &mut layer3_endpoint, &mut runtime, Some(buf)).await
     }
 
     pub async fn pop(&mut self, size: Option<usize>) -> Result<DemiBuffer, Fail> {
