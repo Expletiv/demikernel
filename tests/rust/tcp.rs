@@ -34,7 +34,7 @@ mod test {
 
     /// A default amount of time to wait on an operation to complete. This was chosen arbitrarily to be high enough to
     /// ensure most OS operations will complete.
-    const TIMEOUT_MILLISECONDS: Duration = Duration::from_millis(100);
+    const SAFE_TIMEOUT: Duration = Duration::from_secs(5);
     const BAD_WAIT_TIMEOUT_MILLISECONDS: Duration = Duration::from_millis(1);
 
     use std::{
@@ -108,11 +108,13 @@ mod test {
 
                 let local: SocketAddr = SocketAddr::new(ALICE_IP, PORT_NUMBER);
 
-                // Open connection.
                 let sockqd: QDesc = safe_socket(&mut libos)?;
                 safe_bind(&mut libos, sockqd, local)?;
                 safe_listen(&mut libos, sockqd)?;
                 let qt: QToken = safe_accept(&mut libos, sockqd)?;
+
+                // CONNECTION SETUP PHASE.
+                alice_barrier.wait();
                 let (_, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
 
                 let qd: QDesc = match qr {
@@ -123,11 +125,13 @@ mod test {
                         anyhow::bail!("accept() has failed")
                     },
                 };
-                alice_barrier.wait();
 
-                // Close connection.
+                // CLOSING PHASE.
+                alice_barrier.wait();
                 safe_close_active(&mut libos, qd)?;
                 safe_close_passive(&mut libos, sockqd)?;
+
+                // END.
                 alice_barrier.wait();
 
                 Ok(())
@@ -136,6 +140,8 @@ mod test {
         let bob: JoinHandle<Result<()>> = thread::Builder::new()
             .name(format!("tcp_establish_connection_unbound::bob"))
             .spawn(move || {
+                // CONNECTION PHASE.
+                bob_barrier.wait();
                 let mut libos: DummyLibOS = match DummyLibOS::new(BOB_CONFIG_PATH, bob_tx, alice_rx) {
                     Ok(libos) => libos,
                     Err(e) => anyhow::bail!("Could not create inetstack: {:?}", e),
@@ -143,7 +149,6 @@ mod test {
 
                 let remote: SocketAddr = SocketAddr::new(ALICE_IP, PORT_NUMBER);
 
-                // Open connection.
                 let sockqd: QDesc = safe_socket(&mut libos)?;
                 let qt: QToken = safe_connect(&mut libos, sockqd, remote)?;
                 let (_, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
@@ -155,18 +160,17 @@ mod test {
                         anyhow::bail!("connect() has failed")
                     },
                 }
-
+                // CLOSING PHASE.
                 bob_barrier.wait();
-                // Close connection.
                 safe_close_active(&mut libos, sockqd)?;
-                // Sleep for a while to give Alice time to finish.
+                // END.
                 bob_barrier.wait();
 
                 Ok(())
             })?;
 
-        // It is safe to use unwrap here because there should not be any reason that we can't join the thread and if there
-        // is, there is nothing to clean up here on the main thread.
+        // It is safe to use unwrap here because there should not be any reason that we can't join the thread and if
+        // there is, there is nothing to clean up here on the main thread.
         alice.join().unwrap()?;
         bob.join().unwrap()?;
 
@@ -192,11 +196,13 @@ mod test {
 
                 let local: SocketAddr = SocketAddr::new(ALICE_IP, PORT_NUMBER);
 
-                // Open connection.
                 let sockqd: QDesc = safe_socket(&mut libos)?;
                 safe_bind(&mut libos, sockqd, local)?;
                 safe_listen(&mut libos, sockqd)?;
                 let qt: QToken = safe_accept(&mut libos, sockqd)?;
+
+                // CONNECTION PHASE.
+                alice_barrier.wait();
                 let (_, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
 
                 let qd: QDesc = match qr {
@@ -207,12 +213,13 @@ mod test {
                         anyhow::bail!("accept() has failed")
                     },
                 };
+
+                // CLOSING PHASE.
                 alice_barrier.wait();
 
-                // Close connection.
                 safe_close_active(&mut libos, qd)?;
                 safe_close_passive(&mut libos, sockqd)?;
-                // Sleep for a while to give Bob time to finish.
+                // END.
                 alice_barrier.wait();
 
                 Ok(())
@@ -221,6 +228,8 @@ mod test {
         let bob: JoinHandle<Result<()>> = thread::Builder::new()
             .name(format!("tcp_establish_connection_bound::bob"))
             .spawn(move || {
+                // CONNECTION SETUP PHASE.
+                bob_barrier.wait();
                 let mut libos: DummyLibOS = match DummyLibOS::new(BOB_CONFIG_PATH, bob_tx, alice_rx) {
                     Ok(libos) => libos,
                     Err(e) => anyhow::bail!("Could not create inetstack: {:?}", e),
@@ -229,7 +238,6 @@ mod test {
                 let local: SocketAddr = SocketAddr::new(BOB_IP, PORT_NUMBER);
                 let remote: SocketAddr = SocketAddr::new(ALICE_IP, PORT_NUMBER);
 
-                // Open connection.
                 let sockqd: QDesc = safe_socket(&mut libos)?;
                 safe_bind(&mut libos, sockqd, local)?;
                 let qt: QToken = safe_connect(&mut libos, sockqd, remote)?;
@@ -243,16 +251,16 @@ mod test {
                     },
                 }
 
+                // CLOSING PHASE.
                 bob_barrier.wait();
-                // Close connection.
                 safe_close_active(&mut libos, sockqd)?;
-                // Sleep for a while to give Alice time to finish.
+                // END.
                 bob_barrier.wait();
                 Ok(())
             })?;
 
-        // It is safe to use unwrap here because there should not be any reason that we can't join the thread and if there
-        // is, there is nothing to clean up here on the main thread.
+        // It is safe to use unwrap here because there should not be any reason that we can't join the thread and if
+        // there is, there is nothing to clean up here on the main thread.
         alice.join().unwrap()?;
         bob.join().unwrap()?;
 
@@ -283,11 +291,13 @@ mod test {
 
                     let local: SocketAddr = SocketAddr::new(ALICE_IP, PORT_NUMBER);
 
-                    // Open connection.
                     let sockqd: QDesc = safe_socket(&mut libos)?;
                     safe_bind(&mut libos, sockqd, local)?;
                     safe_listen(&mut libos, sockqd)?;
                     let qt: QToken = safe_accept(&mut libos, sockqd)?;
+
+                    // CONNECTION SETUP PHASE.
+                    alice_barrier.wait();
                     let (_, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
                     let qd: QDesc = match qr {
                         OperationResult::Accept((qd, addr)) if addr.ip() == &BOB_IP => qd,
@@ -297,8 +307,9 @@ mod test {
                             anyhow::bail!("accept() has failed")
                         },
                     };
-                    alice_barrier.wait();
 
+                    // TESTING PHASE.
+                    alice_barrier.wait();
                     // Pop data.
                     let qt: QToken = safe_pop(&mut libos, qd)?;
                     let (qd, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
@@ -311,9 +322,11 @@ mod test {
                         },
                     }
 
-                    // Close connection.
+                    // CLOSING PHASE.
                     safe_close_active(&mut libos, qd)?;
                     safe_close_passive(&mut libos, sockqd)?;
+
+                    // END.
                     alice_barrier.wait();
                     Ok(())
                 })?;
@@ -322,6 +335,8 @@ mod test {
             thread::Builder::new()
                 .name(format!("tcp_push_remote::bob"))
                 .spawn(move || {
+                    // CONNECTION SETUP PHASE.
+                    bob_barrier.wait();
                     let mut libos: DummyLibOS = match DummyLibOS::new(BOB_CONFIG_PATH, bob_tx, alice_rx) {
                         Ok(libos) => libos,
                         Err(e) => anyhow::bail!("Could not create inetstack: {:?}", e),
@@ -329,7 +344,6 @@ mod test {
 
                     let remote: SocketAddr = SocketAddr::new(ALICE_IP, PORT_NUMBER);
 
-                    // Open connection.
                     let sockqd: QDesc = safe_socket(&mut libos)?;
                     let qt: QToken = safe_connect(&mut libos, sockqd, remote)?;
                     let (_, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
@@ -341,6 +355,8 @@ mod test {
                             anyhow::bail!("connect() has failed")
                         },
                     }
+
+                    // TESTING PHASE.
                     bob_barrier.wait();
 
                     let buf = libos.prepare_dummy_buffer(32)?;
@@ -355,14 +371,16 @@ mod test {
                         },
                     }
 
-                    // Close connection.
+                    // CLOSING PHASE.
                     safe_close_active(&mut libos, sockqd)?;
+
+                    // END.
                     bob_barrier.wait();
 
                     Ok(())
                 })?;
-        // It is safe to use unwrap here because there should not be any reason that we can't join the thread and if there
-        // is, there is nothing to clean up here on the main thread.
+        // It is safe to use unwrap here because there should not be any reason that we can't join the thread and if
+        // there is, there is nothing to clean up here on the main thread.
         alice.join().unwrap()?;
         bob.join().unwrap()?;
 
@@ -646,11 +664,13 @@ mod test {
                     };
                     let local: SocketAddr = SocketAddr::new(ALICE_IP, PORT_NUMBER);
 
-                    // Open connection.
                     let sockqd: QDesc = safe_socket(&mut libos)?;
                     safe_bind(&mut libos, sockqd, local)?;
                     safe_listen(&mut libos, sockqd)?;
                     let qt: QToken = safe_accept(&mut libos, sockqd)?;
+
+                    // CONNECTION SETUP PHASE.
+                    alice_barrier.wait();
                     let (_, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
                     let qd: QDesc = match qr {
                         OperationResult::Accept((qd, addr)) if addr.ip() == &BOB_IP => qd,
@@ -660,11 +680,14 @@ mod test {
                             anyhow::bail!("accept() has failed")
                         },
                     };
+
+                    // CLOSING PHASE.
                     alice_barrier.wait();
 
-                    // Close connection.
                     safe_close_active(&mut libos, qd)?;
                     safe_close_passive(&mut libos, sockqd)?;
+
+                    // END.
                     alice_barrier.wait();
                     Ok(())
                 })?;
@@ -673,6 +696,8 @@ mod test {
             thread::Builder::new()
                 .name(format!("tcp_bad_connect::bob"))
                 .spawn(move || {
+                    // CONNECTION SETUP PHASE.
+                    bob_barrier.wait();
                     let mut libos: DummyLibOS = match DummyLibOS::new(BOB_CONFIG_PATH, bob_tx, alice_rx) {
                         Ok(libos) => libos,
                         Err(e) => anyhow::bail!("Could not create inetstack: {:?}", e),
@@ -717,16 +742,18 @@ mod test {
                             anyhow::bail!("connect() has failed")
                         },
                     }
+
+                    // CLOSE PHASE.
                     bob_barrier.wait();
 
-                    // Close connection.
                     safe_close_active(&mut libos, sockqd)?;
+                    // END.
                     bob_barrier.wait();
                     Ok(())
                 })?;
 
-        // It is safe to use unwrap here because there should not be any reason that we can't join the thread and if there
-        // is, there is nothing to clean up here on the main thread.
+        // It is safe to use unwrap here because there should not be any reason that we can't join the thread and if
+        // there is, there is nothing to clean up here on the main thread.
         alice.join().unwrap()?;
         bob.join().unwrap()?;
 
@@ -757,11 +784,13 @@ mod test {
 
                     let local: SocketAddr = SocketAddr::new(ALICE_IP, PORT_NUMBER);
 
-                    // Open connection.
                     let sockqd: QDesc = safe_socket(&mut libos)?;
                     safe_bind(&mut libos, sockqd, local)?;
                     safe_listen(&mut libos, sockqd)?;
                     let qt: QToken = safe_accept(&mut libos, sockqd)?;
+
+                    // CONNECTION SETUP PHASE.
+                    alice_barrier.wait();
                     let (_, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
                     let qd: QDesc = match qr {
                         OperationResult::Accept((qd, addr)) if addr.ip() == &BOB_IP => qd,
@@ -771,6 +800,8 @@ mod test {
                             anyhow::bail!("accept() has failed")
                         },
                     };
+
+                    // CLOSING PHASE.
                     alice_barrier.wait();
 
                     // Close bad queue descriptor.
@@ -779,7 +810,6 @@ mod test {
                         Err(_) => (),
                     };
 
-                    // Close connection.
                     safe_close_active(&mut libos, qd)?;
                     safe_close_passive(&mut libos, sockqd)?;
 
@@ -789,6 +819,7 @@ mod test {
                         Err(_) => (),
                     };
 
+                    // END.
                     alice_barrier.wait();
                     Ok(())
                 })?;
@@ -797,6 +828,8 @@ mod test {
             thread::Builder::new()
                 .name(format!("tcp_bad_close::bob"))
                 .spawn(move || {
+                    // CONNECTION SETUP PHASE.
+                    bob_barrier.wait();
                     let mut libos: DummyLibOS = match DummyLibOS::new(BOB_CONFIG_PATH, bob_tx, alice_rx) {
                         Ok(libos) => libos,
                         Err(e) => anyhow::bail!("Could not create inetstack: {:?}", e),
@@ -804,7 +837,6 @@ mod test {
 
                     let remote: SocketAddr = SocketAddr::new(ALICE_IP, PORT_NUMBER);
 
-                    // Open connection.
                     let sockqd: QDesc = safe_socket(&mut libos)?;
                     let qt: QToken = safe_connect(&mut libos, sockqd, remote)?;
                     let (_, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
@@ -816,8 +848,9 @@ mod test {
                             anyhow::bail!("connect() has failed")
                         },
                     }
-                    bob_barrier.wait();
 
+                    // CLOSING PHASE.
+                    bob_barrier.wait();
                     // Close bad queue descriptor.
                     match libos.async_close(QDesc::from(2000)) {
                         // Should not be able to close bad queue descriptor.
@@ -825,7 +858,6 @@ mod test {
                         Err(_) => (),
                     };
 
-                    // Close connection.
                     safe_close_active(&mut libos, sockqd)?;
 
                     // Double close queue descriptor.
@@ -835,12 +867,13 @@ mod test {
                         Err(_) => (),
                     };
 
+                    // END.
                     bob_barrier.wait();
                     Ok(())
                 })?;
 
-        // It is safe to use unwrap here because there should not be any reason that we can't join the thread and if there
-        // is, there is nothing to clean up here on the main thread.
+        // It is safe to use unwrap here because there should not be any reason that we can't join the thread and if
+        // there is, there is nothing to clean up here on the main thread.
         alice.join().unwrap()?;
         bob.join().unwrap()?;
 
@@ -871,11 +904,14 @@ mod test {
 
                     let local: SocketAddr = SocketAddr::new(ALICE_IP, PORT_NUMBER);
 
-                    // Open connection.
                     let sockqd: QDesc = safe_socket(&mut libos)?;
                     safe_bind(&mut libos, sockqd, local)?;
                     safe_listen(&mut libos, sockqd)?;
                     let qt: QToken = safe_accept(&mut libos, sockqd)?;
+
+                    // CONNECTION SET UP PHASE.
+                    alice_barrier.wait();
+
                     let (_, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
                     let qd: QDesc = match qr {
                         OperationResult::Accept((qd, addr)) if addr.ip() == &BOB_IP => qd,
@@ -885,9 +921,9 @@ mod test {
                             anyhow::bail!("accept() has failed")
                         },
                     };
-                    alice_barrier.wait();
 
-                    // Pop data.
+                    // TESTING PHASE.
+                    alice_barrier.wait();
                     let qt: QToken = safe_pop(&mut libos, qd)?;
                     let (qd, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
                     match qr {
@@ -899,10 +935,11 @@ mod test {
                         },
                     }
 
-                    // Close connection.
+                    // CLOSING PHASE.
                     safe_close_active(&mut libos, qd)?;
                     safe_close_passive(&mut libos, sockqd)?;
 
+                    // END.
                     alice_barrier.wait();
 
                     Ok(())
@@ -912,6 +949,8 @@ mod test {
             thread::Builder::new()
                 .name(format!("tcp_bad_push::bob"))
                 .spawn(move || {
+                    // CONNECTION SETUP PHASE.
+                    bob_barrier.wait();
                     let mut libos: DummyLibOS = match DummyLibOS::new(BOB_CONFIG_PATH, bob_tx, alice_rx) {
                         Ok(libos) => libos,
                         Err(e) => anyhow::bail!("Could not create inetstack: {:?}", e),
@@ -919,7 +958,6 @@ mod test {
 
                     let remote: SocketAddr = SocketAddr::new(ALICE_IP, PORT_NUMBER);
 
-                    // Open connection.
                     let sockqd: QDesc = safe_socket(&mut libos)?;
                     let qt: QToken = safe_connect(&mut libos, sockqd, remote)?;
                     let (_, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
@@ -931,6 +969,8 @@ mod test {
                             anyhow::bail!("connect() has failed")
                         },
                     }
+
+                    // TESTING PHASE.
                     bob_barrier.wait();
 
                     let bytes = libos.prepare_dummy_buffer(32)?;
@@ -974,15 +1014,17 @@ mod test {
                         },
                     }
 
-                    // Close connection.
+                    // CLOSE PHASE.
+
                     safe_close_active(&mut libos, sockqd)?;
 
+                    // END.
                     bob_barrier.wait();
                     Ok(())
                 })?;
 
-        // It is safe to use unwrap here because there should not be any reason that we can't join the thread and if there
-        // is, there is nothing to clean up here on the main thread.
+        // It is safe to use unwrap here because there should not be any reason that we can't join the thread and if
+        // there is, there is nothing to clean up here on the main thread.
         alice.join().unwrap()?;
         bob.join().unwrap()?;
 
@@ -1013,11 +1055,13 @@ mod test {
 
                     let local: SocketAddr = SocketAddr::new(ALICE_IP, PORT_NUMBER);
 
-                    // Open connection.
                     let sockqd: QDesc = safe_socket(&mut libos)?;
                     safe_bind(&mut libos, sockqd, local)?;
                     safe_listen(&mut libos, sockqd)?;
                     let qt: QToken = safe_accept(&mut libos, sockqd)?;
+
+                    // CONNECTION SETUP PHASE.
+                    alice_barrier.wait();
                     let (_, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
                     let qd: QDesc = match qr {
                         OperationResult::Accept((qd, addr)) if addr.ip() == &BOB_IP => qd,
@@ -1027,8 +1071,9 @@ mod test {
                             anyhow::bail!("accept() has failed")
                         },
                     };
-                    alice_barrier.wait();
 
+                    // TESTING PHASE.
+                    alice_barrier.wait();
                     // Pop from bad socket.
                     match libos.pop(QDesc::from(2000), None) {
                         Ok(_) => {
@@ -1051,10 +1096,12 @@ mod test {
                         },
                     }
 
-                    // Close connection.
+                    // CLOSE PHASE. Don't need synchronization here because the close will start once the single
+                    // message is received.
                     safe_close_active(&mut libos, qd)?;
                     safe_close_passive(&mut libos, sockqd)?;
 
+                    // END.
                     alice_barrier.wait();
                     Ok(())
                 })?;
@@ -1063,6 +1110,8 @@ mod test {
             thread::Builder::new()
                 .name(format!("tcp_bad_pop::bob"))
                 .spawn(move || {
+                    // CONNECTION SETUP PHASE.
+                    bob_barrier.wait();
                     let mut libos: DummyLibOS = match DummyLibOS::new(BOB_CONFIG_PATH, bob_tx, alice_rx) {
                         Ok(libos) => libos,
                         Err(e) => anyhow::bail!("Could not create inetstack: {:?}", e),
@@ -1070,7 +1119,6 @@ mod test {
 
                     let remote: SocketAddr = SocketAddr::new(ALICE_IP, PORT_NUMBER);
 
-                    // Open connection.
                     let sockqd: QDesc = safe_socket(&mut libos)?;
                     let qt: QToken = safe_connect(&mut libos, sockqd, remote)?;
                     let (_, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
@@ -1083,6 +1131,7 @@ mod test {
                         },
                     }
 
+                    // TESTING PHASE.
                     bob_barrier.wait();
                     let bytes = libos.prepare_dummy_buffer(32)?;
                     let qt: QToken = safe_push(&mut libos, sockqd, bytes)?;
@@ -1096,15 +1145,15 @@ mod test {
                         },
                     }
 
-                    // Close connection.
+                    // CLOSE PHASE. Don't need synchronization here because the close will start once the single
+                    // message is received.
                     safe_close_active(&mut libos, sockqd)?;
-
+                    // END.
                     bob_barrier.wait();
                     Ok(())
                 })?;
 
-        // It is safe to use unwrap here because there should not be any reason that we can't join the thread and if there
-        // is, there is nothing to clean up here on the main thread.
+        // It is safe to use unwrap here because there should not be any reason that we can't join the thread and if there is, there is nothing to clean up here on the main thread.
         alice.join().unwrap()?;
         bob.join().unwrap()?;
 
@@ -1198,7 +1247,7 @@ mod test {
     /// Safe call to `wait2()`.
     fn safe_wait(libos: &mut DummyLibOS, qt: QToken) -> Result<(QDesc, OperationResult)> {
         // Set this to something reasonably high because it should eventually complete.
-        match libos.wait(qt, TIMEOUT_MILLISECONDS) {
+        match libos.wait(qt, SAFE_TIMEOUT) {
             Ok(result) => Ok(result),
             Err(e) => anyhow::bail!("wait failed: {:?}", e),
         }
