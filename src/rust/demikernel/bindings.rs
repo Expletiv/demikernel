@@ -13,13 +13,17 @@ use crate::{
     },
     runtime::{
         fail::Fail,
-        logging,
-        types::{demi_args_t, demi_callback_t, demi_qresult_t, demi_qtoken_t, demi_sgarray_t, demi_sgaseg_t},
+        logging::{self, CallbackLogWriter},
+        types::{
+            demi_args_t, demi_callback_t, demi_log_callback_t, demi_qresult_t, demi_qtoken_t, demi_sgarray_t,
+            demi_sgaseg_t,
+        },
         QToken,
     },
     SocketOption,
 };
-use ::libc::{c_int, c_void};
+use ::flexi_logger::Logger;
+use ::libc::{c_int, c_void, sockaddr};
 use ::socket2::SockAddr;
 use ::std::{
     cell::RefCell,
@@ -28,7 +32,6 @@ use ::std::{
     ptr, slice,
     time::Duration,
 };
-use libc::sockaddr;
 
 thread_local! {
     static THREAD_LOCAL_LIBOS: RefCell<Option<LibOS>> = RefCell::new(None);
@@ -37,7 +40,24 @@ thread_local! {
 #[allow(unused)]
 #[no_mangle]
 pub extern "C" fn demi_init(args: *const demi_args_t) -> c_int {
-    logging::initialize();
+    // Initialize logging before anything else.
+    let log_callback: Option<demi_log_callback_t> = if args.is_null() {
+        None
+    } else {
+        let args: &demi_args_t = unsafe { &*args };
+        args.log_callback
+    };
+
+    if log_callback.is_none() {
+        logging::initialize();
+    } else {
+        logging::custom_initialize(move || {
+            Logger::try_with_env()
+                .unwrap()
+                .log_to_writer(Box::new(CallbackLogWriter::new(log_callback.unwrap())))
+        });
+    }
+
     trace!("demi_init()");
 
     let libos_name: LibOSName = match LibOSName::from_env() {

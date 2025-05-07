@@ -138,6 +138,19 @@ extern "C"
     // Callback Function.
     typedef void (*demi_callback_t)(const char *, uint32_t, uint64_t);
 
+    // Log levels for demi_log_callback_t. These values correspond to the enum in flexi_logger crate.
+    typedef enum demi_log_level
+    {
+        DemiLogLevel_Error = 1,
+        DemiLogLevel_Warning = 2,
+        DemiLogLevel_Info = 3,
+        DemiLogLevel_Debug = 4,
+        DemiLogLevel_Trace = 5,
+    } demi_log_level_t;
+
+    // Logging callback. Arguments are: level, module name, module length, file name, file name length, line number, message, message length, 
+    typedef void (*demi_log_callback_t)(demi_log_level_t, const char*, uint32_t, const char*, uint32_t, uint32_t, const char*, uint32_t);
+
 /**
  * @brief Arguments for Demikernel.
  */
@@ -149,9 +162,10 @@ extern "C"
         struct __attribute__((__packed__)) demi_args
 #endif
     {
-        int argc;                 /**< Number of command-line arguments. */
-        char *const *argv;        /**< Command-line Arguments.           */
-        demi_callback_t callback; /**< Callback Function.                */
+        int argc;                        /**< Number of command-line arguments. */
+        char *const *argv;               /**< Command-line Arguments.           */
+        demi_callback_t callback;        /**< Callback Function.                */
+        demi_log_callback_t logCallback; /**< Logging Callback.                */
     };
 #ifdef _WIN32
 #pragma pack(pop)
