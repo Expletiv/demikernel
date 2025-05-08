@@ -214,7 +214,7 @@ mod test {
                     anyhow::bail!("wait on push() failed")
                 },
             }
-
+            alice_barrier.wait();
             // Pop data.
             let qt: QToken = match libos.pop(sockfd, None) {
                 Ok(qt) => qt,
@@ -304,6 +304,7 @@ mod test {
                 },
             }
 
+            bob_barrier.wait();
             // Close connection.
             match libos.async_close(sockfd) {
                 Ok(qt) => {
@@ -375,6 +376,7 @@ mod test {
                 },
             }
 
+            alice_barrier.wait();
             let qt: QToken = match libos.pop(sockfd, None) {
                 Ok(qt) => qt,
                 Err(e) => {
@@ -454,6 +456,7 @@ mod test {
                     anyhow::bail!("push() failed")
                 },
             }
+            bob_barrier.wait();
 
             // Close connection.
             match libos.async_close(sockfd) {
