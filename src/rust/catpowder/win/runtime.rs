@@ -150,14 +150,11 @@ impl PhysicalLayer for SharedCatpowderRuntime {
         let me: &mut CatpowderRuntime = &mut self.0.borrow_mut();
         me.interface.provide_rx_buffers();
 
-        let mut queue: usize = 0;
-
         if let Some(vf_interface) = me.vf_interface.as_mut() {
             vf_interface.provide_rx_buffers();
             for rx in vf_interface.rx_rings.iter_mut() {
                 let remaining: u32 = ret.remaining_capacity() as u32;
                 rx.process_rx(&mut me.api, remaining, |dbuf: DemiBuffer| {
-                    trace!("receive(): VF, queue={}, pkt_size={:?}", queue, dbuf.len());
                     ret.push(DemiBuffer::try_from(&*dbuf).unwrap());
                     Ok(())
                 })?;
@@ -165,17 +162,12 @@ impl PhysicalLayer for SharedCatpowderRuntime {
                 if ret.is_full() {
                     return Ok(ret);
                 }
-                queue += 1;
             }
-
-            queue = 0;
         }
 
         for rx in me.interface.rx_rings.iter_mut() {
             let remaining: u32 = ret.remaining_capacity() as u32;
             rx.process_rx(&mut me.api, remaining, |dbuf: DemiBuffer| {
-                trace!("receive(): non-VF, queue={}, pkt_size={:?}", queue, dbuf.len());
-
                 ret.push(DemiBuffer::try_from(&*dbuf).unwrap());
                 Ok(())
             })?;
@@ -183,7 +175,6 @@ impl PhysicalLayer for SharedCatpowderRuntime {
             if ret.is_full() {
                 return Ok(ret);
             }
-            queue += 1;
         }
 
         Ok(ret)
