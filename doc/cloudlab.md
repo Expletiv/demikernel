@@ -40,9 +40,9 @@ Fetch the code from the original repository and use `dev` branch for latest upda
 Execute these scripts within the demikernel repository to setup pre-requisite for Ubuntu, Rust DPDK, and Hugepages
 
 
-    ./scripts/setup/debian.sh
-    ./scripts/setup/dpdk.sh
-    ./scripts/setup/hugepages.sh
+    ./scripts/install-dev-packages.sh
+    ./scripts/build-install-dpdk.sh
+    ./scripts/setup-hugepages.sh
 
 
 # Running Demikernel
@@ -52,7 +52,7 @@ Run `make all` to make sure everything compiles.
 
 ## Configuration files
 
-Edit the config files in `scripts/config/default.yaml` using the following steps.  
+Edit the config files in `scripts/config-templates/baremetal-config-template.yaml` using the following steps.
 
 **Node 0 → Server**
 

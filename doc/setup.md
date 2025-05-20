@@ -11,7 +11,7 @@ specification, check out the `README.md` file.
 
 - [Table of Contents](#table-of-contents)
 - [1. Clone This Repository](#1-clone-this-repository)
-- [2. Install Third-Party Requirements](#2-install-third-party-requirements)
+- [2. Install Third-Party Requirements (Debian-based)](#2-install-third-party-requirements)
 - [3. Install Rust Toolchain](#3-install-rust-toolchain)
 - [4. Build DPDK Library (For Catnip and Only Once)](#4-build-dpdk-library-for-catnip-and-only-once)
 - [5. Setup Configuration File (Only Once)](#5-setup-configuration-file-only-once)
@@ -28,14 +28,14 @@ git clone --recursive https://github.com/microsoft/demikernel.git    # Recursive
 cd $WORKDIR/demikernel                                                # Switch to repository's source tree.
 ```
 
-## 2. Install Third-Party Requirements
+## 2. Install Third-Party Requirements (Debian-based)
 
 ```bash
 # Check what is going to be installed.
-cat scripts/setup/debian.sh
+cat scripts/install-dev-packages.sh
 
 # Install third party libraries.
-sudo -H scripts/setup/debian.sh
+sudo -H scripts/install-dev-packages.sh
 ```
 
 ## 3. Install Rust Toolchain
@@ -48,13 +48,13 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ## 4. Build DPDK Library (For Catnip and Only Once)
 
 ```bash
-./scripts/setup/dpdk.sh
+./scripts/build-install-dpdk.sh
 ```
 
 ## 5. Setup Configuration File (Only Once)
 
-- Copy the template from `scripts/config/default.yaml` to
-  `$HOME/config.yaml`. If running on Azure, use `scripts/config/azure.yaml`.
+- Copy the template from `scripts/config-templates/baremetal-config-template.yaml` to
+  `$HOME/config.yaml`. If running on Azure, use `scripts/config-templates/azure-config-template.yaml`.
 - Open the file in `$HOME/config.yaml` for editing and do the following:
   - Change `XX.XX.XX.XX` to match the IPv4 address that in the local host.
   - Change `ff:ff:ff:ff:ff:ff` to match the MAC address in the local host.
@@ -66,5 +66,5 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ## 6. Enable Huge Pages (Only for Catnip on Every System Reboot)
 
 ```bash
-sudo -E ./scripts/setup/hugepages.sh
+sudo -E ./scripts/setup-hugepages.sh
 ```
