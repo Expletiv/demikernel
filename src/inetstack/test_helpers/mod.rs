@@ -19,9 +19,9 @@ pub const BOB_MAC: MacAddress = MacAddress::new([0xab, 0x89, 0x67, 0x45, 0x23, 0
 pub const BOB_IPV4: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 2);
 pub const CARRIE_MAC: MacAddress = MacAddress::new([0xef, 0xcd, 0xab, 0x89, 0x67, 0x45]);
 pub const CARRIE_IPV4: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 3);
-pub const ALICE_CONFIG_PATH: &str = "./src/rust/inetstack/test_helpers/alice.yaml";
-pub const BOB_CONFIG_PATH: &str = "./src/rust/inetstack/test_helpers/bob.yaml";
-pub const CARRIE_CONFIG_PATH: &str = "./src/rust/inetstack/test_helpers/carrie.yaml";
+pub const ALICE_CONFIG_PATH: &str = "./src/inetstack/test_helpers/alice.yaml";
+pub const BOB_CONFIG_PATH: &str = "./src/inetstack/test_helpers/bob.yaml";
+pub const CARRIE_CONFIG_PATH: &str = "./src/inetstack/test_helpers/carrie.yaml";
 
 //======================================================================================================================
 // Standalone Functions

@@ -60,7 +60,7 @@ windows-sys = { version = "0.52.0", features = ["Win32_Networking_WinSock"] }
 # Targets
 [lib]
 crate-type = ["cdylib", "rlib"]
-path = "src/rust/lib.rs"
+path = "src/lib.rs"
 
 [[test]]
 name = "tcp-tests"
