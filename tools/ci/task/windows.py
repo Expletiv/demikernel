@@ -30,7 +30,7 @@ class BaseWindowsTask(BaseTask):
 class CheckoutOnWindows(BaseWindowsTask):
     def __init__(self, host: str, repository: str, branch: str):
         env_cmd = BaseWindowsTask._build_env_cmd()
-        cmd: str = f"cd {repository} ; {env_cmd} ; git pull origin ; git checkout {branch}"
+        cmd: str = f"cd {repository} ; {env_cmd} ; git fetch origin ; git checkout {branch}; git reset --hard {branch}"
         super().__init__(host, cmd)
 
 
@@ -54,5 +54,5 @@ class RunOnWindows(BaseWindowsTask):
 class CleanupOnWindows(BaseWindowsTask):
     def __init__(self, host: str, repository: str, is_sudo: bool, branch: str):
         env_cmd = BaseWindowsTask._build_env_cmd()
-        cmd: str = f"cd {repository} ; {env_cmd} ; nmake clean ; git checkout ; git clean -fdx"
+        cmd: str = f"cd {repository} ; {env_cmd} ; nmake clean ; git checkout {branch}; git clean -fdx"
         super().__init__(host, cmd)

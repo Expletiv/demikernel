@@ -14,7 +14,7 @@ class BaseLinuxTask(BaseTask):
 
 class CheckoutOnLinux(BaseLinuxTask):
     def __init__(self, host: str, repository: str, branch: str):
-        cmd: str = f"cd {repository} && git pull origin && git checkout {branch}"
+        cmd: str = f"cd {repository} && git fetch origin && git checkout {branch} && git reset --hard {branch}"
         super().__init__(host, cmd)
 
 
