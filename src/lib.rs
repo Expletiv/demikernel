@@ -199,7 +199,6 @@ macro_rules! expect_ok {
 ///     // ... do some more ...
 /// }
 /// ```
-
 #[macro_export]
 macro_rules! timer {
     ($name:expr) => {

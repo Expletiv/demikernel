@@ -24,9 +24,8 @@ use ::std::{
 //======================================================================================================================
 // Structures
 //======================================================================================================================
-/// Per-queue metadata: UDP Control Block
 
-/// UDP Peer
+/// Per-queue metadata: UDP Control Block
 pub struct UdpPeer {
     /// Underlying transport.
     layer3_endpoint: SharedLayer3Endpoint,
@@ -44,8 +43,6 @@ pub struct SharedUdpPeer(SharedObject<UdpPeer>);
 //======================================================================================================================
 // Associate Functions
 //======================================================================================================================
-
-/// Associate functions for [SharedUdpPeer].
 
 impl SharedUdpPeer {
     pub fn new(
