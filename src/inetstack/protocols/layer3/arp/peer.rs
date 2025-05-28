@@ -108,18 +108,18 @@ impl SharedArpPeer {
 
     async fn do_wait_link_addr(&mut self, ipv4_addr: Ipv4Addr) -> MacAddress {
         let (tx, rx): (Sender<MacAddress>, Receiver<MacAddress>) = channel();
+
         if let Some(&link_addr) = self.cache.get(ipv4_addr) {
             let _ = tx.send(link_addr);
+        } else if let Some(wait_queue) = self.waiters.get_mut(&ipv4_addr) {
+            warn!("Duplicate waiter for IP address: {}", ipv4_addr);
+            wait_queue.push_back(tx);
         } else {
-            if let Some(wait_queue) = self.waiters.get_mut(&ipv4_addr) {
-                warn!("Duplicate waiter for IP address: {}", ipv4_addr);
-                wait_queue.push_back(tx);
-            } else {
-                let mut wait_queue: LinkedList<Sender<MacAddress>> = LinkedList::new();
-                wait_queue.push_back(tx);
-                self.waiters.insert(ipv4_addr, wait_queue);
-            }
+            let mut wait_queue: LinkedList<Sender<MacAddress>> = LinkedList::new();
+            wait_queue.push_back(tx);
+            self.waiters.insert(ipv4_addr, wait_queue);
         }
+
         expect_ok!(rx.await, "Dropped waiter?")
     }
 
