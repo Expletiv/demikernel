@@ -254,8 +254,8 @@ impl<'a> PackingIterator<'a> {
 
         Ok(Self {
             cursor: BufferCursor::new(buffer),
-            layout: layout,
-            page_size: page_size,
+            layout,
+            page_size,
             _marker: PhantomData,
         })
     }
