@@ -80,7 +80,7 @@ impl LibOS {
         // Instantiate LibOS.
         #[allow(unreachable_patterns)]
         let libos: LibOS = match libos_name {
-            #[cfg(all(feature = "catnap-libos"))]
+            #[cfg(feature = "catnap-libos")]
             LibOSName::Catnap => Self::NetworkLibOS(NetworkLibOSWrapper::Catnap(SharedNetworkLibOS::<
                 SharedCatnapTransport,
             >::new(

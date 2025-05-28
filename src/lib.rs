@@ -27,7 +27,7 @@ mod catnip;
 #[cfg(feature = "catpowder-libos")]
 mod catpowder;
 
-#[cfg(all(feature = "catnap-libos"))]
+#[cfg(feature = "catnap-libos")]
 mod catnap;
 
 pub use self::demikernel::libos::{name::LibOSName, LibOS};
