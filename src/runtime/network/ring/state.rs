@@ -58,10 +58,8 @@ impl RingStateMachine {
     /// Prepares to move into the next state.
     pub fn prepare(&mut self, op: RingControlOperation) -> Result<(), Fail> {
         let next: RingState = self.get_next_state(op)?;
-        if next != RingState::Closing {
-            if self.next.is_some() {
-                return Err(fail(op, &(format!("ring is busy")), libc::EBUSY));
-            }
+        if next != RingState::Closing && self.next.is_some() {
+            return Err(fail(op, &(format!("ring is busy")), libc::EBUSY));
         }
         self.next = Some(next);
         Ok(())
