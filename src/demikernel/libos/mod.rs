@@ -122,161 +122,109 @@ impl LibOS {
         socket_type: libc::c_int,
         protocol: libc::c_int,
     ) -> Result<QDesc, Fail> {
-        let result: Result<QDesc, Fail> = {
-            match self {
-                LibOS::NetworkLibOS(libos) => libos.socket(domain, socket_type, protocol),
-            }
-        };
-
-        result
+        match self {
+            LibOS::NetworkLibOS(libos) => libos.socket(domain, socket_type, protocol),
+        }
     }
 
     /// Sets an SO_* option on the socket referenced by [sockqd].
     pub fn set_socket_option(&mut self, sockqd: QDesc, option: SocketOption) -> Result<(), Fail> {
-        let result: Result<(), Fail> = {
-            match self {
-                LibOS::NetworkLibOS(libos) => libos.set_socket_option(sockqd, option),
-            }
-        };
-
-        result
+        match self {
+            LibOS::NetworkLibOS(libos) => libos.set_socket_option(sockqd, option),
+        }
     }
 
     /// Gets a SO_* option on the socket referenced by [sockqd].
     pub fn get_socket_option(&mut self, sockqd: QDesc, option: SocketOption) -> Result<SocketOption, Fail> {
-        let result: Result<SocketOption, Fail> = {
-            match self {
-                LibOS::NetworkLibOS(libos) => libos.get_socket_option(sockqd, option),
-            }
-        };
-
-        result
+        match self {
+            LibOS::NetworkLibOS(libos) => libos.get_socket_option(sockqd, option),
+        }
     }
 
     pub fn getpeername(&mut self, sockqd: QDesc) -> Result<SocketAddrV4, Fail> {
-        let result: Result<SocketAddrV4, Fail> = {
-            match self {
-                LibOS::NetworkLibOS(libos) => libos.getpeername(sockqd),
-            }
-        };
-
-        result
+        match self {
+            LibOS::NetworkLibOS(libos) => libos.getpeername(sockqd),
+        }
     }
 
     #[allow(unused_variables)]
     pub fn bind(&mut self, sockqd: QDesc, local: SocketAddr) -> Result<(), Fail> {
-        let result: Result<(), Fail> = {
-            match self {
-                LibOS::NetworkLibOS(libos) => libos.bind(sockqd, local),
-            }
-        };
-
-        result
+        match self {
+            LibOS::NetworkLibOS(libos) => libos.bind(sockqd, local),
+        }
     }
 
     /// This marks the socket as passive.
     #[allow(unused_variables)]
     pub fn listen(&mut self, sockqd: QDesc, backlog: usize) -> Result<(), Fail> {
-        let result: Result<(), Fail> = {
-            match self {
-                LibOS::NetworkLibOS(libos) => libos.listen(sockqd, backlog),
-            }
-        };
-
-        result
+        match self {
+            LibOS::NetworkLibOS(libos) => libos.listen(sockqd, backlog),
+        }
     }
 
     #[allow(unused_variables)]
     pub fn accept(&mut self, sockqd: QDesc) -> Result<QToken, Fail> {
-        let result: Result<QToken, Fail> = {
-            match self {
-                LibOS::NetworkLibOS(libos) => libos.accept(sockqd),
-            }
-        };
-
-        result
+        match self {
+            LibOS::NetworkLibOS(libos) => libos.accept(sockqd),
+        }
     }
 
     #[allow(unused_variables)]
     pub fn connect(&mut self, sockqd: QDesc, remote: SocketAddr) -> Result<QToken, Fail> {
-        let result: Result<QToken, Fail> = {
-            match self {
-                LibOS::NetworkLibOS(libos) => libos.connect(sockqd, remote),
-            }
-        };
-
-        result
+        match self {
+            LibOS::NetworkLibOS(libos) => libos.connect(sockqd, remote),
+        }
     }
 
     /// Closes an I/O queue. async_close() + wait() achieves the same effect as this synchronous function.
     pub fn close(&mut self, qd: QDesc) -> Result<(), Fail> {
-        let result: Result<(), Fail> = {
-            match self {
-                LibOS::NetworkLibOS(libos) => match libos.async_close(qd) {
-                    Ok(qt) => match self.wait(qt, None) {
-                        Ok(_) => Ok(()),
-                        Err(e) => Err(e),
-                    },
+        match self {
+            LibOS::NetworkLibOS(libos) => match libos.async_close(qd) {
+                Ok(qt) => match self.wait(qt, None) {
+                    Ok(_) => Ok(()),
                     Err(e) => Err(e),
                 },
-            }
-        };
-
-        result
+                Err(e) => Err(e),
+            },
+        }
     }
 
     pub fn async_close(&mut self, qd: QDesc) -> Result<QToken, Fail> {
-        let result: Result<QToken, Fail> = {
-            match self {
-                LibOS::NetworkLibOS(libos) => libos.async_close(qd),
-            }
-        };
-
-        result
+        match self {
+            LibOS::NetworkLibOS(libos) => libos.async_close(qd),
+        }
     }
 
     /// Pushes a scatter-gather array to an I/O queue.
     pub fn push(&mut self, qd: QDesc, sga: &demi_sgarray_t) -> Result<QToken, Fail> {
-        let result: Result<QToken, Fail> = {
-            match self {
-                LibOS::NetworkLibOS(libos) => libos.push(qd, sga),
-            }
-        };
-
-        result
+        match self {
+            LibOS::NetworkLibOS(libos) => libos.push(qd, sga),
+        }
     }
 
     /// Pushes a scatter-gather array to a UDP socket.
     #[allow(unused_variables)]
     pub fn pushto(&mut self, qd: QDesc, sga: &demi_sgarray_t, to: SocketAddr) -> Result<QToken, Fail> {
-        let result: Result<QToken, Fail> = {
-            match self {
-                LibOS::NetworkLibOS(libos) => libos.pushto(qd, sga, to),
-            }
-        };
-
-        result
+        match self {
+            LibOS::NetworkLibOS(libos) => libos.pushto(qd, sga, to),
+        }
     }
 
     /// Pops data from a an I/O queue.
     pub fn pop(&mut self, qd: QDesc, size: Option<usize>) -> Result<QToken, Fail> {
-        let result: Result<QToken, Fail> = {
-            // Check if this is a fixed-size pop.
-            if let Some(size) = size {
-                // Check if size is valid.
-                if !((size > 0) && (size <= limits::POP_SIZE_MAX)) {
-                    let cause: String = format!("invalid pop size (size={:?})", size);
-                    error!("pop(): {:?}", &cause);
-                    return Err(Fail::new(libc::EINVAL, &cause));
-                }
+        // Check if this is a fixed-size pop.
+        if let Some(size) = size {
+            // Check if size is valid.
+            if !((size > 0) && (size <= limits::POP_SIZE_MAX)) {
+                let cause: String = format!("invalid pop size (size={:?})", size);
+                error!("pop(): {:?}", &cause);
+                return Err(Fail::new(libc::EINVAL, &cause));
             }
+        }
 
-            match self {
-                LibOS::NetworkLibOS(libos) => libos.pop(qd, size),
-            }
-        };
-
-        result
+        match self {
+            LibOS::NetworkLibOS(libos) => libos.pop(qd, size),
+        }
     }
 
     /// Waits for a pending I/O operation to complete or a timeout to expire.
@@ -312,24 +260,16 @@ impl LibOS {
     }
 
     pub fn sgaalloc(&mut self, size: usize) -> Result<demi_sgarray_t, Fail> {
-        let result: Result<demi_sgarray_t, Fail> = {
-            timer!("demikernel::sgaalloc");
-            match self {
-                LibOS::NetworkLibOS(libos) => libos.sgaalloc(size),
-            }
-        };
-
-        result
+        timer!("demikernel::sgaalloc");
+        match self {
+            LibOS::NetworkLibOS(libos) => libos.sgaalloc(size),
+        }
     }
 
     pub fn sgafree(&mut self, sga: demi_sgarray_t) -> Result<(), Fail> {
-        let result: Result<(), Fail> = {
-            timer!("demikernel::sgafree");
-            match self {
-                LibOS::NetworkLibOS(libos) => libos.sgafree(sga),
-            }
-        };
-
-        result
+        timer!("demikernel::sgafree");
+        match self {
+            LibOS::NetworkLibOS(libos) => libos.sgafree(sga),
+        }
     }
 }
