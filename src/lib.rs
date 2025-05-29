@@ -27,7 +27,7 @@ mod catnip;
 #[cfg(feature = "catpowder-libos")]
 mod catpowder;
 
-#[cfg(all(feature = "catnap-libos"))]
+#[cfg(feature = "catnap-libos")]
 mod catnap;
 
 pub use self::demikernel::libos::{name::LibOSName, LibOS};
@@ -199,7 +199,6 @@ macro_rules! expect_ok {
 ///     // ... do some more ...
 /// }
 /// ```
-
 #[macro_export]
 macro_rules! timer {
     ($name:expr) => {

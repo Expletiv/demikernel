@@ -8,11 +8,11 @@
 #[cfg(all(feature = "catpowder-libos", target_os = "windows"))]
 use crate::inetstack::protocols::Protocol;
 use crate::{pal::KeepAlive, runtime::fail::Fail, MacAddress};
-#[cfg(any(feature = "catnip-libos"))]
+#[cfg(feature = "catnip-libos")]
 use ::std::ffi::CString;
 use ::std::{collections::HashMap, fs::File, io::Read, net::Ipv4Addr, ops::Index, str::FromStr, time::Duration};
 use ::yaml_rust::{Yaml, YamlLoader};
-#[cfg(any(feature = "catnip-libos"))]
+#[cfg(feature = "catnip-libos")]
 use yaml_rust::yaml::Array;
 
 //======================================================================================================================
@@ -50,7 +50,7 @@ mod inetstack_config {
 }
 
 // DPDK options. These only apply to catnip.
-#[cfg(any(feature = "catnip-libos"))]
+#[cfg(feature = "catnip-libos")]
 mod dpdk_config {
     pub const SECTION_NAME: &str = "dpdk";
     pub const EAL_INIT_ARGS: &str = "eal_init";

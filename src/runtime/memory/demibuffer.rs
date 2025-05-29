@@ -307,7 +307,6 @@ impl DemiBuffer {
     // ------------
 
     /// Creates a new (Heap-allocated) `DemiBuffer`.
-
     // Implementation Note:
     // This function is replacing the new() function of DataBuffer, which could return failure.  However, the only
     // failure it actually reported was if the new DataBuffer request was for zero size.  A separate empty() function
