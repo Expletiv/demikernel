@@ -149,7 +149,7 @@ impl Future for YieldPoint {
             YieldState::Yielded if num_ready > 0 => {
                 self_.cond_var.num_ready -= 1;
                 self_.state = YieldState::Running;
-                return Poll::Ready(());
+                Poll::Ready(())
             },
             _ => Poll::Pending,
         }

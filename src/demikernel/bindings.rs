@@ -758,7 +758,7 @@ pub extern "C" fn demi_getsockopt(
         },
         Err(e) => {
             trace!("demi_getsockopt(): {:?}", e);
-            return e.errno;
+            e.errno
         },
     }
 }
@@ -809,11 +809,11 @@ pub extern "C" fn demi_getpeername(qd: c_int, addr: *mut SockAddr, addrlen: *mut
                 );
             }
 
-            return 0;
+            0
         },
         Err(e) => {
             trace!("demi_getpeername() failed: {:?}", e);
-            return e.errno;
+            e.errno
         },
     }
 }
@@ -865,7 +865,7 @@ fn sockaddr_to_socketaddr(saddr: *const sockaddr, size: Socklen) -> Result<Socke
 
     match saddr.as_socket() {
         Some(saddr) => Ok(saddr),
-        None => return Err(Fail::new(libc::ENOTSUP, "communication domain not supported")),
+        None => Err(Fail::new(libc::ENOTSUP, "communication domain not supported")),
     }
 }
 
