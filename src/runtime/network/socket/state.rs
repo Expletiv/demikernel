@@ -167,7 +167,7 @@ impl SocketStateMachine {
         // Already prepared and not committed or aborted yet.
         if let Some(pending) = self.next {
             if next != SocketState::Closing && pending != next {
-                return Err(fail(op, &(format!("socket is busy")), libc::EBUSY));
+                return Err(fail(op, &format!("socket is busy"), libc::EBUSY));
             }
         }
 
@@ -211,19 +211,19 @@ impl SocketStateMachine {
             // Should this be possible without going through the Connecting state?
             SocketOp::Established => Ok(SocketState::ActiveEstablished),
             SocketOp::Close => Ok(SocketState::Closing),
-            SocketOp::Closed => Err(fail(op, &(format!("socket is busy")), libc::EBUSY)),
+            SocketOp::Closed => Err(fail(op, &format!("socket is busy"), libc::EBUSY)),
         }
     }
 
     /// Attempts to transition from bound state.
     fn bound_state(&self, op: SocketOp) -> Result<SocketState, Fail> {
         match op {
-            SocketOp::Bind => Err(fail(op, &(format!("socket is already bound")), libc::EINVAL)),
+            SocketOp::Bind => Err(fail(op, &format!("socket is already bound"), libc::EINVAL)),
             SocketOp::Listen => Ok(SocketState::PassiveListening),
             SocketOp::Connect => Ok(SocketState::ActiveConnecting),
             SocketOp::Established => Ok(SocketState::ActiveConnecting),
             SocketOp::Close => Ok(SocketState::Closing),
-            SocketOp::Closed => Err(fail(op, &(format!("socket is busy")), libc::EBUSY)),
+            SocketOp::Closed => Err(fail(op, &format!("socket is busy"), libc::EBUSY)),
         }
     }
 
@@ -231,23 +231,23 @@ impl SocketStateMachine {
     fn listening_state(&self, op: SocketOp) -> Result<SocketState, Fail> {
         match op {
             SocketOp::Bind | SocketOp::Established => {
-                Err(fail(op, &(format!("socket is already listening")), libc::EINVAL))
+                Err(fail(op, &format!("socket is already listening"), libc::EINVAL))
             },
-            SocketOp::Listen => Err(fail(op, &(format!("socket is already listening")), libc::EADDRINUSE)),
-            SocketOp::Connect => Err(fail(op, &(format!("socket is already listening")), libc::EOPNOTSUPP)),
+            SocketOp::Listen => Err(fail(op, &format!("socket is already listening"), libc::EADDRINUSE)),
+            SocketOp::Connect => Err(fail(op, &format!("socket is already listening"), libc::EOPNOTSUPP)),
             SocketOp::Close => Ok(SocketState::Closing),
-            SocketOp::Closed => Err(fail(op, &(format!("socket is busy")), libc::EBUSY)),
+            SocketOp::Closed => Err(fail(op, &format!("socket is busy"), libc::EBUSY)),
         }
     }
 
     /// Attempts to transition from connecting state.
     fn connecting_state(&self, op: SocketOp) -> Result<SocketState, Fail> {
         match op {
-            SocketOp::Bind => Err(fail(op, &(format!("socket is already connecting")), libc::EINVAL)),
-            SocketOp::Listen => Err(fail(op, &(format!("socket is already connecting")), libc::EADDRINUSE)),
+            SocketOp::Bind => Err(fail(op, &format!("socket is already connecting"), libc::EINVAL)),
+            SocketOp::Listen => Err(fail(op, &format!("socket is already connecting"), libc::EADDRINUSE)),
             SocketOp::Connect => Err(fail(
                 op,
-                &(format!("socket already is already connecting ")),
+                &format!("socket already is already connecting "),
                 libc::EINPROGRESS,
             )),
             SocketOp::Established => Ok(SocketState::ActiveEstablished),
@@ -263,7 +263,7 @@ impl SocketStateMachine {
     fn established_state(&self, op: SocketOp) -> Result<SocketState, Fail> {
         match op {
             SocketOp::Bind | SocketOp::Listen | SocketOp::Connect | SocketOp::Established => {
-                Err(fail(op, &(format!("socket is already connected")), libc::EISCONN))
+                Err(fail(op, &format!("socket is already connected"), libc::EISCONN))
             },
             SocketOp::Close => Ok(SocketState::Closing),
             SocketOp::Closed => Ok(SocketState::Closed),
@@ -275,7 +275,7 @@ impl SocketStateMachine {
         match op {
             SocketOp::Close => Ok(SocketState::Closing),
             SocketOp::Closed => Ok(SocketState::Closed),
-            _ => Err(fail(op, &(format!("socket is closing")), libc::EBADF)),
+            _ => Err(fail(op, &format!("socket is closing"), libc::EBADF)),
         }
     }
 
@@ -284,13 +284,13 @@ impl SocketStateMachine {
         if op == SocketOp::Closed || op == SocketOp::Close {
             Ok(SocketState::Closed)
         } else {
-            Err(fail(op, &(format!("socket is closed")), libc::EBADF))
+            Err(fail(op, &format!("socket is closed"), libc::EBADF))
         }
     }
 
     fn ensure_bound(&self) -> Result<(), Fail> {
         if self.current.get() != SocketState::Bound {
-            let cause: String = format!("socket is not bound");
+            let cause: String = String::from("socket is not bound");
             error!("ensure_bound(): {}", cause);
             return Err(Fail::new(libc::EDESTADDRREQ, &cause));
         }
@@ -299,7 +299,7 @@ impl SocketStateMachine {
 
     fn ensure_listening(&self) -> Result<(), Fail> {
         if self.current.get() != SocketState::PassiveListening {
-            let cause: String = format!("socket is not listening");
+            let cause: String = String::from("socket is not listening");
             error!("ensure_listening(): {}", cause);
             return Err(Fail::new(libc::EINVAL, &cause));
         }
@@ -308,7 +308,7 @@ impl SocketStateMachine {
 
     fn ensure_established(&self) -> Result<(), Fail> {
         if self.current.get() != SocketState::ActiveEstablished {
-            let cause: String = format!("socket is not connected");
+            let cause: String = String::from("socket is not connected");
             error!("ensure_connected(): {}", cause);
             return Err(Fail::new(libc::ENOTCONN, &cause));
         }
@@ -317,7 +317,7 @@ impl SocketStateMachine {
 
     pub fn ensure_not_closing(&self) -> Result<(), Fail> {
         if self.current.get() == SocketState::Closing {
-            let cause: String = format!("socket is closing");
+            let cause: String = String::from("socket is closing");
             error!("ensure_not_closing(): {}", cause);
             return Err(Fail::new(libc::EBADF, &cause));
         }
@@ -326,7 +326,7 @@ impl SocketStateMachine {
 
     fn ensure_not_closed(&self) -> Result<(), Fail> {
         if self.current.get() == SocketState::Closed {
-            let cause: String = format!("socket is closed");
+            let cause: String = String::from("socket is closed");
             error!("ensure_not_closed(): {}", cause);
             return Err(Fail::new(libc::EBADF, &cause));
         }

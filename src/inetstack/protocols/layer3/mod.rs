@@ -81,8 +81,7 @@ impl SharedLayer3Endpoint {
                     let header = match Ipv4Header::parse_and_strip(&mut packet) {
                         Ok(header) => header,
                         Err(e) => {
-                            let cause: String = format!("Invalid destination address: {:?}", e);
-                            warn!("dropping packet: {}", cause);
+                            warn!("dropping packet: Invalid destination address: {:?}", e);
                             continue;
                         },
                     };
@@ -90,8 +89,7 @@ impl SharedLayer3Endpoint {
 
                     // Check that the destination matches our IP address; otherwise, discard.
                     if header.get_dest_addr() != self.local_ipv4_addr && !header.get_dest_addr().is_broadcast() {
-                        let cause: String = format!("Invalid destination address");
-                        warn!("dropping packet: {}", cause);
+                        warn!("dropping packet: Invalid destination address");
                         continue;
                     }
 
@@ -100,8 +98,10 @@ impl SharedLayer3Endpoint {
                         || header.get_src_addr().is_multicast()
                         || header.get_src_addr().is_unspecified()
                     {
-                        let cause: String = format!("invalid remote address (remote={})", header.get_src_addr());
-                        warn!("dropping packet: {}", &cause);
+                        warn!(
+                            "dropping packet: Invalid remote address (remote={})",
+                            header.get_src_addr()
+                        );
                         continue;
                     }
 

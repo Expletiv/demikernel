@@ -105,14 +105,14 @@ impl SharedActiveOpenSocket {
 
         // Check if our peer is refusing our connection request.
         if header.rst {
-            let cause: String = format!("connection refused");
+            let cause: String = String::from("connection refused");
             error!("process_ack(): {}", cause);
             return Err(Fail::new(libc::ECONNREFUSED, &cause));
         }
 
         // Bail if we didn't receive a SYN packet.
         if !header.syn {
-            let cause: String = format!("is not a syn packet");
+            let cause: String = String::from("is not a syn packet");
             error!("process_ack(): {}", cause);
             return Err(Fail::new(libc::EAGAIN, &cause));
         }
@@ -280,7 +280,7 @@ impl SharedActiveOpenSocket {
             }
         }
 
-        let cause: String = format!("connection handshake timed out");
+        let cause: String = String::from("connection handshake timed out");
         error!("connect(): {}", cause);
         Err(Fail::new(libc::ECONNREFUSED, &cause))
     }

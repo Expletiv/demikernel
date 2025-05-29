@@ -177,7 +177,7 @@ impl Config {
         };
 
         if local_ipv4_addr.is_unspecified() || local_ipv4_addr.is_broadcast() {
-            let cause: String = format!("Invalid IPv4 address");
+            let cause: String = String::from("Invalid IPv4 address");
             error!("local_ipv4_addr(): {:?}", cause);
             return Err(Fail::new(libc::EINVAL, &cause));
         }
@@ -263,7 +263,7 @@ impl Config {
                 let link_addr: MacAddress = match k.as_str() {
                     Some(link_string) => MacAddress::parse_canonical_str(link_string)?,
                     None => {
-                        let cause: String = format!("Couldn't parse ARP table link_addr in config");
+                        let cause: String = String::from("Couldn't parse ARP table link_addr in config");
                         error!("arp_table(): {:?}", cause);
                         return Err(Fail::new(libc::EINVAL, &cause));
                     },

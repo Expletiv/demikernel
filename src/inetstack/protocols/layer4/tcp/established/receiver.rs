@@ -398,7 +398,7 @@ impl Receiver {
                         trace!("check_segment_in_window(): send ack on duplicate segment");
                         Sender::send_ack(cb, layer3_endpoint);
                     }
-                    let cause: String = format!("duplicate packet");
+                    let cause: String = String::from("duplicate packet");
                     error!("check_segment_in_window(): {}", cause);
                     return Err(Fail::new(libc::EBADMSG, &cause));
                 } else {
@@ -425,7 +425,7 @@ impl Receiver {
                         trace!("check_segment_in_window(): send ack on out-of-window segment");
                         Sender::send_ack(cb, layer3_endpoint);
                     }
-                    let cause: String = format!("packet outside of receive window");
+                    let cause: String = String::from("packet outside of receive window");
                     error!("check_segment_in_window(): {}", cause);
                     return Err(Fail::new(libc::EBADMSG, &cause));
                 }
@@ -496,7 +496,7 @@ impl Receiver {
             // TODO: RFC 5961 "Blind Reset Attack Using the SYN Bit" prevention would have us always ACK and drop here.
 
             // Receiving a SYN here is an error.
-            let cause: String = format!("Received in-window SYN on established connection.");
+            let cause: String = String::from("Received in-window SYN on established connection.");
             error!("{}", cause);
             // TODO: Send Reset.
             // TODO: Return all outstanding Receive and Send requests with "reset" responses.
@@ -512,7 +512,7 @@ impl Receiver {
     fn check_and_process_ack(cb: &mut ControlBlock, header: &TcpHeader, now: Instant) -> Result<(), Fail> {
         if !header.ack {
             // All segments on established connections should be ACKs.  Drop this segment.
-            let cause: String = format!("Received non-ACK segment on established connection");
+            let cause: String = String::from("Received non-ACK segment on established connection");
             error!("{}", cause);
             return Err(Fail::new(libc::EBADMSG, &cause));
         }

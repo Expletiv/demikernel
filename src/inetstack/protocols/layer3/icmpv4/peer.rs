@@ -245,7 +245,7 @@ impl SharedIcmpv4Peer {
                 Ok(self.runtime.get_now() - t0)
             },
             Err(_) => {
-                let message: String = format!("timer expired");
+                let message: String = String::from("timer expired");
                 self.inflight.remove(&(id, seq_num));
                 error!("ping(): {}", message);
                 Err(Fail::new(libc::ETIMEDOUT, &message))

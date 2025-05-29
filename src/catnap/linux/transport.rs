@@ -411,7 +411,7 @@ impl NetworkTransport for SharedCatnapTransport {
             Ok(addr) => match addr.as_socket_ipv4() {
                 Some(ipv4_addr) => Ok(ipv4_addr),
                 None => {
-                    let cause: String = format!("invalid IPv4 address");
+                    let cause: String = String::from("invalid IPv4 address");
                     error!("getpeername(): {}", cause);
                     Err(Fail::new(libc::EINVAL, &cause))
                 },
