@@ -138,8 +138,7 @@ impl SharedArpPeer {
             let header: ArpHeader = match ArpHeader::parse_and_consume(buf) {
                 Ok(header) => header,
                 Err(e) => {
-                    let cause: String = format!("could not parse ARP header:");
-                    warn!("arp_cache::poll(): {} {:?}", &cause, e);
+                    warn!("arp_cache::poll(): could not parse ARP header: {:?}", e);
                     continue;
                 },
             };
@@ -172,9 +171,7 @@ impl SharedArpPeer {
             // from RFC 826: ?Am I the target protocol address?
             if header.get_destination_protocol_addr() != self.local_ipv4_addr {
                 if !merge_flag {
-                    // we didn't do something.
-                    let cause: String = format!("unrecognized IP address");
-                    warn!("arp_cache::poll(): {}", &cause);
+                    warn!("arp_cache::poll(): unrecognized IP address");
                 }
                 trace!(
                     "poll(): dropping arp packet (link_addr={:?}, ipv4_addr={:?})",

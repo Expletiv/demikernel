@@ -70,7 +70,7 @@ impl SharedUdpPeer {
     /// Binds a UDP socket to a local endpoint address.
     pub fn bind(&mut self, socket: &mut SharedUdpSocket, addr: SocketAddrV4) -> Result<(), Fail> {
         if let Some(_) = socket.local() {
-            let cause: String = format!("cannot bind to already bound socket");
+            let cause: String = String::from("cannot bind to already bound socket");
             error!("bind(): {}", cause);
             return Err(Fail::new(libc::EADDRINUSE, &cause));
         }
@@ -103,7 +103,7 @@ impl SharedUdpPeer {
         // TODO: Allocate ephemeral port if not bound.
         // FIXME: https://github.com/microsoft/demikernel/issues/973
         if !socket.is_bound() {
-            let cause: String = format!("queue is not bound");
+            let cause: String = String::from("queue is not bound");
             error!("pushto(): {}", &cause);
             return Err(Fail::new(libc::ENOTSUP, &cause));
         }
@@ -131,8 +131,7 @@ impl SharedUdpPeer {
             match UdpHeader::parse_and_strip(&src_ipv4_addr, &self.local_ipv4_addr, &mut buf, self.checksum_offload) {
                 Ok(header) => header,
                 Err(e) => {
-                    let cause: String = format!("dropping packet: unable to parse UDP header");
-                    warn!("{}: {:?}", cause, e);
+                    warn!("dropping packet: unable to parse UDP header: {:?}", e);
                     return;
                 },
             };
@@ -153,8 +152,7 @@ impl SharedUdpPeer {
                         // port. However, we simply drop the datagram as this could be a port-scan attack, and not
                         // sending an ICMP message is a valid action. See https://www.rfc-editor.org/rfc/rfc792 for more
                         // details.
-                        let cause: String = format!("dropping packet: port not bound");
-                        warn!("{}: {:?}", cause, local);
+                        warn!("dropping packet: port not bound: {:?}", local);
                         return;
                     },
                 }

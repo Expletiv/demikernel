@@ -750,8 +750,7 @@ pub extern "C" fn demi_getsockopt(
                     }
                 },
                 _ => {
-                    let cause: String = format!("Only SO_LINGER is supported right now");
-                    error!("demi_setsockopt(): {}", cause);
+                    error!("demi_setsockopt(): Only SO_LINGER is supported right now");
                     return libc::EINVAL;
                 },
             };

@@ -126,7 +126,7 @@ impl SharedTcpSocket {
                 return Ok(remote_endpoint);
             },
             _ => {
-                let cause: String = format!("socket is not in established state");
+                let cause: String = String::from("socket is not in established state");
                 error!("getpeername(): {}", &cause);
                 Err(Fail::new(libc::ENOTCONN, &cause))
             },
@@ -234,7 +234,7 @@ impl SharedTcpSocket {
             },
             // Closing a closing socket.
             SocketState::Closing(_) => {
-                let cause: String = format!("cannot close a socket that is closing");
+                let cause: String = String::from("cannot close a socket that is closing");
                 error!("do_close(): {}", &cause);
                 Err(Fail::new(libc::ENOTSUP, &cause))
             },
@@ -262,7 +262,7 @@ impl SharedTcpSocket {
             },
             // Closing a closing socket.
             SocketState::Closing(_) => {
-                let cause: String = format!("cannot close a socket that is closing");
+                let cause: String = String::from("cannot close a socket that is closing");
                 error!("do_close(): {}", &cause);
                 Err(Fail::new(libc::ENOTSUP, &cause))
             },

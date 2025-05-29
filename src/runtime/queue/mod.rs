@@ -148,7 +148,7 @@ pub fn downcast_queue_ptr<'a, T: IoQueue>(boxed_queue_ptr: &'a Box<dyn IoQueue>)
     match void_ptr.downcast_ref::<T>() {
         Some(ptr) => Ok(ptr),
         None => {
-            let cause: String = format!("invalid queue type");
+            let cause: String = String::from("invalid queue type");
             error!("downcast_queue_ptr(): {}", &cause);
             Err(Fail::new(libc::EINVAL, &cause))
         },
@@ -164,7 +164,7 @@ pub fn downcast_mut_ptr<'a, T: IoQueue>(boxed_queue_ptr: &'a mut Box<dyn IoQueue
     match void_ptr.downcast_mut::<T>() {
         Some(ptr) => Ok(ptr),
         None => {
-            let cause: String = format!("invalid queue type");
+            let cause: String = String::from("invalid queue type");
             error!("downcast_mut_ptr(): {}", &cause);
             Err(Fail::new(libc::EINVAL, &cause))
         },
@@ -177,7 +177,7 @@ pub fn downcast_queue<T: IoQueue>(boxed_queue: Box<dyn IoQueue>) -> Result<T, Fa
     match boxed_queue.as_any().downcast::<T>() {
         Ok(queue) => Ok(*queue),
         Err(_) => {
-            let cause: String = format!("invalid queue type");
+            let cause: String = String::from("invalid queue type");
             error!("downcast_queue(): {}", &cause);
             Err(Fail::new(libc::EINVAL, &cause))
         },

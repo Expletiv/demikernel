@@ -760,7 +760,7 @@ impl DemiBuffer {
     fn split(&mut self, split_front: bool, offset: usize) -> Result<Self, Fail> {
         // Check if this is a multi-segment buffer.
         if self.is_multi_segment() {
-            let cause: String = format!("cannot split a multi-segment buffer");
+            let cause: String = String::from("cannot split a multi-segment buffer");
             error!("split_front(): {}", &cause);
             return Err(Fail::new(libc::EINVAL, &cause));
         }

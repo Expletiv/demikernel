@@ -59,7 +59,7 @@ impl RingStateMachine {
     pub fn prepare(&mut self, op: RingControlOperation) -> Result<(), Fail> {
         let next: RingState = self.get_next_state(op)?;
         if next != RingState::Closing && self.next.is_some() {
-            return Err(fail(op, &(format!("ring is busy")), libc::EBUSY));
+            return Err(fail(op, &format!("ring is busy"), libc::EBUSY));
         }
         self.next = Some(next);
         Ok(())
@@ -89,7 +89,7 @@ impl RingStateMachine {
     fn from_opened(&self, op: RingControlOperation) -> Result<RingState, Fail> {
         match op {
             RingControlOperation::Close => Ok(RingState::Closing),
-            RingControlOperation::Closed => Err(fail(op, &(format!("ring is closed")), libc::EBADF)),
+            RingControlOperation::Closed => Err(fail(op, &format!("ring is closed"), libc::EBADF)),
         }
     }
 
@@ -104,15 +104,15 @@ impl RingStateMachine {
     /// Attempts to transition from the [RingState::Closed].
     fn from_closed(&self, op: RingControlOperation) -> Result<RingState, Fail> {
         match op {
-            RingControlOperation::Close => Err(fail(op, &(format!("ring is closed")), libc::EBADF)),
-            RingControlOperation::Closed => Err(fail(op, &(format!("ring is closed")), libc::EBADF)),
+            RingControlOperation::Close => Err(fail(op, &format!("ring is closed"), libc::EBADF)),
+            RingControlOperation::Closed => Err(fail(op, &format!("ring is closed"), libc::EBADF)),
         }
     }
 
     /// Ensures that the target [RingState] is not [RingState::Closing].
     fn ensure_not_closing(&self) -> Result<(), Fail> {
         if self.current == RingState::Closing {
-            let cause: String = format!("ring is closing");
+            let cause: String = String::from("ring is closing");
             error!("ensure_not_closing(): {}", cause);
             return Err(Fail::new(libc::EBADF, &cause));
         }
@@ -122,7 +122,7 @@ impl RingStateMachine {
     /// Ensures that the target [RingState] is not [RingState::Closed].
     fn ensure_not_closed(&self) -> Result<(), Fail> {
         if self.current == RingState::Closed {
-            let cause: String = format!("ring is closed");
+            let cause: String = String::from("ring is closed");
             error!("ensure_not_clossed(): {}", cause);
             return Err(Fail::new(libc::EBADF, &cause));
         }

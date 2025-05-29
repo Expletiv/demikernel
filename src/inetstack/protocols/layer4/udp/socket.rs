@@ -74,7 +74,7 @@ impl SharedUdpSocket {
         let remote: SocketAddrV4 = if let Some(remote) = remote {
             unwrap_socketaddr(remote)?
         } else {
-            let cause: String = format!("udp socket requires a remote address");
+            let cause: String = String::from("udp socket requires a remote address");
             error!("pushto(): {}", &cause);
             return Err(Fail::new(libc::ENOTSUP, &cause));
         };
@@ -82,7 +82,7 @@ impl SharedUdpSocket {
         let port: u16 = if let Some(addr) = self.local() {
             addr.port()
         } else {
-            let cause: String = format!("queue is not bound");
+            let cause: String = String::from("queue is not bound");
             error!("pushto(): {}", &cause);
             return Err(Fail::new(libc::ENOTSUP, &cause));
         };
