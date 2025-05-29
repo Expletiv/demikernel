@@ -126,7 +126,7 @@ where
     }
 
     pub fn get(&self, key: &K) -> Option<&V> {
-        return self.map.get(key).map(|r| &r.value);
+        self.map.get(key).map(|r| &r.value)
     }
 
     #[cfg(test)]

@@ -123,7 +123,7 @@ impl SharedTcpSocket {
         match self.state {
             SocketState::Established(ref mut socket) => {
                 let (_, remote_endpoint): (SocketAddrV4, SocketAddrV4) = socket.endpoints();
-                return Ok(remote_endpoint);
+                Ok(remote_endpoint)
             },
             _ => {
                 let cause: String = String::from("socket is not in established state");

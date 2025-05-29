@@ -484,7 +484,7 @@ impl Receiver {
             },
         }
         cb.state = State::Closed;
-        return Err(Fail::new(libc::ECONNRESET, "remote reset connection"));
+        Err(Fail::new(libc::ECONNRESET, "remote reset connection"))
     }
 
     // Check the SYN bit.
