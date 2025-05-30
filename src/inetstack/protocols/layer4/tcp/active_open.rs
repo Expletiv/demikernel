@@ -193,7 +193,7 @@ impl SharedActiveOpenSocket {
             "Window scale: local {}, remote {}",
             local_window_scale_bits, remote_window_scale_bits
         );
-        Ok(SharedEstablishedSocket::new(
+        SharedEstablishedSocket::new(
             self.local,
             self.remote,
             self.runtime.clone(),
@@ -211,7 +211,7 @@ impl SharedActiveOpenSocket {
             mss,
             congestion_control::None::new,
             None,
-        )?)
+        )
     }
 
     pub async fn connect(mut self) -> Result<SharedEstablishedSocket, Fail> {

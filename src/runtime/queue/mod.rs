@@ -78,12 +78,12 @@ impl IoQueueTable {
 
     /// Gets/borrows a reference to the queue metadata associated with an I/O queue descriptor.
     pub fn get<'a, T: IoQueue>(&'a self, qd: &QDesc) -> Result<&'a T, Fail> {
-        Ok(downcast_queue_ptr::<T>(self.get_queue_ref(qd)?)?)
+        downcast_queue_ptr::<T>(self.get_queue_ref(qd)?)
     }
 
     /// Gets/borrows a mutable reference to the queue metadata associated with an I/O queue descriptor
     pub fn get_mut<'a, T: IoQueue>(&'a mut self, qd: &QDesc) -> Result<&'a mut T, Fail> {
-        Ok(downcast_mut_ptr::<T>(self.get_mut_queue_ref(qd)?)?)
+        downcast_mut_ptr::<T>(self.get_mut_queue_ref(qd)?)
     }
 
     /// Releases the entry associated with an I/O queue descriptor.
@@ -96,7 +96,7 @@ impl IoQueueTable {
                 return Err(Fail::new(libc::EBADF, &cause));
             },
         };
-        Ok(downcast_queue::<T>(self.table.remove(internal_id.into()))?)
+        downcast_queue::<T>(self.table.remove(internal_id.into()))
     }
 
     /// Gets an iterator over all registered queues.
