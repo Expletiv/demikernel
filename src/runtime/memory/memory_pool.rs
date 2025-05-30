@@ -244,7 +244,7 @@ impl BufferCursor {
 
 impl<'a> PackingIterator<'a> {
     pub fn new(buffer: &'a mut [MaybeUninit<u8>], page_size: NonZeroUsize, layout: Layout) -> Result<Self, Fail> {
-        if buffer.len() == 0 {
+        if buffer.is_empty() {
             return Err(Fail::new(libc::EINVAL, "memory buffer too short"));
         }
 

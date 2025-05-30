@@ -187,7 +187,7 @@ impl Receiver {
         }
 
         // Store whether the packet has data here because processing it will consume the DemiBuffer.
-        let has_data: bool = data.len() > 0;
+        let has_data: bool = !data.is_empty();
         if has_data {
             Self::process_data(cb, layer3_endpoint, data, seg_start, seg_end, seg_len)?;
         }
