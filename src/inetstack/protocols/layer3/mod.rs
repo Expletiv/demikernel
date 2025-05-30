@@ -63,7 +63,7 @@ impl SharedLayer3Endpoint {
 
         Ok(SharedLayer3Endpoint(SharedObject::new(Layer3Endpoint {
             arp: arp.clone(),
-            icmpv4: SharedIcmpv4Peer::new(&config, runtime, layer2_endpoint.clone(), arp, rng_seed)?,
+            icmpv4: SharedIcmpv4Peer::new(config, runtime, layer2_endpoint.clone(), arp, rng_seed)?,
             local_ipv4_addr: config.local_ipv4_addr()?,
             layer2_endpoint,
         })))

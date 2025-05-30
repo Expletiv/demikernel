@@ -396,7 +396,7 @@ impl TcpHeader {
 
         // Alright, we've fully filled out the header, time to compute the checksum.
         if !tx_checksum_offload {
-            let checksum: u16 = tcp_checksum(src_ipv4_addr, dst_ipv4_addr, &hdr_buf[..], &payload);
+            let checksum: u16 = tcp_checksum(src_ipv4_addr, dst_ipv4_addr, &hdr_buf[..], payload);
             hdr_buf[16..18].copy_from_slice(&checksum.to_be_bytes());
         } else {
             hdr_buf[16] = 0;

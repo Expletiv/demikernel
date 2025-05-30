@@ -98,7 +98,7 @@ impl SharedEstablishedSocket {
                     "{}: scale={:?} window={:?}",
                     cause, sender_window_scale_bits, sender_window_size_bytes
                 );
-                return Err(Fail::new(libc::EINVAL, &cause));
+                return Err(Fail::new(libc::EINVAL, cause));
             },
             _ if sender_window_size_bytes > MAX_WINDOW_SIZE_WITH_SCALING => {
                 let cause = "Sender window too large";
@@ -106,7 +106,7 @@ impl SharedEstablishedSocket {
                     "{}: scale={:?} window={:?}",
                     cause, sender_window_scale_bits, sender_window_size_bytes
                 );
-                return Err(Fail::new(libc::EINVAL, &cause));
+                return Err(Fail::new(libc::EINVAL, cause));
             },
             _ => (),
         };
@@ -119,7 +119,7 @@ impl SharedEstablishedSocket {
                     "{}: scale={:?} window={:?}",
                     cause, receiver_window_scale_bits, receiver_window_size_bytes
                 );
-                return Err(Fail::new(libc::EINVAL, &cause));
+                return Err(Fail::new(libc::EINVAL, cause));
             },
             _ if receiver_window_size_bytes > MAX_WINDOW_SIZE_WITH_SCALING => {
                 let cause = "Receiver window too large";
@@ -127,7 +127,7 @@ impl SharedEstablishedSocket {
                     "{}: scale={:?} window={:?}",
                     cause, receiver_window_scale_bits, receiver_window_size_bytes
                 );
-                return Err(Fail::new(libc::EINVAL, &cause));
+                return Err(Fail::new(libc::EINVAL, cause));
             },
             _ => (),
         };

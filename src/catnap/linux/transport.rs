@@ -469,7 +469,7 @@ impl NetworkTransport for SharedCatnapTransport {
 
         // Update socket state.
         self.data_from_sd(sd).move_socket_to_passive();
-        self.register_epoll(&sd, libc::EPOLLIN as u32)?;
+        self.register_epoll(sd, libc::EPOLLIN as u32)?;
 
         Ok(())
     }
@@ -508,7 +508,7 @@ impl NetworkTransport for SharedCatnapTransport {
     /// with an error.
     async fn connect(&mut self, sd: &mut Self::SocketDescriptor, remote: SocketAddr) -> Result<(), Fail> {
         self.data_from_sd(sd).move_socket_to_active();
-        self.register_epoll(&sd, (libc::EPOLLIN | libc::EPOLLOUT) as u32)?;
+        self.register_epoll(sd, (libc::EPOLLIN | libc::EPOLLOUT) as u32)?;
 
         loop {
             match self.socket_from_sd(sd).connect(&remote.into()) {
