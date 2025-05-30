@@ -61,7 +61,7 @@ pub extern "C" fn demi_init(args: *const demi_args_t) -> c_int {
     trace!("demi_init()");
 
     let libos_name: LibOSName = match LibOSName::from_env() {
-        Ok(libos_name) => libos_name.into(),
+        Ok(libos_name) => libos_name,
         Err(e) => panic!("{:?}", e),
     };
 

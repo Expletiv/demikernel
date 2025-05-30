@@ -79,7 +79,7 @@ impl TaskGroup {
         // The pin slab index can be reverse-computed in a page index and an offset within the page.
         let pin_slab_index: usize = self.tasks.insert(task)?;
 
-        self.add_new_pages_up_to_pin_slab_index(pin_slab_index.into());
+        self.add_new_pages_up_to_pin_slab_index(pin_slab_index);
 
         // Initialize the appropriate page offset.
         let (waker_page_ref, waker_page_offset): (&WakerPageRef, usize) = {
