@@ -117,7 +117,7 @@ impl ActiveSocketData {
                     self.recv_queue.push(Err(e));
                 } else {
                     trace!("data popped ({:?} bytes)", nbytes);
-                    if buf.len() == 0 {
+                    if buf.is_empty() {
                         self.closed = true;
                     }
                     self.recv_queue.push(Ok((socketaddr.as_socket(), buf)));

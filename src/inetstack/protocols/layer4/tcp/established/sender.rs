@@ -260,7 +260,7 @@ impl Sender {
 
         // Place the buffer in the unsent queue.
         if let Some(buf) = buf.take() {
-            if cb.sender.unacked_queue.len() > 0 {
+            if !cb.sender.unacked_queue.is_empty() {
                 trace!("push(): total unacked segments={:?}", cb.sender.unacked_queue.len());
             }
             if !buf.is_empty() {
@@ -341,7 +341,7 @@ impl Sender {
                 // We have some window, try to send some or all of the segment.
                 let _: usize = Self::send_segment(cb, layer3_endpoint, now, &mut buffer);
                 // If the buffer is now empty, then we sent all of it.
-                if buffer.len() == 0 {
+                if buffer.is_empty() {
                     return Ok(());
                 }
                 // Otherwise, wait until something limiting the window changes and then try again to finish sending
@@ -451,7 +451,7 @@ impl Sender {
             initial_tx: Some(now),
         };
 
-        if cb.sender.unacked_queue.len() > 0 {
+        if !cb.sender.unacked_queue.is_empty() {
             trace!(
                 "send_segment(): unacked_queue.len() = {:?}",
                 cb.sender.unacked_queue.len()

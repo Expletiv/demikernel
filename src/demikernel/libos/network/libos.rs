@@ -299,7 +299,7 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
     /// begins.
     pub fn push(&mut self, qd: QDesc, sga: &demi_sgarray_t) -> Result<QToken, Fail> {
         let buf: DemiBuffer = clone_sgarray(sga)?;
-        if buf.len() == 0 {
+        if buf.is_empty() {
             let cause: String = String::from("zero-length buffer");
             warn!("push(): {}", cause);
             return Err(Fail::new(libc::EINVAL, &cause));
@@ -344,7 +344,7 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
         trace!("pushto() qd={:?}", qd);
 
         let buf: DemiBuffer = clone_sgarray(sga)?;
-        if buf.len() == 0 {
+        if buf.is_empty() {
             return Err(Fail::new(libc::EINVAL, "zero-length buffer"));
         }
 
