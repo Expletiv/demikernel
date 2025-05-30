@@ -447,7 +447,7 @@ impl DemiBuffer {
             ol_flags: 0,
             pkt_len: size as u32 - headroom as u32,
             data_len: size - headroom as u16,
-            buf_len: size as u16,
+            buf_len: size,
             next: None,
             pool: None,
         })));

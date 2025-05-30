@@ -191,7 +191,7 @@ impl SharedIcmpv4Peer {
 
         let t0: Instant = self.runtime.get_now();
         let pkt: DemiBuffer = DemiBuffer::new_with_headroom(
-            ICMPV4_ECHO_REQUEST_MESSAGE_SIZE as u16,
+            ICMPV4_ECHO_REQUEST_MESSAGE_SIZE,
             (ICMPV4_HEADER_SIZE + IPV4_HEADER_MIN_SIZE as usize + ETHERNET2_HEADER_SIZE) as u16,
         );
 

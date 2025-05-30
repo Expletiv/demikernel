@@ -91,7 +91,7 @@ impl Ipv4Header {
             ihl: IPV4_IHL_NO_OPTIONS,
             dscp: 0,
             ecn: 0,
-            total_length: IPV4_HEADER_MIN_SIZE as u16,
+            total_length: IPV4_HEADER_MIN_SIZE,
             identification: 0,
             flags: IPV4_CTRL_FLAG_DF,
             fragment_offset: 0,
@@ -122,7 +122,7 @@ impl Ipv4Header {
         // Internet header length.
         let ihl: u8 = buf[0] & 0xF;
         let hdr_size: u16 = (ihl as u16) << 2;
-        if hdr_size < IPV4_HEADER_MIN_SIZE as u16 {
+        if hdr_size < IPV4_HEADER_MIN_SIZE {
             return Err(Fail::new(EBADMSG, "ipv4 IHL is too small"));
         }
         if buf.len() < hdr_size as usize {

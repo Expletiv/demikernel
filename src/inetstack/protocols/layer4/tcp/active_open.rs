@@ -166,7 +166,7 @@ impl SharedActiveOpenSocket {
                 } else {
                     remote_window_scale_bits
                 };
-                (self.tcp_config.get_window_scale() as u8, remote)
+                (self.tcp_config.get_window_scale(), remote)
             },
             None => (0, 0),
         };
