@@ -931,9 +931,9 @@ fn allocate_metadata_data<'a>(direct_data_size: u16) -> (&'a mut MaybeUninit<Met
 ///
 /// # Safety:
 /// `buffer` must be suitably aligned for and large enough to hold a [`MetaData`].
-unsafe fn split_buffer_for_metadata<'a>(
-    buffer: &'a mut [MaybeUninit<u8>],
-) -> (&'a mut MaybeUninit<MetaData>, &'a mut [MaybeUninit<u8>]) {
+unsafe fn split_buffer_for_metadata(
+    buffer: &mut [MaybeUninit<u8>],
+) -> (&mut MaybeUninit<MetaData>, &mut [MaybeUninit<u8>]) {
     assert!(buffer.len() >= size_of::<MetaData>());
 
     let (metadata_buf, data_buf) = buffer.split_at_mut(size_of::<MetaData>());
