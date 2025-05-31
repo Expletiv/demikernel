@@ -71,7 +71,7 @@ impl SharedConditionVariable {
 
     /// Wake all waiting coroutines.
     pub fn broadcast(&mut self) {
-        self.num_ready = self.num_ready + self.waiters.len();
+        self.num_ready += self.waiters.len();
         for (_, waiter) in self.waiters.drain(..) {
             waiter.wake_by_ref();
         }

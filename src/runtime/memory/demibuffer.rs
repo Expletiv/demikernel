@@ -549,7 +549,7 @@ impl DemiBuffer {
         // Step 2: detach the indirect buffer.
         metadata.buf_addr = null_mut();
         metadata.buf_len = 0;
-        metadata.ol_flags = metadata.ol_flags & !METADATA_F_INDIRECT;
+        metadata.ol_flags &= !METADATA_F_INDIRECT;
 
         // Step 3: reconstitute the direct DemiBuffer.
         let direct: NonNull<MetaData> = NonNull::from(direct);
@@ -1179,7 +1179,7 @@ impl Drop for DemiBuffer {
                             // Restore buf_addr and buf_len to their unattached values.
                             metadata.buf_addr = null_mut();
                             metadata.buf_len = 0;
-                            metadata.ol_flags = metadata.ol_flags & !METADATA_F_INDIRECT;
+                            metadata.ol_flags &= !METADATA_F_INDIRECT;
 
                             // Drop our reference to the direct buffer, and free it if ours was the last one.
                             if direct.dec_refcnt() == 0 {
