@@ -305,7 +305,7 @@ impl SharedPassiveSocket {
                 },
                 Err(Fail { errno, cause: _ }) if errno == ETIMEDOUT => {
                     if handshake_retries > 0 {
-                        handshake_retries = handshake_retries - 1;
+                        handshake_retries -= 1;
                         continue;
                     } else {
                         self.ready

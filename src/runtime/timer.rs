@@ -72,7 +72,7 @@ pub struct SharedTimer(SharedObject<Timer>);
 
 impl YieldPointId {
     pub fn increment(&mut self) {
-        self.0 = self.0 + 1;
+        self.0 += 1;
     }
 }
 
