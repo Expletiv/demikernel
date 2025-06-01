@@ -30,10 +30,10 @@ impl IsnGenerator {
         let crc: crc::Crc<u32> = crc::Crc::<u32>::new(&crc::CRC_32_CKSUM);
         let mut digest = crc.digest();
         digest.update(&remote.ip().octets());
-        let remote_port: u16 = remote.port().into();
+        let remote_port: u16 = remote.port();
         digest.update(&remote_port.to_be_bytes());
         digest.update(&local.ip().octets());
-        let local_port: u16 = local.port().into();
+        let local_port: u16 = local.port();
         digest.update(&local_port.to_be_bytes());
         digest.update(&self.nonce.to_be_bytes());
         let digest = digest.finalize();

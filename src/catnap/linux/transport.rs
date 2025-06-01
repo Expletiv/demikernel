@@ -73,7 +73,7 @@ impl SharedCatnapTransport {
         // Create epoll socket.
         // Linux ignores the size argument to epoll, it just has to be more than 0.
         let epoll_fd: RawFd = match unsafe { libc::epoll_create(10) } {
-            fd if fd >= 0 => fd.into(),
+            fd if fd >= 0 => fd,
             _ => {
                 let errno: libc::c_int = unsafe { *libc::__errno_location() };
                 panic!("could not create epoll socket: {:?}", errno);
