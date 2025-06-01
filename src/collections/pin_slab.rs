@@ -290,8 +290,7 @@ fn calculate_key(key: usize) -> Option<(usize, usize, usize)> {
         return None;
     }
 
-    let slot: usize =
-        ((mem::size_of::<usize>() * 8) as usize - key.leading_zeros() as usize).saturating_sub(FIRST_SLOT_MASK);
+    let slot: usize = ((mem::size_of::<usize>() * 8) - key.leading_zeros() as usize).saturating_sub(FIRST_SLOT_MASK);
 
     let (start, end): (usize, usize) = if key < FIRST_SLOT_SIZE {
         (0, FIRST_SLOT_SIZE)

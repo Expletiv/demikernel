@@ -77,7 +77,7 @@ impl Icmpv4Header {
         buf[2] = 0;
         buf[3] = 0;
         buf[4..8].copy_from_slice(&rest_of_header[..]);
-        let (hdr_buf, payload): (&[u8], &[u8]) = buf[..].split_at(ICMPV4_HEADER_SIZE as usize);
+        let (hdr_buf, payload): (&[u8], &[u8]) = buf[..].split_at(ICMPV4_HEADER_SIZE);
         let checksum: u16 = Self::compute_checksum(hdr_buf, payload);
         buf[2..4].copy_from_slice(&checksum.to_be_bytes());
     }

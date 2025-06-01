@@ -394,9 +394,9 @@ impl SharedPassiveSocket {
                         "remote windows scale larger than {:?} is incorrect, so setting to {:?}. See RFC 1323.",
                         MAX_WINDOW_SCALE, MAX_WINDOW_SCALE
                     );
-                    (self.tcp_config.get_window_scale() as u8, MAX_WINDOW_SCALE as u8)
+                    (self.tcp_config.get_window_scale(), MAX_WINDOW_SCALE as u8)
                 } else {
-                    (self.tcp_config.get_window_scale() as u8, remote_window_scale)
+                    (self.tcp_config.get_window_scale(), remote_window_scale)
                 }
             },
             None => (0, 0),

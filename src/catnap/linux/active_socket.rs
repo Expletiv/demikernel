@@ -73,7 +73,7 @@ impl ActiveSocketData {
                 Ok(nbytes) => {
                     trace!("data pushed ({:?}/{:?} bytes)", nbytes, buf.len());
                     expect_ok!(
-                        buf.adjust(nbytes as usize),
+                        buf.adjust(nbytes),
                         "OS should not have sent more bytes than in the buffer"
                     );
                     if buf.is_empty() {
@@ -113,7 +113,7 @@ impl ActiveSocketData {
         {
             // Operation completed.
             Ok((nbytes, socketaddr)) => {
-                if let Err(e) = buf.trim(buf.len() - nbytes as usize) {
+                if let Err(e) = buf.trim(buf.len() - nbytes) {
                     self.recv_queue.push(Err(e));
                 } else {
                     trace!("data popped ({:?} bytes)", nbytes);
