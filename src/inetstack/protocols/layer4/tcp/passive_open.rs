@@ -375,7 +375,7 @@ impl SharedPassiveSocket {
                 (_, tcp_hdr, _) if tcp_hdr.ack => {
                     let cause = "invalid SYN+ACK seq num";
                     warn!("{}: {:?}", cause, tcp_hdr);
-                    return Err(Fail::new(EBADMSG, &cause));
+                    return Err(Fail::new(EBADMSG, cause));
                 },
                 // We got a duplicate SYN, so ignore it.
                 (_, tcp_hdr, _) if tcp_hdr.syn && tcp_hdr.seq_num == remote_isn => {

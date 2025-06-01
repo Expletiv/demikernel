@@ -495,7 +495,7 @@ impl DemiBuffer {
         match self.get_tag() {
             Tag::Heap => {
                 if let Some(check) = self.as_metadata().pool.as_ref() {
-                    Rc::ptr_eq(&check, pool.pool())
+                    Rc::ptr_eq(check, pool.pool())
                 } else {
                     false
                 }

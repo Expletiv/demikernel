@@ -446,13 +446,11 @@ pub extern "C" fn demi_wait_any(
         timeout
     );
 
-    // Check for invalid storage location for queue result.
     if qr_out.is_null() {
         warn!("qr_out is a null pointer");
         return libc::EINVAL;
     }
 
-    // Check arguments.
     if num_qts < 0 {
         return libc::EINVAL;
     }
@@ -468,8 +466,7 @@ pub extern "C" fn demi_wait_any(
         Some(unsafe { Duration::new((*timeout).tv_sec as u64, (*timeout).tv_nsec as u32) })
     };
 
-    // Issue wait_any operation.
-    let ret: Result<i32, Fail> = do_syscall(|libos| match libos.wait_any(&qts, duration) {
+    let ret: Result<i32, Fail> = do_syscall(|libos| match libos.wait_any(qts, duration) {
         Ok((ix, qr)) => {
             unsafe {
                 *qr_out = qr;

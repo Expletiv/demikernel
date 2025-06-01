@@ -261,7 +261,7 @@ impl SharedActiveOpenSocket {
                 if r == State::Closed {
                     let cause: &str = "Closing socket while connecting";
                     warn!("{}", cause);
-                    return Err(Fail::new(libc::ECONNABORTED, &cause));
+                    return Err(Fail::new(libc::ECONNABORTED, cause));
                 }
             },
             r = recv_queue.pop(Some(handshake_timeout)).fuse() => match r {

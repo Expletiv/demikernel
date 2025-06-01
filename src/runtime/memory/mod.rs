@@ -123,7 +123,7 @@ pub fn clone_sgarray(sga: &demi_sgarray_t) -> Result<DemiBuffer, Fail> {
     mem::forget(buf);
 
     // Check whether the limits of the buffer have changed.
-    check_demi_buf_limits(&sga, &mut clone)?;
+    check_demi_buf_limits(sga, &mut clone)?;
 
     // Return the clone.
     Ok(clone)
