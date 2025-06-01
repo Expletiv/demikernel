@@ -139,7 +139,7 @@ impl IoQueueTable {
 //======================================================================================================================
 
 /// Downcasts a [IoQueue] reference to a concrete queue type reference `&T`.
-pub fn downcast_queue_ptr<'a, T: IoQueue>(boxed_queue_ptr: &'a Box<dyn IoQueue>) -> Result<&'a T, Fail> {
+pub fn downcast_queue_ptr<T: IoQueue>(boxed_queue_ptr: &Box<dyn IoQueue>) -> Result<&T, Fail> {
     // 1. Get reference to queue inside the box.
     let queue_ptr: &dyn IoQueue = boxed_queue_ptr.as_ref();
     // 2. Cast that reference to a void pointer for downcasting.
@@ -155,7 +155,7 @@ pub fn downcast_queue_ptr<'a, T: IoQueue>(boxed_queue_ptr: &'a Box<dyn IoQueue>)
     }
 }
 
-pub fn downcast_mut_ptr<'a, T: IoQueue>(boxed_queue_ptr: &'a mut Box<dyn IoQueue>) -> Result<&'a mut T, Fail> {
+pub fn downcast_mut_ptr<T: IoQueue>(boxed_queue_ptr: &mut Box<dyn IoQueue>) -> Result<&mut T, Fail> {
     // 1. Get reference to queue inside the box.
     let queue_ptr: &mut dyn IoQueue = boxed_queue_ptr.as_mut();
     // 2. Cast that reference to a void pointer for downcasting.

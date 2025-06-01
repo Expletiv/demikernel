@@ -517,7 +517,7 @@ impl<T> Deref for SharedObject<T> {
 /// judiciously across coroutines with the understanding that the shared object may change/be mutated whenever the
 /// coroutine yields.
 impl<T> DerefMut for SharedObject<T> {
-    fn deref_mut<'a>(&'a mut self) -> &'a mut Self::Target {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         let ptr: *mut T = Rc::as_ptr(&self.0) as *mut T;
         unsafe { &mut *ptr }
     }
@@ -535,7 +535,7 @@ impl<T> AsRef<T> for SharedObject<T> {
 /// and should be considered unsafe. However, it is safe to use in Demikernel if and only if we only run one coroutine
 /// at a time.
 impl<T> AsMut<T> for SharedObject<T> {
-    fn as_mut<'a>(&'a mut self) -> &'a mut T {
+    fn as_mut(&mut self) -> &mut T {
         let ptr: *mut T = Rc::as_ptr(&self.0) as *mut T;
         unsafe { &mut *ptr }
     }
@@ -556,7 +556,7 @@ impl<T: ?Sized> Deref for SharedBox<T> {
 }
 
 impl<T: ?Sized> DerefMut for SharedBox<T> {
-    fn deref_mut<'a>(&'a mut self) -> &'a mut Self::Target {
+    fn deref_mut(&mut self) -> &mut Self::Target {
         self.0.deref_mut().as_mut()
     }
 }
