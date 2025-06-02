@@ -11,7 +11,7 @@ pub enum OptionValue {
     String(String),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Options {
     inner: HashMap<String, OptionValue>,
 }
@@ -59,11 +59,5 @@ impl Options {
 
     pub fn insert_string(&mut self, key: String, value: String) {
         self.inner.insert(key, OptionValue::String(value));
-    }
-}
-
-impl Default for Options {
-    fn default() -> Self {
-        Self { inner: HashMap::new() }
     }
 }

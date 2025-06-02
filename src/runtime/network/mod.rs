@@ -26,6 +26,7 @@ use ::std::{
 // Structures
 //======================================================================================================================
 
+#[derive(Default)]
 pub struct SocketIdToQDescMap {
     mappings: HashMap<SocketId, QDesc>,
 }
@@ -55,18 +56,6 @@ impl SocketIdToQDescMap {
             }
         }
         false
-    }
-}
-
-//======================================================================================================================
-// Traits
-//======================================================================================================================
-
-impl Default for SocketIdToQDescMap {
-    fn default() -> Self {
-        Self {
-            mappings: HashMap::<SocketId, QDesc>::new(),
-        }
     }
 }
 
