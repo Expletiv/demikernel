@@ -59,7 +59,7 @@ impl RingStateMachine {
     pub fn prepare(&mut self, op: RingControlOperation) -> Result<(), Fail> {
         let next: RingState = self.get_next_state(op)?;
         if next != RingState::Closing && self.next.is_some() {
-            return Err(fail(op, &format!("ring is busy"), libc::EBUSY));
+            return Err(fail(op, "ring is busy", libc::EBUSY));
         }
         self.next = Some(next);
         Ok(())
@@ -89,7 +89,7 @@ impl RingStateMachine {
     fn from_opened(&self, op: RingControlOperation) -> Result<RingState, Fail> {
         match op {
             RingControlOperation::Close => Ok(RingState::Closing),
-            RingControlOperation::Closed => Err(fail(op, &format!("ring is closed"), libc::EBADF)),
+            RingControlOperation::Closed => Err(fail(op, "ring is closed", libc::EBADF)),
         }
     }
 
@@ -104,8 +104,7 @@ impl RingStateMachine {
     /// Attempts to transition from the [RingState::Closed].
     fn from_closed(&self, op: RingControlOperation) -> Result<RingState, Fail> {
         match op {
-            RingControlOperation::Close => Err(fail(op, &format!("ring is closed"), libc::EBADF)),
-            RingControlOperation::Closed => Err(fail(op, &format!("ring is closed"), libc::EBADF)),
+            RingControlOperation::Close | RingControlOperation::Closed => Err(fail(op, "ring is closed", libc::EBADF)),
         }
     }
 
