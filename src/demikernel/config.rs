@@ -169,10 +169,7 @@ impl Config {
             Self::get_typed_str_option(
                 self.get_global_config()?,
                 global_config::LOCAL_IPV4_ADDR,
-                |val: &str| match val.parse() {
-                    Ok(local_addr) => Some(local_addr),
-                    _ => None,
-                },
+                |val: &str| val.parse().ok(),
             )?
         };
 
@@ -192,10 +189,7 @@ impl Config {
             Self::get_typed_str_option(
                 self.get_global_config()?,
                 global_config::LOCAL_LINK_ADDR,
-                |val: &str| match MacAddress::parse_canonical_str(val) {
-                    Ok(local_addr) => Some(local_addr),
-                    _ => None,
-                },
+                |val: &str| MacAddress::parse_canonical_str(val).ok(),
             )
         }
     }
