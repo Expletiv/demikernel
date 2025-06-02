@@ -27,8 +27,6 @@ def __read_args() -> argparse.Namespace:
 def __build_report(args):
     commit_id = git.get_head_commit(args.branch)
 
-    # This information is printed to the console and will be used by the
-    # workflow to post a comment on the PR.
     print('libos = ' + args.libos)
     print('commit id = ' + commit_id)
 
@@ -144,7 +142,6 @@ def __print_perf_data(perf_df):
     ]
 
     out_df = perf_df.sort_values(by=sort_by_columns, ascending=False)[columns_to_display]
-    # This print will be used by the workflow to post a comment on the PR.
     print(out_df.to_markdown(floatfmt='.2f', index=False))
 
 
