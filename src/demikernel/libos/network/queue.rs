@@ -89,10 +89,8 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
         })))
     }
 
-    /// Sets a socket option on the socket.
     pub fn set_socket_option(&mut self, option: SocketOption) -> Result<(), Fail> {
-        // Ensure that option can be set, depending on the state of the socket.
-        if let Err(_) = self.state_machine.ensure_not_closing() {
+        if self.state_machine.ensure_not_closing().is_err() {
             let cause: String = String::from("cannot set socket-level options when socket is closing");
             warn!("set_socket_option(): {}", cause);
             return Err(Fail::new(libc::EBUSY, &cause));
