@@ -11,7 +11,7 @@ use crate::{demikernel::config::Config, runtime::fail::Fail};
 // Structures
 //======================================================================================================================
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct UdpConfig {
     rx_checksum: bool,
     tx_checksum: bool,
@@ -36,19 +36,6 @@ impl UdpConfig {
 
     pub fn get_tx_checksum_offload(&self) -> bool {
         self.tx_checksum
-    }
-}
-
-//======================================================================================================================
-// Trait Implementations
-//======================================================================================================================
-
-impl Default for UdpConfig {
-    fn default() -> Self {
-        UdpConfig {
-            rx_checksum: false,
-            tx_checksum: false,
-        }
     }
 }
 
