@@ -490,7 +490,7 @@ fn tcp_checksum(src_ipv4_addr: &Ipv4Addr, dst_ipv4_addr: &Ipv4Addr, header: &[u8
 
     // Finally, checksum the data itself.
     let mut chunks_iter: ChunksExact<u8> = data.chunks_exact(2);
-    while let Some(chunk) = chunks_iter.next() {
+    for chunk in chunks_iter.by_ref() {
         state += u16::from_be_bytes([chunk[0], chunk[1]]) as u32;
     }
     // Since the data may have an odd number of bytes, pad the last byte with zero if necessary.
