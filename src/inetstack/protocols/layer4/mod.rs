@@ -301,19 +301,12 @@ impl Peer {
     pub async fn close(&mut self, sd: &mut Socket) -> Result<(), Fail> {
         let local_port: Option<u16> = match sd {
             Socket::Tcp(socket) => {
-                let local_port: Option<u16> = match socket.local() {
-                    Some(socket_addr_v4) => Some(socket_addr_v4.port()),
-                    None => None,
-                };
-
+                let local_port: Option<u16> = socket.local().map(|addr| addr.port());
                 self.tcp.close(socket).await?;
                 local_port
             },
             Socket::Udp(socket) => {
-                let local_port: Option<u16> = match socket.local() {
-                    Some(socket_addr_v4) => Some(socket_addr_v4.port()),
-                    None => None,
-                };
+                let local_port: Option<u16> = socket.local().map(|addr| addr.port());
                 self.udp.close(socket).await?;
                 local_port
             },
@@ -328,19 +321,12 @@ impl Peer {
     pub fn hard_close(&mut self, sd: &mut Socket) -> Result<(), Fail> {
         let local_port: Option<u16> = match sd {
             Socket::Tcp(socket) => {
-                let local_port: Option<u16> = match socket.local() {
-                    Some(socket_addr_v4) => Some(socket_addr_v4.port()),
-                    None => None,
-                };
-
+                let local_port: Option<u16> = socket.local().map(|addr| addr.port());
                 self.tcp.hard_close(socket)?;
                 local_port
             },
             Socket::Udp(socket) => {
-                let local_port: Option<u16> = match socket.local() {
-                    Some(socket_addr_v4) => Some(socket_addr_v4.port()),
-                    None => None,
-                };
+                let local_port: Option<u16> = socket.local().map(|addr| addr.port());
                 self.udp.hard_close(socket)?;
                 local_port
             },
