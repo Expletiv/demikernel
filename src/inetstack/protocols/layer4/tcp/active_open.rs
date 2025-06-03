@@ -128,7 +128,7 @@ impl SharedActiveOpenSocket {
         tcp_hdr.seq_num = self.local_isn + SeqNumber::from(1);
         debug!("Sending ACK: {:?}", tcp_hdr);
 
-        let dst_ipv4_addr: Ipv4Addr = self.remote.ip().clone();
+        let dst_ipv4_addr: Ipv4Addr = *self.remote.ip();
         let mut pkt: DemiBuffer = DemiBuffer::new_with_headroom(0, MAX_HEADER_SIZE as u16);
         tcp_hdr.serialize_and_attach(
             &mut pkt,
@@ -235,7 +235,7 @@ impl SharedActiveOpenSocket {
             info!("Advertising window scale: {}", self.tcp_config.get_window_scale());
 
             debug!("Sending SYN {:?}", tcp_hdr);
-            let dst_ipv4_addr: Ipv4Addr = self.remote.ip().clone();
+            let dst_ipv4_addr: Ipv4Addr = *self.remote.ip();
             let mut pkt: DemiBuffer = DemiBuffer::new_with_headroom(0, MAX_HEADER_SIZE as u16);
             tcp_hdr.serialize_and_attach(
                 &mut pkt,

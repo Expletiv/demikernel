@@ -91,7 +91,7 @@ impl SharedUdpSocket {
         udp_header.serialize_and_attach(&mut buf, &self.local_ipv4_addr, remote.ip(), self.checksum_offload);
         // Send the packet to the lower layer.
         self.layer3_endpoint
-            .transmit_udp_packet_blocking(remote.ip().clone(), buf)
+            .transmit_udp_packet_blocking(*remote.ip(), buf)
             .await
     }
 

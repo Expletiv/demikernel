@@ -150,7 +150,7 @@ impl SharedTcpSocket {
             self.runtime.clone(),
             self.layer3_endpoint.clone(),
             self.tcp_config.clone(),
-            self.socket_options.clone(),
+            self.socket_options,
             nonce,
         )?;
         self.state = SocketState::Listening(passive_socket);
@@ -170,7 +170,7 @@ impl SharedTcpSocket {
             self.runtime.clone(),
             self.layer3_endpoint.clone(),
             self.tcp_config.clone(),
-            self.socket_options.clone(),
+            self.socket_options,
         );
         Ok(new_queue)
     }
@@ -189,7 +189,7 @@ impl SharedTcpSocket {
             self.runtime.clone(),
             self.layer3_endpoint.clone(),
             self.tcp_config.clone(),
-            self.socket_options.clone(),
+            self.socket_options,
         )?;
         self.state = SocketState::Connecting(socket.clone());
         let new_socket = socket.connect().await?;

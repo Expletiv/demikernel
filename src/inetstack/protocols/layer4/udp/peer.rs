@@ -76,7 +76,7 @@ impl SharedUdpPeer {
         }
 
         socket.bind(addr)?;
-        self.addresses.insert(addr.clone(), socket.clone());
+        self.addresses.insert(addr, socket.clone());
         Ok(())
     }
 

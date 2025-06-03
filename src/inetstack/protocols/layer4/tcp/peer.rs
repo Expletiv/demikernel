@@ -81,7 +81,7 @@ impl SharedTcpPeer {
             self.runtime.clone(),
             self.layer3_endpoint.clone(),
             self.tcp_config.clone(),
-            self.default_socket_options.clone(),
+            self.default_socket_options,
         ))
     }
 
@@ -153,7 +153,7 @@ impl SharedTcpPeer {
         // Should we remove the passive entry for the local address if the socket was previously bound?
         if self
             .addresses
-            .insert(SocketId::Active(local, remote.clone()), socket.clone())
+            .insert(SocketId::Active(local, remote), socket.clone())
             .is_some()
         {
             // We fail here because the ephemeral port allocator should not allocate the same port more than once.
@@ -162,7 +162,7 @@ impl SharedTcpPeer {
         let local_isn: SeqNumber = self.isn_generator.generate(&local, &remote);
         // Wait for connect to complete.
         if let Err(e) = socket.connect(local, remote, local_isn).await {
-            self.addresses.remove(&SocketId::Active(local, remote.clone()));
+            self.addresses.remove(&SocketId::Active(local, remote));
             Err(e)
         } else {
             Ok(())
