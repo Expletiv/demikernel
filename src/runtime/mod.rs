@@ -419,11 +419,7 @@ impl SharedDemiRuntime {
 
                 // OperationTasks return a value to the application, so we must stash these for later. Otherwise, we
                 // just discard the return value of the completed coroutine.
-                if let Ok(operation_task) = OperationTask::try_from(boxed_task.as_any()) {
-                    Some(operation_task)
-                } else {
-                    None
-                }
+                OperationTask::try_from(boxed_task.as_any()).ok()
             })
             .collect()
     }
