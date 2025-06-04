@@ -65,7 +65,7 @@ impl ActiveSocketData {
             }
             // Try to send the buffer.
             let io_result: Result<usize, io::Error> = match addr {
-                Some(addr) => self.socket.send_to(&buf, &addr.clone().into()),
+                Some(addr) => self.socket.send_to(&buf, &addr.into()),
                 None => self.socket.send(&buf),
             };
             match io_result {

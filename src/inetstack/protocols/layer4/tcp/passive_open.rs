@@ -178,7 +178,7 @@ impl SharedPassiveSocket {
         }
 
         // Send SYN+ACK.
-        let local: SocketAddrV4 = self.local.clone();
+        let local: SocketAddrV4 = self.local;
         let local_isn = self.isn_generator.generate(&local, &remote);
         let remote_isn = tcp_hdr.seq_num;
 
@@ -225,7 +225,7 @@ impl SharedPassiveSocket {
         };
 
         // Create a RST segment.
-        let dst_ipv4_addr: Ipv4Addr = remote.ip().clone();
+        let dst_ipv4_addr: Ipv4Addr = *remote.ip();
         let mut tcp_hdr: TcpHeader = TcpHeader::new(self.local.port(), remote.port());
         tcp_hdr.rst = true;
         tcp_hdr.seq_num = seq_num;
@@ -342,7 +342,7 @@ impl SharedPassiveSocket {
         info!("Advertising window scale: {}", self.tcp_config.get_window_scale());
 
         debug!("Sending SYN+ACK: {:?}", tcp_hdr);
-        let dst_ipv4_addr: Ipv4Addr = remote.ip().clone();
+        let dst_ipv4_addr: Ipv4Addr = *remote.ip();
         let mut pkt: DemiBuffer = DemiBuffer::new_with_headroom(0, MAX_HEADER_SIZE as u16);
         tcp_hdr.serialize_and_attach(
             &mut pkt,

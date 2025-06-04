@@ -127,7 +127,7 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
         self.get_shared_queue(&qd)?.bind(socket_addr)?;
         // Insert into address to queue descriptor table.
         self.runtime
-            .insert_socket_id_to_qd(SocketId::Passive(socket_addrv4.clone()), qd);
+            .insert_socket_id_to_qd(SocketId::Passive(socket_addrv4), qd);
 
         Ok(())
     }

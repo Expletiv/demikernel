@@ -695,7 +695,7 @@ impl Sender {
         // This routine should only ever be called to send TCP segments that contain a valid ACK value.
         debug_assert!(header.ack);
 
-        let remote_ipv4_addr: Ipv4Addr = cb.remote.ip().clone();
+        let remote_ipv4_addr: Ipv4Addr = *cb.remote.ip();
         header.serialize_and_attach(
             &mut pkt,
             cb.local.ip(),
