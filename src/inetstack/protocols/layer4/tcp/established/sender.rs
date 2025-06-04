@@ -584,33 +584,30 @@ impl Sender {
 
     /// Retransmits the earliest segment that has not (yet) been acknowledged by our peer.
     pub fn retransmit(cb: &mut ControlBlock, layer3_endpoint: &mut SharedLayer3Endpoint) {
-        match cb.sender.unacked_queue.get_front_mut() {
-            Some(segment) => {
-                // We're retransmitting this, so we can no longer use an ACK for it as an RTT measurement (as we can't
-                // tell if the ACK is for the original or the retransmission).  Remove the transmission timestamp from
-                // the entry.
-                segment.initial_tx.take();
+        if let Some(segment) = cb.sender.unacked_queue.get_front_mut() {
+            // We're retransmitting this, so we can no longer use an ACK for it as an RTT measurement (as we can't tell
+            // if the ACK is for the original or the retransmission).  Remove the transmission timestamp from the entry.
+            segment.initial_tx.take();
 
-                // Clone the segment data for retransmission.
-                let data: Option<DemiBuffer> = segment.bytes.as_ref().map(|b| b.clone());
+            // Clone the segment data for retransmission.
+            let data: Option<DemiBuffer> = segment.bytes.as_ref().map(|b| b.clone());
 
-                // TODO: Issue #198 Repacketization - we should send a full MSS (and set the FIN flag if applicable).
+            // TODO: Issue #198 Repacketization - we should send a full MSS (and set the FIN flag if applicable).
 
-                // Prepare and send the segment.
-                let mut header: TcpHeader = Self::tcp_header(cb, Some(cb.sender.send_unacked.get()));
-                // If data exists, then this is a regular packet, otherwise, its a FIN.
-                if data.is_some() {
-                    header.psh = true;
-                } else {
-                    header.fin = true;
-                }
-                Self::emit(cb, layer3_endpoint, header, data);
-            },
-            None => (),
+            let mut header: TcpHeader = Self::tcp_header(cb, Some(cb.sender.send_unacked.get()));
+
+            if data.is_some() {
+                // Regular packet, so set the PSH flag.
+                header.psh = true;
+            } else {
+                // If there is no data, then its a FIN.
+                header.fin = true;
+            }
+
+            Self::emit(cb, layer3_endpoint, header, data);
         }
     }
 
-    // Process an ack.
     pub fn process_ack(cb: &mut ControlBlock, header: &TcpHeader, now: Instant) {
         // Start by checking that the ACK acknowledges something new.
         let send_unacknowledged: SeqNumber = cb.sender.send_unacked.get();
