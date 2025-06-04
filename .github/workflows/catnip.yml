@@ -22,6 +22,7 @@ env:
   CLIENT: ${{ secrets.CATNIP_HOSTNAME_B }}
   SERVER_ADDR: 10.3.1.50
   CLIENT_ADDR: 10.3.1.51
+  SHOULD_RUN_RELEASE: ${{ github.ref_name == 'main' || github.ref_name == 'unstable' || github.ref_name == 'dev' || contains(github.head_ref, 'do-release') }}
 
 jobs:
 
@@ -97,11 +98,16 @@ jobs:
     needs: debug-pipeline
     runs-on: ubuntu-latest
     steps:
+    - name: Print if release pipeline should not run
+      if: ${{ env.SHOULD_RUN_RELEASE == 'false' }}
+      run: echo "Release pipeline skipped because branch is not main, unstable, dev, or does not contain 'do-release'."
     - name: Checkout
+      if: ${{ env.SHOULD_RUN_RELEASE == 'true' }}
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
     - name: Setup SSH
+      if: ${{ env.SHOULD_RUN_RELEASE == 'true' }}
       shell: bash
       run: |
         mkdir -p $HOME/.ssh/
@@ -115,6 +121,7 @@ jobs:
         echo -e "\tUser ${{ secrets.USERNAME }}" >> $HOME/.ssh/config
         echo -e "\tPort ${{ secrets.PORTNUM }}" >> $HOME/.ssh/config
     - name: Bootstrap VMs
+      if: ${{ env.SHOULD_RUN_RELEASE == 'true' }}
       shell: bash
       run: |
         echo "Running azure-init-mlx.sh on SERVER"
@@ -137,6 +144,7 @@ jobs:
         ssh $CLIENT "sudo ip -br addr show dev eth1 | grep -q ' UP ' && \
                      sudo ip addr flush dev eth1"
     - name: Run
+      if: ${{ env.SHOULD_RUN_RELEASE == 'true' }}
       run: |
         branch_name=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
         python3 tools/demikernel_ci.py \
@@ -151,7 +159,7 @@ jobs:
           --server-addr $SERVER_ADDR \
           --client-addr $CLIENT_ADDR
     - name: Archive Logs
-      if: always()
+      if: ${{ env.SHOULD_RUN_RELEASE == 'true' }}
       uses: actions/upload-artifact@v4
       with:
         name: catnip-release-pipeline-logs
@@ -171,19 +179,26 @@ jobs:
       pull-requests: write
       security-events: write
     steps:
+    - name: Print if release pipeline should not run
+      if: ${{ env.SHOULD_RUN_RELEASE == 'false' }}
+      run: echo "Release pipeline skipped because branch is not main, unstable, dev, or does not contain 'do-release'."
     - name: Checkout
+      if: ${{ env.SHOULD_RUN_RELEASE == 'true' }}
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
     - name: Download Release Pipeline Logs
+      if: ${{ env.SHOULD_RUN_RELEASE == 'true' }}
       uses: actions/download-artifact@v4
       with:
         name: catnip-release-pipeline-logs
         path: ./catnip_release_pipeline_logs
     - name: Setup FlameGraph Repository
+      if: ${{ env.SHOULD_RUN_RELEASE == 'true' }}
       run: |
         git clone https://github.com/brendangregg/FlameGraph.git /tmp/FlameGraph
     - name: Parse Statistics
+      if: ${{ env.SHOULD_RUN_RELEASE == 'true' }}
       id: parse-stats
       run: |
         branch_name=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
@@ -193,6 +208,7 @@ jobs:
           --libos $LIBOS \
           --log-dir ./catnip_release_pipeline_logs)
     - name: Archive Performance Data
+      if: ${{ env.SHOULD_RUN_RELEASE == 'true' }}
       uses: actions/upload-artifact@v4
       with:
         name: performance-data
