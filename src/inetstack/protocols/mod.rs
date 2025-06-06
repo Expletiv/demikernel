@@ -44,7 +44,7 @@ pub fn compute_generic_checksum(buf: &[u8], start: Option<u32>) -> u32 {
     };
 
     let mut chunks_iter: ChunksExact<u8> = buf.chunks_exact(2);
-    while let Some(chunk) = chunks_iter.next() {
+    for chunk in chunks_iter.by_ref() {
         state += u16::from_be_bytes([chunk[0], chunk[1]]) as u32;
     }
 
