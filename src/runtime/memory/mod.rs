@@ -14,10 +14,7 @@ use crate::runtime::{
     types::{demi_sgarray_t, demi_sgaseg_t},
 };
 use ::libc::c_void;
-use ::std::{
-    mem,
-    ptr::{self, NonNull},
-};
+use ::std::{mem, ptr::NonNull};
 
 //======================================================================================================================
 // Exports
@@ -84,7 +81,7 @@ pub fn sgafree(sga: demi_sgarray_t) -> Result<(), Fail> {
         return Err(Fail::new(libc::EINVAL, "demi_sgarray_t has invalid segment count"));
     }
 
-    if sga.sga_buf == ptr::null_mut() {
+    if sga.sga_buf.is_null() {
         return Err(Fail::new(libc::EINVAL, "demi_sgarray_t has invalid DemiBuffer token"));
     }
 
@@ -107,7 +104,7 @@ pub fn clone_sgarray(sga: &demi_sgarray_t) -> Result<DemiBuffer, Fail> {
         return Err(Fail::new(libc::EINVAL, "demi_sgarray_t has invalid segment count"));
     }
 
-    if sga.sga_buf == ptr::null_mut() {
+    if sga.sga_buf.is_null() {
         return Err(Fail::new(libc::EINVAL, "demi_sgarray_t has invalid DemiBuffer token"));
     }
 
