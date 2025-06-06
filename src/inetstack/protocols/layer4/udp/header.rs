@@ -177,7 +177,7 @@ impl UdpHeader {
             state += u16::from_be_bytes([chunk[0], chunk[1]]) as u32;
         }
         // Pad with zeros with payload has an odd number of bytes.
-        if let Some(&b) = chunks_iter.remainder().get(0) {
+        if let Some(&b) = chunks_iter.remainder().first() {
             state += u16::from_be_bytes([b, 0]) as u32;
         }
 

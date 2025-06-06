@@ -494,7 +494,7 @@ fn tcp_checksum(src_ipv4_addr: &Ipv4Addr, dst_ipv4_addr: &Ipv4Addr, header: &[u8
         state += u16::from_be_bytes([chunk[0], chunk[1]]) as u32;
     }
     // Since the data may have an odd number of bytes, pad the last byte with zero if necessary.
-    if let Some(&b) = chunks_iter.remainder().get(0) {
+    if let Some(&b) = chunks_iter.remainder().first() {
         state += u16::from_be_bytes([b, 0]) as u32;
     }
 

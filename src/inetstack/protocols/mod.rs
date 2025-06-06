@@ -48,7 +48,7 @@ pub fn compute_generic_checksum(buf: &[u8], start: Option<u32>) -> u32 {
         state += u16::from_be_bytes([chunk[0], chunk[1]]) as u32;
     }
 
-    if let Some(&b) = chunks_iter.remainder().get(0) {
+    if let Some(&b) = chunks_iter.remainder().first() {
         state += u16::from_be_bytes([b, 0]) as u32;
     }
 
