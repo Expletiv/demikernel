@@ -72,7 +72,7 @@ jobs:
     - name: Run
       run: |
         branch_name=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
-        python3 tools/demikernel_ci.py \
+        python3 -u tools/demikernel_ci.py \
           --platform linux \
           --server $SERVER \
           --client $CLIENT \
@@ -147,7 +147,7 @@ jobs:
       if: ${{ env.SHOULD_RUN_RELEASE == 'true' }}
       run: |
         branch_name=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
-        python3 tools/demikernel_ci.py \
+        python3 -u tools/demikernel_ci.py \
           --platform linux \
           --server $SERVER \
           --client $CLIENT \
@@ -203,7 +203,7 @@ jobs:
       run: |
         branch_name=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
         pip install pandas tabulate
-        stats=$(python3 tools/perf.py \
+        stats=$(python3 -u tools/perf.py \
           --branch origin/$branch_name \
           --libos $LIBOS \
           --log-dir ./catnip_release_pipeline_logs)
