@@ -50,7 +50,7 @@ jobs:
     - name: Run
       run: |
         branch_name=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
-        python3 tools/demikernel_ci.py \
+        python3 -u tools/demikernel_ci.py \
           --platform windows \
           --server $SERVER \
           --client $CLIENT \
@@ -103,7 +103,7 @@ jobs:
       if: ${{ env.SHOULD_RUN_RELEASE == 'true' }}
       run: |
         branch_name=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
-        python3 tools/demikernel_ci.py \
+        python3 -u tools/demikernel_ci.py \
           --platform windows \
           --server $SERVER \
           --client $CLIENT \
@@ -149,7 +149,7 @@ jobs:
     - name: Run
       run: |
         branch_name=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
-        python3 tools/demikernel_ci.py \
+        python3 -u tools/demikernel_ci.py \
           --platform windows \
           --server $SERVER \
           --client $CLIENT \
@@ -202,7 +202,7 @@ jobs:
       if: ${{ env.SHOULD_RUN_RELEASE == 'true' }}
       run: |
         branch_name=${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}
-        python3 tools/demikernel_ci.py \
+        python3 -u tools/demikernel_ci.py \
           --platform windows \
           --server $SERVER \
           --client $CLIENT \
