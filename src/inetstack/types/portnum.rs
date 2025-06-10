@@ -23,7 +23,7 @@ pub struct Port16(NonZeroU16);
 
 impl Port16 {
     pub fn new(num: NonZeroU16) -> Self {
-        Self { 0: num }
+        Self(num)
     }
 }
 

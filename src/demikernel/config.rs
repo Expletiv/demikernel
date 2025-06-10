@@ -135,7 +135,7 @@ impl Config {
             _ => return Err(Fail::new(libc::EINVAL, "Wrong number of config objects")),
         };
 
-        Ok(Self { 0: config_obj.clone() })
+        Ok(Self(config_obj.clone()))
     }
 
     fn get_global_config(&self) -> Result<&Yaml, Fail> {
