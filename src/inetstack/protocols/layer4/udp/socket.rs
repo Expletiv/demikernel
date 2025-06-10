@@ -96,19 +96,19 @@ impl SharedUdpSocket {
     }
 
     pub async fn pop(&mut self, size: usize) -> Result<(SocketAddrV4, DemiBuffer), Fail> {
-        loop {
-            match self.recv_queue.pop(None).await {
-                Ok(msg) => {
-                    let remote: SocketAddrV4 = msg.0;
-                    let mut buf: DemiBuffer = msg.1;
+        match self.recv_queue.pop(None).await {
+            Ok(msg) => {
+                let remote: SocketAddrV4 = msg.0;
+                let mut buf: DemiBuffer = msg.1;
+
+                if size < buf.len() {
                     // We got more bytes than expected, so we trim the buffer.
-                    if size < buf.len() {
-                        buf.trim(size - buf.len())?;
-                    };
-                    return Ok((remote, buf));
-                },
-                Err(e) => return Err(e),
-            }
+                    buf.trim(size - buf.len())?;
+                };
+
+                Ok((remote, buf))
+            },
+            Err(e) => Err(e),
         }
     }
 
