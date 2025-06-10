@@ -139,7 +139,7 @@ impl TaskGroup {
     pub fn get_waker(&self, task_offset: usize) -> Option<Waker> {
         let (waker_page_index, waker_page_offset) = self.get_waker_page_index_and_offset(task_offset)?;
 
-        let raw_waker: NonNull<u8> = self.waker_page_refs[waker_page_index].into_raw_waker_ref(waker_page_offset);
+        let raw_waker: NonNull<u8> = self.waker_page_refs[waker_page_index].as_raw_waker_ref(waker_page_offset);
         Some(unsafe { Waker::from_raw(WakerRef::new(raw_waker).into()) })
     }
 

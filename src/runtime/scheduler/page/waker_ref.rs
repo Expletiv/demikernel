@@ -150,7 +150,7 @@ mod tests {
         let p: WakerPageRef = WakerPageRef::default();
         crate::ensure_eq!(p.refcount_get(), 1);
 
-        let p_clone: NonNull<u8> = p.into_raw_waker_ref(0);
+        let p_clone: NonNull<u8> = p.as_raw_waker_ref(0);
         let refcount: u64 = p.refcount_get();
         crate::ensure_eq!(refcount, 2);
         let q: WakerRef = WakerRef::new(p_clone);
@@ -159,7 +159,7 @@ mod tests {
         let refcount: u64 = p.refcount_get();
         crate::ensure_eq!(refcount, 2);
 
-        let r: WakerRef = WakerRef::new(p.into_raw_waker_ref(31));
+        let r: WakerRef = WakerRef::new(p.as_raw_waker_ref(31));
         let refcount: u64 = r.refcount_get();
         crate::ensure_eq!(refcount, 3);
         let refcount: u64 = p.refcount_get();
@@ -191,11 +191,11 @@ mod tests {
         let p: WakerPageRef = WakerPageRef::default();
         crate::ensure_eq!(p.refcount_get(), 1);
 
-        let q: WakerRef = WakerRef::new(p.into_raw_waker_ref(0));
+        let q: WakerRef = WakerRef::new(p.as_raw_waker_ref(0));
         crate::ensure_eq!(p.refcount_get(), 2);
-        let r: WakerRef = WakerRef::new(p.into_raw_waker_ref(31));
+        let r: WakerRef = WakerRef::new(p.as_raw_waker_ref(31));
         crate::ensure_eq!(p.refcount_get(), 3);
-        let s: WakerRef = WakerRef::new(p.into_raw_waker_ref(15));
+        let s: WakerRef = WakerRef::new(p.as_raw_waker_ref(15));
         crate::ensure_eq!(p.refcount_get(), 4);
 
         q.wake();
@@ -215,11 +215,11 @@ mod tests {
         let p: WakerPageRef = WakerPageRef::default();
         crate::ensure_eq!(p.refcount_get(), 1);
 
-        let q: WakerRef = WakerRef::new(p.into_raw_waker_ref(0));
+        let q: WakerRef = WakerRef::new(p.as_raw_waker_ref(0));
         crate::ensure_eq!(p.refcount_get(), 2);
-        let r: WakerRef = WakerRef::new(p.into_raw_waker_ref(31));
+        let r: WakerRef = WakerRef::new(p.as_raw_waker_ref(31));
         crate::ensure_eq!(p.refcount_get(), 3);
-        let s: WakerRef = WakerRef::new(p.into_raw_waker_ref(15));
+        let s: WakerRef = WakerRef::new(p.as_raw_waker_ref(15));
         crate::ensure_eq!(p.refcount_get(), 4);
 
         q.wake_by_ref();
@@ -252,7 +252,7 @@ mod tests {
         let ix: usize = rand::thread_rng().gen_range(0..WAKER_BIT_LENGTH);
 
         b.iter(|| {
-            let raw_page_ref: NonNull<u8> = black_box(p.into_raw_waker_ref(ix));
+            let raw_page_ref: NonNull<u8> = black_box(p.as_raw_waker_ref(ix));
             let q: WakerRef = WakerRef::new(raw_page_ref);
             q.wake();
         });
@@ -264,7 +264,7 @@ mod tests {
         let ix: usize = rand::thread_rng().gen_range(0..WAKER_BIT_LENGTH);
 
         b.iter(|| {
-            let raw_page_ref: NonNull<u8> = black_box(p.into_raw_waker_ref(ix));
+            let raw_page_ref: NonNull<u8> = black_box(p.as_raw_waker_ref(ix));
             let q: WakerRef = WakerRef::new(raw_page_ref);
             q.wake_by_ref();
         });
