@@ -79,14 +79,14 @@ impl RingStateMachine {
     // Get the next state for this queue.
     fn get_next_state(&mut self, op: RingControlOperation) -> Result<RingState, Fail> {
         match self.current {
-            RingState::Opened => self.from_opened(op),
-            RingState::Closing => self.from_closing(op),
-            RingState::Closed => self.from_closed(op),
+            RingState::Opened => self.transition_from_opened(op),
+            RingState::Closing => self.transition_from_closing(op),
+            RingState::Closed => self.transition_from_closed(op),
         }
     }
 
     /// Attempts to transition from the [RingState::Opened].
-    fn from_opened(&self, op: RingControlOperation) -> Result<RingState, Fail> {
+    fn transition_from_opened(&self, op: RingControlOperation) -> Result<RingState, Fail> {
         match op {
             RingControlOperation::Close => Ok(RingState::Closing),
             RingControlOperation::Closed => Err(fail(op, "ring is closed", libc::EBADF)),
@@ -94,7 +94,7 @@ impl RingStateMachine {
     }
 
     /// Attempts to transition from the [RingState::Closing].
-    fn from_closing(&self, op: RingControlOperation) -> Result<RingState, Fail> {
+    fn transition_from_closing(&self, op: RingControlOperation) -> Result<RingState, Fail> {
         match op {
             RingControlOperation::Close => Ok(RingState::Closing),
             RingControlOperation::Closed => Ok(RingState::Closed),
@@ -102,7 +102,7 @@ impl RingStateMachine {
     }
 
     /// Attempts to transition from the [RingState::Closed].
-    fn from_closed(&self, op: RingControlOperation) -> Result<RingState, Fail> {
+    fn transition_from_closed(&self, op: RingControlOperation) -> Result<RingState, Fail> {
         match op {
             RingControlOperation::Close | RingControlOperation::Closed => Err(fail(op, "ring is closed", libc::EBADF)),
         }
