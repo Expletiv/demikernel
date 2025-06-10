@@ -140,14 +140,7 @@ impl SharedCatnapTransport {
     async fn poll(&mut self) {
         let mut events: Vec<libc::epoll_event> = Vec::with_capacity(EPOLL_BATCH_SIZE);
         loop {
-            match unsafe {
-                libc::epoll_wait(
-                    self.epoll_fd,
-                    events.as_mut_ptr() as *mut libc::epoll_event,
-                    EPOLL_BATCH_SIZE as i32,
-                    0,
-                )
-            } {
+            match unsafe { libc::epoll_wait(self.epoll_fd, events.as_mut_ptr(), EPOLL_BATCH_SIZE as i32, 0) } {
                 result if result >= 0 => {
                     let num_events: usize = result as usize;
                     unsafe {
