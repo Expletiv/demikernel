@@ -1,7 +1,7 @@
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-name: Catnap + Catpowder (Windows Kernel and XDP)
+name: CatnapW + Catpowder (Windows Kernel and XDP)
 
 concurrency:
   group: catnapw
@@ -27,7 +27,7 @@ env:
 jobs:
 
   debug-pipeline:
-    name: Catnap Debug Pipeline (Windows Kernel)
+    name: CatnapW Debug Pipeline (Windows Kernel)
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
@@ -73,7 +73,7 @@ jobs:
           **/*.stderr.txt
 
   release-pipeline:
-    name: Catnap Release Pipeline (Windows Kernel)
+    name: CatnapW Release Pipeline (Windows Kernel)
     needs: debug-pipeline
     runs-on: ubuntu-latest
     steps:
@@ -116,7 +116,8 @@ jobs:
           --server-addr $SERVER_ADDR \
           --client-addr $CLIENT_ADDR
     - name: Archive Logs
-      if: ${{ env.SHOULD_RUN_RELEASE == 'true' }}
+      if: always()
+      continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
         name: catnapw-release-pipeline-logs
@@ -215,7 +216,8 @@ jobs:
           --server-addr $SERVER_ADDR \
           --client-addr $CLIENT_ADDR
     - name: Archive Logs
-      if: ${{ env.SHOULD_RUN_RELEASE == 'true' }}
+      if: always()
+      continue-on-error: true
       uses: actions/upload-artifact@v4
       with:
         name: catpowder-release-pipeline-logs

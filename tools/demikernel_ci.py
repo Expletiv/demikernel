@@ -73,8 +73,9 @@ def run_pipeline(
     if test_integration:
         if status["checkout"] and status["compile"]:
             if libos in ["catnap", "catnip", "catpowder"]:
-                status["integration_tests"] = factory.integration_test(test_name="tcp-tests").execute()
-                status["integration_tests"] = factory.integration_test(test_name="udp-tests").execute()
+                status["integration_tests"] = True
+                status["integration_tests"] &= factory.integration_test(test_name="tcp-tests").execute()
+                status["integration_tests"] &= factory.integration_test(test_name="udp-tests").execute()
 
     # STEP 5: Run system tests.
     if test_system and config["platform"]:
