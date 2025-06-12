@@ -10,7 +10,7 @@ use crate::runtime::{
     limits,
     memory::DemiBuffer,
     network::{
-        socket::{operation::SocketOp, option::SocketOption, state::SocketStateMachine},
+        socket::{option::SocketOption, state::SocketStateMachine},
         transport::NetworkTransport,
     },
     queue::{IoQueue, QType},
@@ -37,10 +37,6 @@ pub struct NetworkQueue<T: NetworkTransport> {
     state_machine: SocketStateMachine,
     /// Underlying socket.
     socket: T::SocketDescriptor,
-    /// The local address to which the socket is bound.
-    local: Option<SocketAddr>,
-    /// The remote address to which the socket is connected.
-    remote: Option<SocketAddr>,
     /// Underlying network transport.
     transport: T,
 }
@@ -70,8 +66,6 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
             qtype,
             state_machine: SocketStateMachine::new_unbound(typ),
             socket,
-            local: None,
-            remote: None,
             transport: transport.clone(),
         })))
     }
@@ -98,33 +92,22 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
 
     /// Binds the target queue to `local` address.
     pub fn bind(&mut self, local: SocketAddr) -> Result<(), Fail> {
-        self.state_machine.prepare(SocketOp::Bind)?;
-        // Bind underlying socket.
-        match self.transport.clone().bind(&mut self.socket, local) {
-            Ok(_) => {
-                self.local = Some(local);
-                self.state_machine.commit();
-                Ok(())
-            },
-            Err(e) => {
-                self.state_machine.abort();
-                Err(e)
-            },
-        }
+        self.state_machine.may_bind()?;
+        self.transport.clone().bind(&mut self.socket, local)?;
+        self.state_machine.bind(local);
+        Ok(())
     }
 
     /// Sets the target queue to listen for incoming connections.
     pub fn listen(&mut self, backlog: usize) -> Result<(), Fail> {
-        // Begins the listen operation.
-        self.state_machine.prepare(SocketOp::Listen)?;
-
+        self.state_machine.may_listen()?;
         match self.transport.clone().listen(&mut self.socket, backlog) {
-            Ok(_) => {
-                self.state_machine.commit();
+            Ok(()) => {
+                self.state_machine.listen();
                 Ok(())
             },
             Err(e) => {
-                self.state_machine.abort();
+                self.state_machine.closed();
                 Err(e)
             },
         }
@@ -136,17 +119,16 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
     where
         F: FnOnce() -> Result<QToken, Fail>,
     {
+        // 1. Check if we are in a state where we can accept.
+        self.state_machine.may_accept()?;
         coroutine_constructor()
     }
 
     /// Asynchronously accepts a new connection on the queue. This function contains all of the single-queue,
     /// asynchronous code necessary to run an accept and any single-queue functionality after the accept completes.
     pub async fn accept_coroutine(&mut self) -> Result<Self, Fail> {
-        // 1. Check if we are still in a state where we can accept.
-        self.state_machine.may_accept()?;
-
-        // 2. Block until either the accept operation completes or the state changes.
-        let (new_socket, saddr) = {
+        // 1. Block until either the accept operation completes or the state changes.
+        let (socket, addr) = match {
             let mut state_machine: SocketStateMachine = self.state_machine.clone();
             let mut transport: T = self.transport.clone();
             let state_tracker = state_machine.while_may_accept().fuse();
@@ -157,20 +139,24 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
             select_biased! {
                 // If the accepting queue is no longer in a state where it is accepting sockets, return immediately
                 // with the error.
-                fail = state_tracker => return Err(fail),
+                fail = state_tracker => Err(fail),
                 // If the operation returned unsuccessfully, return, otherwise continue to create a new queue.
-                result = operation => result?,
+                result = operation => result,
             }
+        } {
+            Ok(result) => result,
+            Err(e) => {
+                self.state_machine.closed();
+                return Err(e);
+            },
         };
 
-        // 3. Successfully accepted a connection, so construct a new queue.
-        trace!("connection accepted ({:?})", new_socket);
+        // 2. Successfully accepted a connection, so construct a new queue.
+        trace!("connection accepted ({:?})", socket);
         Ok(Self(SharedObject::new(NetworkQueue {
             qtype: self.qtype,
-            state_machine: SocketStateMachine::new_established(),
-            socket: new_socket,
-            local: None,
-            remote: Some(saddr),
+            state_machine: SocketStateMachine::new_established(addr),
+            socket,
             transport: self.transport.clone(),
         })))
     }
@@ -182,21 +168,20 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
     where
         F: FnOnce() -> Result<QToken, Fail>,
     {
+        self.state_machine.may_connect()?;
         coroutine_constructor()
     }
 
     /// Asynchronously connects the target queue to a remote address. This function contains all of the single-queue,
     /// asynchronous code necessary to run a connect and any single-queue functionality after the connect completes.
     pub async fn connect_coroutine(&mut self, remote: SocketAddr) -> Result<(), Fail> {
-        // 1. Check whether we can connect.
-        self.state_machine.prepare(SocketOp::Connect)?;
-        self.state_machine.commit();
-
+        // 1. Move to a connecting state.
+        self.state_machine.connecting(remote);
         // 2. Wait until either the connect completes or the socket state changes.
         let result: Result<(), Fail> = {
             let mut state_machine: SocketStateMachine = self.state_machine.clone();
             let mut transport: T = self.transport.clone();
-            let state_tracker = state_machine.while_may_connect().fuse();
+            let state_tracker = state_machine.while_open().fuse();
             let operation = transport.connect(&mut self.socket, remote).fuse();
             pin_mut!(state_tracker);
             pin_mut!(operation);
@@ -211,15 +196,12 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
         match result {
             Ok(()) => {
                 // Successfully connected to remote.
-                self.state_machine.prepare(SocketOp::Established)?;
-                self.state_machine.commit();
-                self.remote = Some(remote);
+                self.state_machine.connected(remote);
                 Ok(())
             },
             Err(e) => {
                 // If connect does not succeed, we close the socket.
-                self.state_machine.prepare(SocketOp::Closed)?;
-                self.state_machine.commit();
+                self.state_machine.closed();
                 Err(e)
             },
         }
@@ -230,26 +212,39 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
     where
         F: FnOnce() -> Result<QToken, Fail>,
     {
+        self.state_machine.ensure_not_closing()?;
         coroutine_constructor()
     }
 
     /// Close this queue. This function contains all the single-queue functionality to synchronously close a queue.
     pub fn hard_close(&mut self) -> Result<(), Fail> {
-        self.transport.clone().hard_close(&mut self.socket)
+        self.state_machine.ensure_not_closing()?;
+        self.transport.clone().hard_close(&mut self.socket)?;
+        self.state_machine.closed();
+        Ok(())
     }
 
     /// Asynchronously closes this queue. This function contains all of the single-queue, asynchronous code necessary
     /// to close a queue and any single-queue functionality after the close completes.
     pub async fn close_coroutine(&mut self) -> Result<(), Fail> {
-        self.state_machine.prepare(SocketOp::Close)?;
-        self.state_machine.commit();
-        match self.transport.clone().close(&mut self.socket).await {
-            Ok(()) => {
-                self.state_machine.prepare(SocketOp::Closed)?;
-                self.state_machine.commit();
-                Ok(())
-            },
-            Err(e) => Err(e),
+        self.state_machine.closing();
+        self.wait_for_close().await;
+        self.state_machine.closed();
+        Ok(())
+    }
+
+    /// Block until either the close finishes or some other coroutine closes the connection.
+    async fn wait_for_close(&mut self) {
+        let mut state_machine: SocketStateMachine = self.state_machine.clone();
+        let mut transport: T = self.transport.clone();
+        let state_tracker = state_machine.while_closing().fuse();
+        let operation = transport.close(&mut self.socket).fuse();
+        pin_mut!(state_tracker);
+        pin_mut!(operation);
+
+        select_biased! {
+            _ = state_tracker => (),
+            _ = operation => (),
         }
     }
 
@@ -269,7 +264,7 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
         let result = {
             let mut state_machine: SocketStateMachine = self.state_machine.clone();
             let mut transport: T = self.transport.clone();
-            let state_tracker = state_machine.while_may_push().fuse();
+            let state_tracker = state_machine.while_open().fuse();
             let operation = transport.push(&mut self.socket, &mut buf, addr).fuse();
             pin_mut!(state_tracker);
             pin_mut!(operation);
@@ -299,12 +294,11 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
     /// Asynchronously pops data from the queue. This function contains all of the single-queue, asynchronous code
     /// necessary to pop from a queue and any single-queue functionality after the pop completes.
     pub async fn pop_coroutine(&mut self, size: Option<usize>) -> Result<(Option<SocketAddr>, DemiBuffer), Fail> {
-        self.state_machine.may_pop()?;
         let size: usize = size.unwrap_or(limits::RECVBUF_SIZE_MAX);
 
         let mut state_machine: SocketStateMachine = self.state_machine.clone();
         let mut transport: T = self.transport.clone();
-        let state_tracker = state_machine.while_may_pop().fuse();
+        let state_tracker = state_machine.while_open().fuse();
         let operation = transport.pop(&mut self.socket, size).fuse();
         pin_mut!(state_tracker);
         pin_mut!(operation);
@@ -314,13 +308,12 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
             result = operation => result,
         }
     }
-
     pub fn local(&self) -> Option<SocketAddr> {
-        self.local
+        self.state_machine.local()
     }
 
     pub fn remote(&self) -> Option<SocketAddr> {
-        self.remote
+        self.state_machine.remote()
     }
 }
 

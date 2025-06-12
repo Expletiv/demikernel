@@ -267,6 +267,7 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
             Ok(queue) => queue,
             Err(e) => return (qd, OperationResult::Failed(e)),
         };
+        // Cache this for later because once the queue closes, it won't keep the locally bound address.
         let local: Option<SocketAddr> = queue.local();
         // Wait for close operation to complete.
         match queue.close_coroutine().await {
