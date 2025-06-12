@@ -200,14 +200,24 @@ fn wait_on_invalid_queue_token_returns_einval(libos: &mut LibOS) -> Result<()> {
     // Wait on an invalid queue token made from u64 MAX value.
     match libos.wait(QToken::from(u64::MAX), Some(Duration::ZERO)) {
         Ok(_) => anyhow::bail!("wait() should not succeed on invalid token"),
+        // If we are using direct mapping, this will time out because we do not have a data structure to track valid and
+        // invalid qtokens. Instead, we will never find a completed qtoken.
+        #[cfg(not(feature = "direct-mapping"))]
         Err(e) if e.errno == libc::EINVAL => {},
+        #[cfg(feature = "direct-mapping")]
+        Err(e) if e.errno == libc::ETIMEDOUT => {},
         Err(_) => anyhow::bail!("wait() should not fail with any other reason than invalid token"),
     }
 
     // Wait on an invalid queue token made from 0 value.
     match libos.wait(QToken::from(0), Some(Duration::ZERO)) {
         Ok(_) => anyhow::bail!("wait() should not succeed on invalid token"),
+        // If we are using direct mapping, this will time out because we do not have a data structure to track valid and
+        // invalid qtokens. Instead, we will never find a completed qtoken.
+        #[cfg(not(feature = "direct-mapping"))]
         Err(e) if e.errno == libc::EINVAL => {},
+        #[cfg(feature = "direct-mapping")]
+        Err(e) if e.errno == libc::ETIMEDOUT => {},
         Err(_) => anyhow::bail!("wait() should not fail with any other reason than invalid token"),
     }
 
