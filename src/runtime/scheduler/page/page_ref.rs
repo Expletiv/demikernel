@@ -57,7 +57,7 @@ impl WakerPageRef {
     /// carefully review the pointer arithmetic interaction between
     /// [crate::page::WakerPage], [crate::page::WakerPageRef],
     /// [crate::page::WakerRef] and [crate::Scheduler].
-    pub fn into_raw_waker_ref(&self, ix: usize) -> NonNull<u8> {
+    pub fn as_raw_waker_ref(&self, ix: usize) -> NonNull<u8> {
         debug_assert!(ix < WAKER_BIT_LENGTH);
 
         // Bump the refcount of the underlying waker page.
@@ -201,15 +201,15 @@ mod tests {
         let refcount: u64 = p.refcount_get();
         crate::ensure_eq!(refcount, 1);
 
-        let _: NonNull<u8> = p.into_raw_waker_ref(0);
+        let _: NonNull<u8> = p.as_raw_waker_ref(0);
         let refcount: u64 = p.refcount_get();
         crate::ensure_eq!(refcount, 2);
 
-        let _: NonNull<u8> = p.into_raw_waker_ref(31);
+        let _: NonNull<u8> = p.as_raw_waker_ref(31);
         let refcount: u64 = p.refcount_get();
         crate::ensure_eq!(refcount, 3);
 
-        let _: NonNull<u8> = p.into_raw_waker_ref(63);
+        let _: NonNull<u8> = p.as_raw_waker_ref(63);
         let refcount: u64 = p.refcount_get();
         crate::ensure_eq!(refcount, 4);
 
