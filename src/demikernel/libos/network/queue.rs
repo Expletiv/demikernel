@@ -149,8 +149,7 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
     where
         F: FnOnce() -> Result<QToken, Fail>,
     {
-        self.state_machine.may_accept()?;
-        self.do_generic_sync_control_path_call(coroutine_constructor)
+        coroutine_constructor()
     }
 
     /// Asynchronously accepts a new connection on the queue. This function contains all of the single-queue,
@@ -197,15 +196,15 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
     where
         F: FnOnce() -> Result<QToken, Fail>,
     {
-        self.state_machine.prepare(SocketOp::Connect)?;
-        self.do_generic_sync_control_path_call(coroutine_constructor)
+        coroutine_constructor()
     }
 
     /// Asynchronously connects the target queue to a remote address. This function contains all of the single-queue,
     /// asynchronous code necessary to run a connect and any single-queue functionality after the connect completes.
     pub async fn connect_coroutine(&mut self, remote: SocketAddr) -> Result<(), Fail> {
-        // 1. Check whether we can still connect.
-        self.state_machine.may_connect()?;
+        // 1. Check whether we can connect.
+        self.state_machine.prepare(SocketOp::Connect)?;
+        self.state_machine.commit();
 
         // 2. Wait until either the connect completes or the socket state changes.
         let result: Result<(), Fail> = {
@@ -245,27 +244,19 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
     where
         F: FnOnce() -> Result<QToken, Fail>,
     {
-        self.state_machine.prepare(SocketOp::Close)?;
-        self.do_generic_sync_control_path_call(coroutine_constructor)
+        coroutine_constructor()
     }
 
     /// Close this queue. This function contains all the single-queue functionality to synchronously close a queue.
     pub fn hard_close(&mut self) -> Result<(), Fail> {
-        //self.state_machine.prepare(SocketOp::Close)?;
-        //self.state_machine.commit();
-        match self.transport.clone().hard_close(&mut self.socket) {
-            Ok(()) => {
-                //self.state_machine.prepare(SocketOp::Closed)?;
-                //self.state_machine.commit();
-                Ok(())
-            },
-            Err(e) => Err(e),
-        }
+        self.transport.clone().hard_close(&mut self.socket)
     }
 
     /// Asynchronously closes this queue. This function contains all of the single-queue, asynchronous code necessary
     /// to close a queue and any single-queue functionality after the close completes.
     pub async fn close_coroutine(&mut self) -> Result<(), Fail> {
+        self.state_machine.prepare(SocketOp::Close)?;
+        self.state_machine.commit();
         match self.transport.clone().close(&mut self.socket).await {
             Ok(()) => {
                 self.state_machine.prepare(SocketOp::Closed)?;
@@ -348,28 +339,6 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
         select_biased! {
             fail = state_tracker => Err(fail),
             result = operation => result,
-        }
-    }
-
-    /// Generic function for spawning a control-path coroutine on [self].
-    fn do_generic_sync_control_path_call<F>(&mut self, coroutine_constructor: F) -> Result<QToken, Fail>
-    where
-        F: FnOnce() -> Result<QToken, Fail>,
-    {
-        // Spawn coroutine.
-        match coroutine_constructor() {
-            // We successfully spawned the coroutine.
-            Ok(qt) => {
-                // Commit the operation on the socket.
-                self.state_machine.commit();
-                Ok(qt)
-            },
-            // We failed to spawn the coroutine.
-            Err(e) => {
-                // Abort the operation on the socket.
-                self.state_machine.abort();
-                Err(e)
-            },
         }
     }
 

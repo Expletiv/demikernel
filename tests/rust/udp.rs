@@ -196,6 +196,7 @@ mod test {
                 },
             }
 
+            alice_barrier.wait();
             let bytes = libos.prepare_dummy_buffer(32)?;
             let qt: QToken = match libos.pushto(sockfd, &bytes, bob_addr) {
                 Ok(qt) => qt,
@@ -264,7 +265,7 @@ mod test {
                     anyhow::bail!("bind() failed: {:?}", e)
                 },
             };
-
+            bob_barrier.wait();
             // Pop data.
             let qt: QToken = match libos.pop(sockfd, None) {
                 Ok(qt) => qt,
@@ -355,6 +356,7 @@ mod test {
                     anyhow::bail!("bind() failed: {:?}", e)
                 },
             };
+            alice_barrier.wait();
 
             let bytes = libos.prepare_dummy_buffer(32)?;
             let qt: QToken = match libos.pushto(sockfd, &bytes, bob_addr) {
@@ -425,6 +427,8 @@ mod test {
                     anyhow::bail!("bind() failed: {:?}", e)
                 },
             };
+
+            bob_barrier.wait();
             // Pop data.
             let qt: QToken = match libos.pop(sockfd, None) {
                 Ok(qt) => qt,

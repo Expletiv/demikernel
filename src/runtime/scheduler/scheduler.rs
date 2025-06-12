@@ -39,6 +39,13 @@ pub struct SchedulerId(pub usize);
 #[derive(Clone, Default)]
 pub struct SharedScheduler(SharedObject<Scheduler>);
 
+/// Possible outcomes for inserting a task.
+#[derive(Debug)]
+pub enum InsertResult {
+    Inserted(SchedulerId),
+    Completed(Box<dyn Task>),
+}
+
 //======================================================================================================================
 // Associate Functions
 //======================================================================================================================
@@ -53,7 +60,7 @@ impl Scheduler {
     }
 
     /// The parent id can either be the id of the group or another task in the same group.
-    pub fn insert_task<T: Task>(&mut self, group_id: SchedulerId, task: T) -> Option<SchedulerId> {
+    pub fn insert_task<T: Task>(&mut self, group_id: SchedulerId, task: T) -> Option<InsertResult> {
         let group: &mut TaskGroup = self.get_mut_group(group_id)?;
         group.insert(Box::new(task))
     }
@@ -133,12 +140,9 @@ impl From<SchedulerId> for u64 {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        expect_some,
-        runtime::scheduler::{
-            scheduler::{Scheduler, SchedulerId},
-            task::TaskWithResult,
-        },
+    use crate::runtime::scheduler::{
+        scheduler::{InsertResult, Scheduler, SchedulerId},
+        task::TaskWithResult,
     };
     use ::anyhow::Result;
     use ::futures::FutureExt;
@@ -164,10 +168,10 @@ mod tests {
         type Output = ();
 
         fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-            match self.as_ref().val & 1 {
+            match self.as_ref().val {
                 0 => Poll::Ready(()),
                 _ => {
-                    self.get_mut().val += 1;
+                    self.get_mut().val -= 1;
                     let waker: &Waker = ctx.waker();
                     waker.wake_by_ref();
                     Poll::Pending
@@ -178,37 +182,14 @@ mod tests {
 
     type DummyTask = TaskWithResult<()>;
 
-    /// Tests if when inserting multiple tasks into the scheduler at once each, of them gets a unique identifier.
-    #[test]
-    fn insert_creates_unique_tasks_ids() -> Result<()> {
-        let mut scheduler: Scheduler = Scheduler::default();
-        let group_id: SchedulerId = scheduler.create_group();
-
-        // Insert a task and make sure the task id is not a simple counter.
-        let task: DummyTask = DummyTask::new("testing", Box::pin(DummyCoroutine::new(0).fuse()));
-        let Some(task_id) = scheduler.insert_task(group_id, task) else {
-            anyhow::bail!("insert() failed")
-        };
-
-        // Insert another task and make sure the task id is not sequentially after the previous one.
-        let task2: DummyTask = DummyTask::new("testing", Box::pin(DummyCoroutine::new(0).fuse()));
-        let Some(task_id2) = scheduler.insert_task(group_id, task2) else {
-            anyhow::bail!("insert() failed")
-        };
-
-        crate::ensure_neq!(task_id2, task_id);
-
-        Ok(())
-    }
-
     #[test]
     fn poll_group_with_one_small_task_completes_it() -> Result<()> {
         let mut scheduler: Scheduler = Scheduler::default();
         let group_id: SchedulerId = scheduler.create_group();
 
         // Insert a single future in the scheduler. This future shall complete with a single poll operation.
-        let task: DummyTask = DummyTask::new("testing", Box::pin(DummyCoroutine::new(0).fuse()));
-        let Some(_) = scheduler.insert_task(group_id, task) else {
+        let task: DummyTask = DummyTask::new("testing", Box::pin(DummyCoroutine::new(1).fuse()));
+        let Some(InsertResult::Inserted(_)) = scheduler.insert_task(group_id, task) else {
             anyhow::bail!("insert() failed")
         };
 
@@ -228,8 +209,8 @@ mod tests {
 
         // Insert a single future in the scheduler. This future shall complete
         // with two poll operations.
-        let task: DummyTask = DummyTask::new("testing", Box::pin(DummyCoroutine::new(1).fuse()));
-        let Some(_) = scheduler.insert_task(group_id, task) else {
+        let task: DummyTask = DummyTask::new("testing", Box::pin(DummyCoroutine::new(2).fuse()));
+        let Some(InsertResult::Inserted(_)) = scheduler.insert_task(group_id, task) else {
             anyhow::bail!("insert() failed")
         };
 
@@ -252,8 +233,8 @@ mod tests {
         let group_id: SchedulerId = scheduler.create_group();
 
         // Insert a single future in the scheduler. This future shall complete with a single poll operation.
-        let task: DummyTask = DummyTask::new("testing", Box::pin(DummyCoroutine::new(0).fuse()));
-        let Some(_) = scheduler.insert_task(group_id, task) else {
+        let task: DummyTask = DummyTask::new("testing", Box::pin(DummyCoroutine::new(1).fuse()));
+        let Some(InsertResult::Inserted(_)) = scheduler.insert_task(group_id, task) else {
             anyhow::bail!("insert() failed")
         };
 
@@ -266,40 +247,16 @@ mod tests {
         }
     }
 
-    /// Tests if consecutive tasks are not assigned the same task id.
-    #[test]
-    fn insert_consecutive_creates_unique_task_ids() -> Result<()> {
-        let mut scheduler: Scheduler = Scheduler::default();
-        let group_id: SchedulerId = scheduler.create_group();
-
-        // Create and run a task.
-        let task: DummyTask = DummyTask::new("testing", Box::pin(DummyCoroutine::new(0).fuse()));
-        let Some(task_id) = scheduler.insert_task(group_id, task) else {
-            anyhow::bail!("insert() failed")
-        };
-
-        // Create another task.
-        let task2: DummyTask = DummyTask::new("testing", Box::pin(DummyCoroutine::new(0).fuse()));
-        let Some(task_id2) = scheduler.insert_task(group_id, task2) else {
-            anyhow::bail!("insert() failed")
-        };
-        // Ensure that the second task has a unique id.
-        crate::ensure_neq!(task_id2, task_id);
-
-        Ok(())
-    }
-
     #[bench]
     fn insert_bench(b: &mut Bencher) {
         let mut scheduler: Scheduler = Scheduler::default();
         let group_id: SchedulerId = scheduler.create_group();
 
         b.iter(|| {
-            let task: DummyTask = DummyTask::new("testing", Box::pin(black_box(DummyCoroutine::default().fuse())));
-            let task_id: SchedulerId = expect_some!(
-                scheduler.insert_task(group_id, task),
-                "couldn't insert future in scheduler"
-            );
+            let task: DummyTask = DummyTask::new("testing", Box::pin(black_box(DummyCoroutine::new(1).fuse())));
+            let Some(InsertResult::Inserted(task_id)) = scheduler.insert_task(group_id, task) else {
+                panic!("couldn't insert future in scheduler");
+            };
             black_box(task_id);
         });
     }
@@ -312,12 +269,13 @@ mod tests {
         const NUM_TASKS: usize = 1024;
         let mut task_ids: Vec<SchedulerId> = Vec::<SchedulerId>::with_capacity(NUM_TASKS);
 
-        for val in 0..NUM_TASKS {
+        for val in 1..NUM_TASKS {
             let task: DummyTask = DummyTask::new("testing", Box::pin(DummyCoroutine::new(val).fuse()));
-            let Some(task_id) = scheduler.insert_task(group_id, task) else {
-                panic!("insert() failed");
+            match scheduler.insert_task(group_id, task) {
+                Some(InsertResult::Completed(_)) => panic!("task should not have completed"),
+                Some(InsertResult::Inserted(task_id)) => task_ids.push(task_id),
+                None => panic!("insert() failed"),
             };
-            task_ids.push(task_id);
         }
 
         b.iter(|| {
@@ -333,12 +291,13 @@ mod tests {
         const NUM_TASKS: usize = 8;
         let mut task_ids: Vec<SchedulerId> = Vec::<SchedulerId>::with_capacity(NUM_TASKS);
 
-        for val in 0..NUM_TASKS {
+        for val in 1..NUM_TASKS {
             let task: DummyTask = DummyTask::new("testing", Box::pin(DummyCoroutine::new(val).fuse()));
-            let Some(task_id) = scheduler.insert_task(group_id, task) else {
-                panic!("insert() failed");
+            match scheduler.insert_task(group_id, task) {
+                Some(InsertResult::Completed(_)) => panic!("task should not have completed"),
+                Some(InsertResult::Inserted(task_id)) => task_ids.push(task_id),
+                None => panic!("insert() failed"),
             };
-            task_ids.push(task_id);
         }
 
         b.iter(|| {

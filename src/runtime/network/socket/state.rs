@@ -166,7 +166,7 @@ impl SocketStateMachine {
 
         // Already prepared and not committed or aborted yet.
         if let Some(pending) = self.next {
-            if next != SocketState::Closing && pending != next {
+            if (next != SocketState::Closing || next != SocketState::Closed) && pending != next {
                 return Err(fail(op, "socket is busy", libc::EBUSY));
             }
         }

@@ -6,9 +6,9 @@
 //======================================================================================================================
 
 use crate::check_for_network_error;
-use ::anyhow::{ensure, Result};
+use ::anyhow::Result;
 use ::demikernel::{runtime::types::demi_opcode_t, LibOS, QDesc, QToken};
-use ::std::{net::SocketAddr, time::Duration};
+use ::std::net::SocketAddr;
 
 //======================================================================================================================
 // Constants
@@ -165,23 +165,18 @@ fn listen_connecting_socket(libos: &mut LibOS, local: &SocketAddr, remote: &Sock
     libos.bind(sockqd, local.to_owned())?;
     let qt: QToken = libos.connect(sockqd, remote.to_owned())?;
 
-    // Poll the scheduler once to ensure that the connect() co-routine runs. No coroutines should have completed.
-    ensure!(libos
-        .wait_next_n(|_| { false }, Some(Duration::ZERO))
-        .is_err_and(|e| { e.errno == libc::ETIMEDOUT }));
-
-    // Fail to listen(). Socket should be closed.
+    // Fail to listen().
     match libos.listen(sockqd, 16) {
         Err(e) if e.errno == libc::EADDRINUSE => (),
         Err(e) => anyhow::bail!("listen() failed with {}", e),
         Ok(()) => anyhow::bail!("listen() on a socket that is connecting should fail"),
     };
 
-    // Succeed to close socket.
+    // Close the socket.
     libos.close(sockqd)?;
 
     // Poll again to check that the connect() co-routine returns an err, either canceled or refused.
-    match libos.wait(qt, Some(Duration::ZERO)) {
+    match libos.wait(qt, None) {
         Ok(qr) if check_for_network_error(&qr) => Ok(()),
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!(
             "wait() should succeed with a specified error on connect() after close(), instead returned this \
@@ -202,13 +197,10 @@ fn listen_accepting_socket(libos: &mut LibOS, local: &SocketAddr) -> Result<()> 
     // Create an accepting socket.
     let sockqd: QDesc = libos.socket(AF_INET, SOCK_STREAM, 0)?;
     libos.bind(sockqd, local.to_owned())?;
+
     libos.listen(sockqd, 16)?;
     let qt: QToken = libos.accept(sockqd)?;
 
-    // Poll the scheduler once to ensure that the accept() co-routine runs. No coroutines should have completed.
-    ensure!(libos
-        .wait_next_n(|_| { false }, Some(Duration::ZERO))
-        .is_err_and(|e| { e.errno == libc::ETIMEDOUT }));
     // Fail to listen().
     match libos.listen(sockqd, 16) {
         Err(e) if e.errno == libc::EADDRINUSE => (),
@@ -216,11 +208,11 @@ fn listen_accepting_socket(libos: &mut LibOS, local: &SocketAddr) -> Result<()> 
         Ok(()) => anyhow::bail!("listen() on a socket that is accepting connections should fail"),
     };
 
-    // Succeed to close socket.
+    // Close the socket.
     libos.close(sockqd)?;
 
     // Poll again to check that the qtoken returns an err.
-    match libos.wait(qt, Some(Duration::ZERO)) {
+    match libos.wait(qt, None) {
         Ok(qr) if check_for_network_error(&qr) => Ok(()),
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!(
             "wait() should succeed with a specified error on accept() after close(), instead returned this unknown \

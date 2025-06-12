@@ -30,6 +30,7 @@
 use ::futures::future::FusedFuture;
 use ::std::{
     any::Any,
+    fmt::Debug,
     future::Future,
     pin::Pin,
     task::{Context, Poll},
@@ -41,7 +42,7 @@ use ::std::{
 
 /// Task runs a single coroutine to completion and stores the result for later. Thus, it implements Future but
 /// never directly returns anything.
-pub trait Task: FusedFuture<Output = ()> + Unpin + Any {
+pub trait Task: FusedFuture<Output = ()> + Unpin + Any + Debug {
     fn get_name(&self) -> &'static str;
     fn as_any(self: Box<Self>) -> Box<dyn Any>;
     fn get_id(&self) -> Option<u64>;
@@ -121,6 +122,12 @@ impl<R: Unpin + Clone + Any> Task for TaskWithResult<R> {
 
     fn set_id(&mut self, id: u64) {
         self.task_id = Some(id);
+    }
+}
+
+impl<R: Unpin + Clone + Any> Debug for TaskWithResult<R> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.get_name())
     }
 }
 
