@@ -286,10 +286,8 @@ impl WinsockRuntime {
     fn get_or_init_extensions(&mut self, s: SOCKET) -> Result<Rc<SocketExtensions>, Fail> {
         let protocol: WSAPROTOCOL_INFOW = unsafe { self.getsockopt(s, SOL_SOCKET, SO_PROTOCOL_INFOW) }?;
 
-        let extensions: &mut Weak<SocketExtensions> = self
-            .extensions_by_provider
-            .entry(protocol.ProviderId)
-            .or_insert(Weak::default());
+        let extensions: &mut Weak<SocketExtensions> =
+            self.extensions_by_provider.entry(protocol.ProviderId).or_default();
         if let Some(extensions) = extensions.upgrade() {
             return Ok(extensions);
         }
@@ -300,7 +298,6 @@ impl WinsockRuntime {
         Ok(new_extensions)
     }
 
-    /// Create a raw Winsock socket.
     pub(super) unsafe fn raw_socket(
         domain: libc::c_int,
         typ: libc::c_int,
