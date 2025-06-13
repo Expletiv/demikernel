@@ -343,11 +343,7 @@ impl DemiBuffer {
     /// Possibly this requirement could be relaxed with more buffer reference types, or buffers which carry an explicit
     /// lifetime. Until a compelling use case arises, this will cap to `'static`.
     pub fn new_in_pool(pool: &BufferPool) -> Option<Self> {
-        let buffer: PoolBuf = match pool.pool().get() {
-            Some(buffer) => buffer,
-            None => return None,
-        };
-
+        let buffer: PoolBuf = pool.pool().get()?;
         let (mut buffer, pool): (NonNull<[MaybeUninit<u8>]>, Rc<MemoryPool>) = PoolBuf::into_raw(buffer);
 
         // Safety: the buffer size and alignment requirements are enforced by BufferPool.
