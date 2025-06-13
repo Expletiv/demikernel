@@ -404,11 +404,11 @@ impl Sender {
     ) -> usize {
         let buf_len: usize = segment.len();
         debug_assert_ne!(buf_len, 0);
-        // Check window size.
-        let max_frame_size_bytes: usize = match Self::get_open_window_size_bytes(cb) {
-            0 => return 0,
-            size => size,
-        };
+
+        let max_frame_size_bytes: usize = Self::get_open_window_size_bytes(cb);
+        if max_frame_size_bytes == 0 {
+            return 0;
+        }
 
         // Split the packet if necessary.
         // TODO: Use a scatter/gather array to coalesce multiple buffers into a single segment.

@@ -79,7 +79,7 @@ impl WakerPageRef {
 impl Clone for WakerPageRef {
     fn clone(&self) -> Self {
         let old_refount: u64 = unsafe { self.0.as_ref().refcount_inc() };
-        debug_assert!(old_refount < std::u64::MAX);
+        debug_assert!(old_refount < u64::MAX);
         Self(self.0)
     }
 }

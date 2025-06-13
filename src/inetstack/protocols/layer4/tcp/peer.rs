@@ -109,7 +109,7 @@ impl SharedTcpPeer {
         // All other checks should have been done already.
         debug_assert!(!Ipv4Addr::is_unspecified(local.ip()));
         debug_assert!(local.port() != 0);
-        debug_assert!(self.addresses.get(&SocketId::Passive(local)).is_none());
+        debug_assert!(!self.addresses.contains_key(&SocketId::Passive(local)));
 
         // Issue operation.
         socket.bind(local)?;

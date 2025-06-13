@@ -69,7 +69,7 @@ impl SharedUdpPeer {
 
     /// Binds a UDP socket to a local endpoint address.
     pub fn bind(&mut self, socket: &mut SharedUdpSocket, addr: SocketAddrV4) -> Result<(), Fail> {
-        if let Some(_) = socket.local() {
+        if socket.local().is_some() {
             let cause: String = String::from("cannot bind to already bound socket");
             error!("bind(): {}", cause);
             return Err(Fail::new(libc::EADDRINUSE, &cause));

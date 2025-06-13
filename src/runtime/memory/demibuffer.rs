@@ -522,6 +522,13 @@ impl DemiBuffer {
         self.as_metadata().data_len as usize
     }
 
+    // This function purposely depends on len() to determine if the buffer is
+    // empty because it allows the logic to calculate the length to change
+    // without changing this function.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Returns the amount of headroom available in the packet.
     pub fn headroom(&self) -> u16 {
         self.as_metadata().data_off
@@ -1124,8 +1131,7 @@ impl Deref for DemiBuffer {
     type Target = [u8];
 
     fn deref(&self) -> &[u8] {
-        // If the buffer is empty, return an empty slice.
-        if self.len() == 0 {
+        if self.is_empty() {
             return &[];
         }
         // Safety: the call to from_raw_parts is safe, as its arguments refer to a valid readable memory region

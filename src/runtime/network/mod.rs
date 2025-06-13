@@ -49,7 +49,7 @@ impl SocketIdToQDescMap {
     }
 
     pub fn is_in_use(&self, socket_addrv4: SocketAddrV4) -> bool {
-        for (socket_id, _) in &self.mappings {
+        for socket_id in self.mappings.keys() {
             match socket_id {
                 SocketId::Passive(addr) | SocketId::Active(addr, _) if *addr == socket_addrv4 => return true,
                 _ => continue,
