@@ -41,7 +41,7 @@ use crate::{
         network::{socket::SocketId, SocketIdToQDescMap},
         poll::PollFuture,
         queue::{IoQueue, IoQueueTable},
-        scheduler::{SharedScheduler, TaskWithResult},
+        scheduler::{InsertResult, SharedScheduler, TaskWithResult},
     },
 };
 use ::futures::{future::FusedFuture, select_biased, Future, FutureExt};
@@ -138,7 +138,7 @@ impl SharedDemiRuntime {
         task_name: &'static str,
         coroutine: Pin<Box<F>>,
     ) -> Result<QToken, Fail> {
-        self.insert_coroutine(task_name, self.background_group_id, coroutine)
+        self.insert_and_poll_coroutine(task_name, self.background_group_id, coroutine)
     }
 
     /// Inserts the background `coroutine` named `task_name` into the scheduler. There should only be one of these
@@ -151,11 +151,11 @@ impl SharedDemiRuntime {
     where
         F::Output: Unpin + Clone + Any,
     {
-        self.insert_coroutine(task_name, self.foreground_group_id, coroutine)
+        self.insert_and_poll_coroutine(task_name, self.foreground_group_id, coroutine)
     }
 
-    /// Inserts a coroutine of type T and task
-    fn insert_coroutine<F: FusedFuture + 'static>(
+    /// Inserts a coroutine of type T and task and polls it once.
+    fn insert_and_poll_coroutine<F: FusedFuture + 'static>(
         &mut self,
         task_name: &'static str,
         group_id: SchedulerId,
@@ -169,13 +169,28 @@ impl SharedDemiRuntime {
         let coroutine = coroutine_timer!(task_name, coroutine);
         let task: TaskWithResult<F::Output> = TaskWithResult::<F::Output>::new(task_name, coroutine);
         match self.scheduler.insert_task(group_id, task) {
-            Some(task_id) => {
+            Some(InsertResult::Inserted(task_id)) => {
                 let qt: QToken = self.qtoken_to_scheduler_id.insert_with_new_id(task_id).unwrap();
                 self.scheduler
                     .get_mut_task(group_id, task_id)
                     .unwrap()
                     .set_id(qt.into());
                 // Stash the newly allocated qtoken in the task.
+                Ok(qt)
+            },
+            Some(InsertResult::Completed(mut boxed_task)) => {
+                trace!("Completed while inserting coroutine: {:?}", boxed_task.get_name());
+                // Place into id map so that the application can retrive the result later.
+                let qt: QToken = self.qtoken_to_scheduler_id.insert_with_new_id(0_u64.into()).unwrap();
+                boxed_task.set_id(qt.into());
+
+                // OperationTasks return a value to the application, so we must stash these for later.
+                let mut task: OperationTask =
+                    OperationTask::try_from(boxed_task.as_any()).expect("should be able to unbox what we just boxed");
+                self.completed_results.insert(
+                    qt,
+                    expect_some!(task.get_result(), "Task completed so there must be a result"),
+                );
                 Ok(qt)
             },
             None => {

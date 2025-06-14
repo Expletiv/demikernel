@@ -6,9 +6,9 @@
 //======================================================================================================================
 
 use crate::check_for_network_error;
-use ::anyhow::{ensure, Result};
+use ::anyhow::Result;
 use ::demikernel::{runtime::types::demi_opcode_t, LibOS, QDesc, QToken};
-use ::std::{net::SocketAddr, time::Duration};
+use ::std::net::SocketAddr;
 
 //======================================================================================================================
 // Constants
@@ -65,15 +65,11 @@ fn wait_after_close_accepting_socket(libos: &mut LibOS, local: &SocketAddr) -> R
     libos.listen(sockqd, 16)?;
     let qt: QToken = libos.accept(sockqd)?;
 
-    // Poll the scheduler once to ensure that the accept() co-routine runs. No coroutines should have completed.
-    ensure!(libos
-        .wait_next_n(|_| { false }, Some(Duration::ZERO))
-        .is_err_and(|e| { e.errno == libc::ETIMEDOUT }));
     // Succeed to close socket.
     libos.close(sockqd)?;
 
     // Poll again to check that the accept() coroutine returns an err and was properly canceled.
-    match libos.wait(qt, Some(Duration::ZERO)) {
+    match libos.wait(qt, None) {
         Ok(qr) if check_for_network_error(&qr) => Ok(()),
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!(
             "wait() should succeed with a specified error on accept() after close(), instead returned this unknown \
@@ -95,15 +91,11 @@ fn wait_after_close_connecting_socket(libos: &mut LibOS, remote: &SocketAddr) ->
     let sockqd: QDesc = libos.socket(AF_INET, SOCK_STREAM, 0)?;
     let qt: QToken = libos.connect(sockqd, *remote)?;
 
-    // Poll the scheduler once to ensure that the connect() co-routine runs. No coroutines should have completed.
-    ensure!(libos
-        .wait_next_n(|_| { false }, Some(Duration::ZERO))
-        .is_err_and(|e| { e.errno == libc::ETIMEDOUT }));
     // Succeed to close socket.
     libos.close(sockqd)?;
 
     // Poll again to check that the connect() co-routine returns an err, either canceled or refused.
-    match libos.wait(qt, Some(Duration::ZERO)) {
+    match libos.wait(qt, None) {
         Ok(qr) if check_for_network_error(&qr) => Ok(()),
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!(
             "wait() should succeed with a specified error on connect() after close(), instead returned this \
@@ -127,22 +119,18 @@ fn wait_after_async_close_accepting_socket(libos: &mut LibOS, local: &SocketAddr
     libos.listen(sockqd, 16)?;
     let qt: QToken = libos.accept(sockqd)?;
 
-    // Poll the scheduler once to ensure that the accept() co-routine runs. No coroutines should have completed.
-    ensure!(libos
-        .wait_next_n(|_| { false }, Some(Duration::ZERO))
-        .is_err_and(|e| { e.errno == libc::ETIMEDOUT }));
     // Succeed to close socket.
     let qt_close: QToken = libos.async_close(sockqd)?;
 
     // Poll once to ensure the async_close() coroutine runs and finishes the close.
-    match libos.wait(qt_close, Some(Duration::ZERO)) {
+    match libos.wait(qt_close, None) {
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_CLOSE && qr.qr_ret == 0 => {},
         Ok(_) => anyhow::bail!("wait() should succeed with async_close()"),
         Err(_) => anyhow::bail!("wait() should succeed with async_close()"),
     }
 
     // Poll again to check that the accept() co-routine completed with an error and was properly canceled.
-    match libos.wait(qt, Some(Duration::ZERO)) {
+    match libos.wait(qt, None) {
         Ok(qr) if check_for_network_error(&qr) => Ok(()),
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!(
             "wait() should succeed with a specified error on accept() after close(), instead returned this unknown \
@@ -164,22 +152,18 @@ fn wait_after_async_close_connecting_socket(libos: &mut LibOS, remote: &SocketAd
     let sockqd: QDesc = libos.socket(AF_INET, SOCK_STREAM, 0)?;
     let qt: QToken = libos.connect(sockqd, *remote)?;
 
-    // Poll the scheduler once to ensure that the connect() co-routine runs. No coroutines should have completed.
-    ensure!(libos
-        .wait_next_n(|_| { false }, Some(Duration::ZERO))
-        .is_err_and(|e| { e.errno == libc::ETIMEDOUT }));
     // Succeed to close socket.
     let qt_close: QToken = libos.async_close(sockqd)?;
 
     // Poll once to ensure the async_close() coroutine runs and finishes the close.
-    match libos.wait(qt_close, Some(Duration::ZERO)) {
+    match libos.wait(qt_close, None) {
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_CLOSE && qr.qr_ret == 0 => {},
         Ok(_) => anyhow::bail!("wait() should succeed with async_close()"),
         Err(_) => anyhow::bail!("wait() should succeed"),
     }
 
     // Poll again to check that the connect() co-routine completed with an error, either canceled or refused.
-    match libos.wait(qt, Some(Duration::ZERO)) {
+    match libos.wait(qt, None) {
         Ok(qr) if check_for_network_error(&qr) => Ok(()),
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!(
             "wait() should succeed with a specified error on connect() after async_close(), instead returned this \
@@ -198,7 +182,7 @@ fn wait_after_async_close_connecting_socket(libos: &mut LibOS, remote: &SocketAd
 // Attempt to wait on an invalid queue token.
 fn wait_on_invalid_queue_token_returns_einval(libos: &mut LibOS) -> Result<()> {
     // Wait on an invalid queue token made from u64 MAX value.
-    match libos.wait(QToken::from(u64::MAX), Some(Duration::ZERO)) {
+    match libos.wait(QToken::from(u64::MAX), None) {
         Ok(_) => anyhow::bail!("wait() should not succeed on invalid token"),
         // If we are using direct mapping, this will time out because we do not have a data structure to track valid and
         // invalid qtokens. Instead, we will never find a completed qtoken.
@@ -210,7 +194,7 @@ fn wait_on_invalid_queue_token_returns_einval(libos: &mut LibOS) -> Result<()> {
     }
 
     // Wait on an invalid queue token made from 0 value.
-    match libos.wait(QToken::from(0), Some(Duration::ZERO)) {
+    match libos.wait(QToken::from(0), None) {
         Ok(_) => anyhow::bail!("wait() should not succeed on invalid token"),
         // If we are using direct mapping, this will time out because we do not have a data structure to track valid and
         // invalid qtokens. Instead, we will never find a completed qtoken.
@@ -232,11 +216,6 @@ fn wait_for_accept_after_issuing_async_close(libos: &mut LibOS, local: &SocketAd
     libos.listen(sockqd, 16)?;
     let qt: QToken = libos.accept(sockqd)?;
 
-    // Poll the scheduler once to ensure that the accept() co-routine runs. No coroutines should have completed.
-    ensure!(libos
-        .wait_next_n(|_| { false }, Some(Duration::ZERO))
-        .is_err_and(|e| { e.errno == libc::ETIMEDOUT }));
-
     // Close the socket.
     let qt_close: QToken = libos.async_close(sockqd)?;
 
@@ -248,7 +227,7 @@ fn wait_for_accept_after_issuing_async_close(libos: &mut LibOS, local: &SocketAd
     }
 
     // Wait again on accept() and ensure it fails or gets cancelled.
-    match libos.wait(qt, Some(Duration::ZERO)) {
+    match libos.wait(qt, None) {
         Ok(qr) if check_for_network_error(&qr) => Ok(()),
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!(
             "wait() should succeed with a specified error on accept() after async_close(), instead returned this \
@@ -268,16 +247,13 @@ fn wait_for_accept_after_issuing_async_close(libos: &mut LibOS, local: &SocketAd
 fn wait_for_connect_after_issuing_async_close(libos: &mut LibOS, remote: &SocketAddr) -> Result<()> {
     // Create a connecting socket.
     let sockqd: QDesc = libos.socket(AF_INET, SOCK_STREAM, 0)?;
+
     let qt: QToken = libos.connect(sockqd, *remote)?;
 
-    // Poll the scheduler once to ensure that the connect() co-routine runs. No coroutines should have completed.
-    ensure!(libos
-        .wait_next_n(|_| { false }, Some(Duration::ZERO))
-        .is_err_and(|e| { e.errno == libc::ETIMEDOUT }));
     let qt_close: QToken = libos.async_close(sockqd)?;
 
     // Wait again on connect() and ensure it fails or gets cancelled.
-    match libos.wait(qt, Some(Duration::ZERO)) {
+    match libos.wait(qt, None) {
         Ok(qr) if check_for_network_error(&qr) => {},
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!(
             "wait() should succeed with a specified error on connect() after async(), instead returned this \
@@ -293,7 +269,7 @@ fn wait_for_connect_after_issuing_async_close(libos: &mut LibOS, remote: &Socket
     }
 
     // Poll once to ensure the async_close() coroutine runs and finishes the close.
-    match libos.wait(qt_close, Some(Duration::ZERO)) {
+    match libos.wait(qt_close, None) {
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_CLOSE && qr.qr_ret == 0 => Ok(()),
         Ok(_) => anyhow::bail!("wait() should succeed with async_close()"),
         Err(e) => anyhow::bail!("wait() should succeed. {:?}", e),

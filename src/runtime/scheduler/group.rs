@@ -17,7 +17,7 @@ use crate::{
     runtime::scheduler::{
         page::{WakerPageRef, WakerRef},
         waker64::{WAKER_BIT_LENGTH, WAKER_BIT_LENGTH_SHIFT},
-        SchedulerId, Task,
+        InsertResult, Task,
     },
 };
 use ::bit_iter::BitIter;
@@ -74,7 +74,7 @@ impl TaskGroup {
     }
 
     /// Insert a new task into our scheduler returning a handle corresponding to it.
-    pub fn insert(&mut self, task: Box<dyn Task>) -> Option<SchedulerId> {
+    pub fn insert(&mut self, task: Box<dyn Task>) -> Option<InsertResult> {
         let task_name: &'static str = task.get_name();
         // The pin slab index can be reverse-computed in a page index and an offset within the page.
         let pin_slab_index: usize = self.tasks.insert(task)?;
@@ -89,7 +89,12 @@ impl TaskGroup {
         waker_page_ref.initialize(waker_page_offset);
 
         trace!("insert(): name={:?}, pin_slab_index={:?}", task_name, pin_slab_index);
-        Some(pin_slab_index.into())
+
+        // Poll new task.
+        match self.poll_runnable_task(pin_slab_index) {
+            Some(task) => Some(InsertResult::Completed(task)),
+            None => Some(InsertResult::Inserted(pin_slab_index.into())),
+        }
     }
 
     pub fn get_mut_task(&mut self, pin_slab_index: usize) -> Option<Pin<&mut Box<dyn Task>>> {

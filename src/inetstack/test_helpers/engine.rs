@@ -66,10 +66,7 @@ impl SharedEngine {
         for _ in 0..MAX_LOOP_ITERATIONS {
             // Run all foreground tasks until they are done and then run the background tasks once.
             // This function should either time out or complete a task (which will be stored for later).
-            match self.get_runtime().wait_any(&[], Duration::ZERO) {
-                Ok(_) => unreachable!("Should not have completed a task without qtokens passed in"),
-                Err(e) => assert_eq!(e.errno, libc::ETIMEDOUT),
-            };
+            self.run_scheduler();
             match self.layer1_endpoint.pop_all_frames() {
                 frames if frames.len() >= number_of_frames => return frames,
                 _ => continue,
@@ -85,6 +82,7 @@ impl SharedEngine {
     pub fn push_frame(&mut self, bytes: DemiBuffer) {
         // We no longer do processing in this function, so we will not know if the packet is dropped or not.
         self.layer1_endpoint.push_frame(bytes);
+        self.run_scheduler();
     }
 
     pub async fn ipv4_ping(&mut self, dest_ipv4_addr: Ipv4Addr, timeout: Option<Duration>) -> Result<Duration, Fail> {
@@ -174,6 +172,14 @@ impl SharedEngine {
 
     pub fn get_transport(&self) -> SharedInetStack {
         self.libos.get_transport().clone()
+    }
+
+    // Just poll the scheduler to process some packets.
+    fn run_scheduler(&mut self) {
+        match self.get_runtime().wait_any(&[], Duration::ZERO) {
+            Ok(_) => unreachable!("Should not have completed a task without qtokens passed in"),
+            Err(e) => assert_eq!(e.errno, libc::ETIMEDOUT),
+        };
     }
 }
 

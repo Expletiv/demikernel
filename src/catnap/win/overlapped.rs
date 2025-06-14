@@ -478,9 +478,6 @@ mod tests {
         let server_task: QToken = runtime
             .insert_nonpolling_coroutine("ioc_server", Box::pin(server))
             .unwrap();
-        ensure!(runtime
-            .wait(server_task, Duration::ZERO)
-            .is_err_and(|e| e.errno == libc::ETIMEDOUT));
         post_completion(&iocp, overlapped.as_mut().marshal(), COMPLETION_KEY)?;
 
         iocp.process_events()?;
@@ -698,19 +695,14 @@ mod tests {
             .insert_nonpolling_coroutine("ioc_server", Box::pin(server))
             .unwrap();
 
-        ensure!(
-            server_state_view.load(Ordering::Relaxed) < 1,
-            "server execution should not start yet"
+        ensure_eq!(
+            server_state_view.load(Ordering::Relaxed),
+            1,
+            "server execution should have started"
         );
 
         let iocp_ref: &mut IoCompletionPort<()> = unsafe { &mut *iocp.get() };
         iocp_ref.process_events()?;
-        ensure!(
-            runtime
-                .wait(server_task, Duration::ZERO)
-                .is_err_and(|e| e.errno == libc::ETIMEDOUT),
-            "server should not be done"
-        );
 
         // Poll the runtime again, which
         let result: OperationResult = loop {

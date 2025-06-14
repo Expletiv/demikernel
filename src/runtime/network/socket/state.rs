@@ -5,11 +5,9 @@
 // Imports
 //======================================================================================================================
 
-use crate::{
-    collections::async_value::SharedAsyncValue,
-    runtime::{fail::Fail, network::socket::operation::SocketOp},
-};
+use crate::{collections::async_value::SharedAsyncValue, runtime::fail::Fail};
 use ::socket2::Type;
+use ::std::net::SocketAddr;
 
 //======================================================================================================================
 // Structures
@@ -18,13 +16,21 @@ use ::socket2::Type;
 #[derive(Copy, Clone, Debug, PartialEq)]
 enum SocketState {
     Unbound,
-    Bound,
+    Bound(SocketAddr),
     /// Bound to a local address and is able to accept incoming connections.
-    PassiveListening,
+    PassiveListening {
+        local: SocketAddr,
+    },
     /// Connecting to a remote address.
-    ActiveConnecting,
+    ActiveConnecting {
+        local: Option<SocketAddr>,
+        remote: SocketAddr,
+    },
     /// Connected to a remote address.
-    ActiveEstablished,
+    ActiveEstablished {
+        local: Option<SocketAddr>,
+        remote: SocketAddr,
+    },
     Closing,
     Closed,
 }
@@ -33,7 +39,6 @@ enum SocketState {
 pub struct SocketStateMachine {
     typ: Type,
     current: SharedAsyncValue<SocketState>,
-    next: Option<SocketState>,
 }
 
 //======================================================================================================================
@@ -46,16 +51,49 @@ impl SocketStateMachine {
         Self {
             typ,
             current: SharedAsyncValue::new(SocketState::Unbound),
-            next: None,
         }
     }
 
-    pub fn new_established() -> Self {
+    pub fn new_established(remote: SocketAddr) -> Self {
         Self {
             typ: Type::STREAM,
-            current: SharedAsyncValue::new(SocketState::ActiveEstablished),
-            next: None,
+            current: SharedAsyncValue::new(SocketState::ActiveEstablished { local: None, remote }),
         }
+    }
+
+    pub fn may_bind(&self) -> Result<(), Fail> {
+        match self.current.get() {
+            SocketState::Unbound => Ok(()),
+            SocketState::Closing | SocketState::Closed => Err(fail("socket is closing", libc::EBADF)),
+            _ => Err(fail("socket is already bound", libc::EINVAL)),
+        }
+    }
+
+    pub fn bind(&mut self, local: SocketAddr) {
+        self.current.set(SocketState::Bound(local))
+    }
+
+    pub fn may_listen(&self) -> Result<(), Fail> {
+        match self.current.get() {
+            SocketState::Unbound => Err(fail("socket is not bound", libc::EDESTADDRREQ)),
+            SocketState::Bound(_) => Ok(()),
+            SocketState::PassiveListening { local: _ } => Err(fail("socket is already listening", libc::EADDRINUSE)),
+            SocketState::ActiveConnecting { local: _, remote: _ } => {
+                Err(fail("socket is already connecting", libc::EADDRINUSE))
+            },
+            SocketState::ActiveEstablished { local: _, remote: _ } => {
+                Err(fail("socket is already connected", libc::EISCONN))
+            },
+            _ => Err(fail("socket is closing", libc::EBADF)),
+        }
+    }
+
+    pub fn listen(&mut self) {
+        let new_state: SocketState = match self.current.get() {
+            SocketState::Bound(local) => SocketState::PassiveListening { local },
+            _ => return,
+        };
+        self.current.set(new_state)
     }
 
     pub fn may_accept(&self) -> Result<(), Fail> {
@@ -79,22 +117,51 @@ impl SocketStateMachine {
     }
 
     pub fn may_connect(&self) -> Result<(), Fail> {
-        self.ensure_not_closing()?;
-        self.ensure_not_closed()?;
-        Ok(())
+        match self.current.get() {
+            SocketState::Unbound | SocketState::Bound(_) => Ok(()),
+            SocketState::ActiveConnecting { local: _, remote: _ } => {
+                Err(fail("socket already is already connecting", libc::EINPROGRESS))
+            },
+            SocketState::PassiveListening { local: _ } => Err(fail("socket is already listening", libc::EOPNOTSUPP)),
+            SocketState::ActiveEstablished { local: _, remote: _ } => {
+                Err(fail("socket is already connected", libc::EISCONN))
+            },
+            _ => Err(fail("socket is closing", libc::EBADF)),
+        }
     }
 
-    pub async fn while_may_connect(&mut self) -> Fail {
-        loop {
-            match self.may_connect() {
-                Ok(()) => {
-                    // Check state again if it changes.
-                    _ = self.current.clone().wait_for_change(None).await;
-                    continue;
-                },
-                Err(e) => return e,
-            }
+    pub fn connecting(&mut self, remote: SocketAddr) {
+        let local: Option<SocketAddr> = match self.current.get() {
+            SocketState::Bound(local) => Some(local),
+            _ => None,
+        };
+        self.current.set(SocketState::ActiveConnecting { local, remote })
+    }
+
+    pub fn connected(&mut self, remote: SocketAddr) {
+        let local: Option<SocketAddr> = match self.current.get() {
+            SocketState::Bound(local) => Some(local),
+            SocketState::ActiveConnecting { local, remote: _ } => local,
+            _ => None,
+        };
+
+        self.current.set(SocketState::ActiveEstablished { local, remote });
+    }
+
+    pub async fn while_open(&mut self) -> Fail {
+        while self.ensure_not_closing().is_ok() && self.ensure_not_closed().is_ok() {
+            // Check state again if it changes.
+            _ = self.current.clone().wait_for_change(None).await;
         }
+        Fail::new(libc::EBADF, "socket is closing")
+    }
+
+    pub async fn while_closing(&mut self) -> Fail {
+        while self.ensure_not_closed().is_ok() {
+            // Check state again if it changes.
+            _ = self.current.clone().wait_for_change(None).await;
+        }
+        Fail::new(libc::EBADF, "socket is closed")
     }
 
     pub fn may_push(&self) -> Result<(), Fail> {
@@ -108,19 +175,6 @@ impl SocketStateMachine {
         // NOTE: no need to ensure other states, because this is checked on the prepare operation.
 
         Ok(())
-    }
-
-    pub async fn while_may_push(&mut self) -> Fail {
-        loop {
-            match self.may_push() {
-                Ok(()) => {
-                    // Check state again if it changes.
-                    _ = self.current.clone().wait_for_change(None).await;
-                    continue;
-                },
-                Err(e) => return e,
-            }
-        }
     }
 
     pub fn may_pop(&self) -> Result<(), Fail> {
@@ -138,197 +192,68 @@ impl SocketStateMachine {
         Ok(())
     }
 
-    pub async fn while_may_pop(&mut self) -> Fail {
-        loop {
-            match self.may_pop() {
-                Ok(()) => {
-                    // Check state again if it changes.
-                    _ = self.current.clone().wait_for_change(None).await;
-                    continue;
-                },
-                Err(e) => return e,
-            }
-        }
+    pub fn closing(&mut self) {
+        self.current.set(SocketState::Closing)
     }
 
-    pub fn commit(&mut self) {
-        let current: SocketState = self.current.get();
-        self.current.set(self.next.unwrap_or(current));
-        self.next = None;
-    }
-
-    pub fn abort(&mut self) {
-        self.next = None;
-    }
-
-    pub fn prepare(&mut self, op: SocketOp) -> Result<(), Fail> {
-        let next: SocketState = self.get_next_state(op)?;
-
-        // Already prepared and not committed or aborted yet.
-        if let Some(pending) = self.next {
-            if next != SocketState::Closing && pending != next {
-                return Err(fail(op, "socket is busy", libc::EBUSY));
-            }
-        }
-
-        self.next = Some(next);
-        Ok(())
-    }
-
-    fn get_next_state(&self, op: SocketOp) -> Result<SocketState, Fail> {
-        let next_state: Result<SocketState, Fail> = match self.current.get() {
-            SocketState::Unbound => self.unbound_state(op),
-            SocketState::Bound => self.bound_state(op),
-            SocketState::PassiveListening => self.listening_state(op),
-            SocketState::ActiveConnecting => self.connecting_state(op),
-            SocketState::ActiveEstablished => self.established_state(op),
-            SocketState::Closing => self.closing_state(op),
-            SocketState::Closed => self.closed_state(op),
-        };
-        match next_state {
-            Ok(state) => {
-                if state != self.current.get() && self.next != Some(state) {
-                    debug!("get_next_state(): current={:?}, transition={:?}", self.current, op);
-                }
-                Ok(state)
-            },
-            Err(e) => {
-                warn!(
-                    "not valid transition: current={:?}, transition={:?}, error={:?}",
-                    self.current, op, e
-                );
-                Err(e)
-            },
-        }
-    }
-
-    /// Attempts to transition from a not bound state.
-    fn unbound_state(&self, op: SocketOp) -> Result<SocketState, Fail> {
-        match op {
-            SocketOp::Bind => Ok(SocketState::Bound),
-            SocketOp::Listen => Err(fail(op, "socket is not bound", libc::EDESTADDRREQ)),
-            SocketOp::Connect => Ok(SocketState::ActiveConnecting),
-            // Should this be possible without going through the Connecting state?
-            SocketOp::Established => Ok(SocketState::ActiveEstablished),
-            SocketOp::Close => Ok(SocketState::Closing),
-            SocketOp::Closed => Err(fail(op, "socket is busy", libc::EBUSY)),
-        }
-    }
-
-    /// Attempts to transition from bound state.
-    fn bound_state(&self, op: SocketOp) -> Result<SocketState, Fail> {
-        match op {
-            SocketOp::Bind => Err(fail(op, "socket is already bound", libc::EINVAL)),
-            SocketOp::Listen => Ok(SocketState::PassiveListening),
-            SocketOp::Connect => Ok(SocketState::ActiveConnecting),
-            SocketOp::Established => Ok(SocketState::ActiveConnecting),
-            SocketOp::Close => Ok(SocketState::Closing),
-            SocketOp::Closed => Err(fail(op, "socket is busy", libc::EBUSY)),
-        }
-    }
-
-    /// Attempts to transition from listening state.
-    fn listening_state(&self, op: SocketOp) -> Result<SocketState, Fail> {
-        match op {
-            SocketOp::Bind | SocketOp::Established => Err(fail(op, "socket is already listening", libc::EINVAL)),
-            SocketOp::Listen => Err(fail(op, "socket is already listening", libc::EADDRINUSE)),
-            SocketOp::Connect => Err(fail(op, "socket is already listening", libc::EOPNOTSUPP)),
-            SocketOp::Close => Ok(SocketState::Closing),
-            SocketOp::Closed => Err(fail(op, "socket is busy", libc::EBUSY)),
-        }
-    }
-
-    /// Attempts to transition from connecting state.
-    fn connecting_state(&self, op: SocketOp) -> Result<SocketState, Fail> {
-        match op {
-            SocketOp::Bind => Err(fail(op, "socket is already connecting", libc::EINVAL)),
-            SocketOp::Listen => Err(fail(op, "socket is already connecting", libc::EADDRINUSE)),
-            SocketOp::Connect => Err(fail(op, "socket already is already connecting", libc::EINPROGRESS)),
-            SocketOp::Established => Ok(SocketState::ActiveEstablished),
-            SocketOp::Close => Ok(SocketState::Closing),
-            // We may enter the closed state from other states because either the state machine was incorrectly rolled
-            // back or the close cased another operation to fail.
-            // FIXME: https://github.com/microsoft/demikernel/issues/1035
-            SocketOp::Closed => Ok(SocketState::Closed),
-        }
-    }
-
-    /// Attempts to transition from connected state.
-    fn established_state(&self, op: SocketOp) -> Result<SocketState, Fail> {
-        match op {
-            SocketOp::Bind | SocketOp::Listen | SocketOp::Connect | SocketOp::Established => {
-                Err(fail(op, "socket is already connected", libc::EISCONN))
-            },
-            SocketOp::Close => Ok(SocketState::Closing),
-            SocketOp::Closed => Ok(SocketState::Closed),
-        }
-    }
-
-    /// Attempts to transition from closing state.
-    fn closing_state(&self, op: SocketOp) -> Result<SocketState, Fail> {
-        match op {
-            SocketOp::Close => Ok(SocketState::Closing),
-            SocketOp::Closed => Ok(SocketState::Closed),
-            _ => Err(fail(op, "socket is closing", libc::EBADF)),
-        }
-    }
-
-    /// Attempts to transition from closed state.
-    fn closed_state(&self, op: SocketOp) -> Result<SocketState, Fail> {
-        if op == SocketOp::Closed || op == SocketOp::Close {
-            Ok(SocketState::Closed)
-        } else {
-            Err(fail(op, "socket is closed", libc::EBADF))
-        }
+    pub fn closed(&mut self) {
+        self.current.set(SocketState::Closed)
     }
 
     fn ensure_bound(&self) -> Result<(), Fail> {
-        if self.current.get() != SocketState::Bound {
-            let cause: String = String::from("socket is not bound");
-            error!("ensure_bound(): {}", cause);
-            return Err(Fail::new(libc::EDESTADDRREQ, &cause));
+        match self.current.get() {
+            SocketState::Bound(_) => Ok(()),
+            _ => Err(fail("socket is not bound", libc::EDESTADDRREQ)),
         }
-        Ok(())
     }
 
     fn ensure_listening(&self) -> Result<(), Fail> {
-        if self.current.get() != SocketState::PassiveListening {
-            let cause: String = String::from("socket is not listening");
-            error!("ensure_listening(): {}", cause);
-            return Err(Fail::new(libc::EINVAL, &cause));
+        match self.current.get() {
+            SocketState::PassiveListening { local: _ } => Ok(()),
+            _ => Err(fail("socket is not listening", libc::EINVAL)),
         }
-        Ok(())
     }
 
     fn ensure_established(&self) -> Result<(), Fail> {
-        if self.current.get() != SocketState::ActiveEstablished {
-            let cause: String = String::from("socket is not connected");
-            error!("ensure_connected(): {}", cause);
-            return Err(Fail::new(libc::ENOTCONN, &cause));
+        match self.current.get() {
+            SocketState::ActiveEstablished { local: _, remote: _ } => Ok(()),
+            _ => Err(fail("socket is not connected", libc::ENOTCONN)),
         }
-        Ok(())
     }
 
     pub fn ensure_not_closing(&self) -> Result<(), Fail> {
-        if self.current.get() == SocketState::Closing {
-            let cause: String = String::from("socket is closing");
-            error!("ensure_not_closing(): {}", cause);
-            return Err(Fail::new(libc::EBADF, &cause));
+        match self.current.get() {
+            SocketState::Closing => Err(fail("socket is closing", libc::EBADF)),
+            _ => Ok(()),
         }
-        Ok(())
     }
 
     fn ensure_not_closed(&self) -> Result<(), Fail> {
-        if self.current.get() == SocketState::Closed {
-            let cause: String = String::from("socket is closed");
-            error!("ensure_not_closed(): {}", cause);
-            return Err(Fail::new(libc::EBADF, &cause));
+        match self.current.get() {
+            SocketState::Closed => Err(fail("socket is closed", libc::EBADF)),
+            _ => Ok(()),
         }
-        Ok(())
     }
 
     fn get_state(&self) -> SocketState {
         self.current.get()
+    }
+
+    pub fn local(&self) -> Option<SocketAddr> {
+        match self.current.get() {
+            SocketState::Bound(local) | SocketState::PassiveListening { local } => Some(local),
+            SocketState::ActiveEstablished { local, remote: _ }
+            | SocketState::ActiveConnecting { local, remote: _ } => local,
+            _ => None,
+        }
+    }
+
+    pub fn remote(&self) -> Option<SocketAddr> {
+        match self.current.get() {
+            SocketState::ActiveConnecting { local: _, remote }
+            | SocketState::ActiveEstablished { local: _, remote } => Some(remote),
+            _ => None,
+        }
     }
 }
 
@@ -350,7 +275,7 @@ impl PartialEq for SocketStateMachine {
 // Standalone Functions
 //======================================================================================================================
 
-fn fail(op: SocketOp, cause: &str, errno: i32) -> Fail {
-    error!("{:?}(): {}", op, cause);
+fn fail(cause: &str, errno: i32) -> Fail {
+    error!("{}", cause);
     Fail::new(errno, cause)
 }
