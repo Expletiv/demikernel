@@ -265,10 +265,6 @@ impl PartialEq for SocketStateMachine {
     fn eq(&self, other: &Self) -> bool {
         self.get_state() == other.get_state()
     }
-
-    fn ne(&self, other: &Self) -> bool {
-        self.get_state() != other.get_state()
-    }
 }
 
 //======================================================================================================================
