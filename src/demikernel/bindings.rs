@@ -48,14 +48,14 @@ pub extern "C" fn demi_init(args: *const demi_args_t) -> c_int {
         args.log_callback
     };
 
-    if log_callback.is_none() {
-        logging::initialize();
-    } else {
+    if let Some(log_callback) = log_callback {
         logging::custom_initialize(move || {
             Logger::try_with_env()
                 .unwrap()
-                .log_to_writer(Box::new(CallbackLogWriter::new(log_callback.unwrap())))
+                .log_to_writer(Box::new(CallbackLogWriter::new(log_callback)))
         });
+    } else {
+        logging::initialize();
     }
 
     trace!("demi_init()");
