@@ -64,7 +64,7 @@ macro_rules! ensure_eq {
         }
     });
     ($left:expr, $right:expr,) => ({
-        crate::ensure_eq!($left, $right)
+        $crate::ensure_eq!($left, $right)
     });
     ($left:expr, $right:expr, $($arg:tt)+) => ({
         match (&($left), &($right)) {
@@ -90,7 +90,7 @@ macro_rules! ensure_neq {
         }
     });
     ($left:expr, $right:expr,) => ({
-        crate::ensure_neq!($left, $right)
+        $crate::ensure_neq!($left, $right)
     });
     ($left:expr, $right:expr, $($arg:tt)+) => ({
         match (&($left), &($right)) {
