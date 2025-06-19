@@ -459,6 +459,8 @@ impl DemiBuffer {
     }
 
     /// Creates a `DemiBuffer` from a raw pointer.
+    /// # Safety
+    /// This function assumes that the provided pointer a valid `MetaData` structure.
     pub unsafe fn from_raw(token: NonNull<u8>) -> Self {
         DemiBuffer {
             tagged_ptr: token.cast::<MetaData>(),

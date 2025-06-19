@@ -36,6 +36,7 @@ struct Record {
 /// - TODO: Deregister waiters here when the receiver goes away.
 /// - TODO: Implement eviction.
 /// - TODO: Implement remove.
+///
 /// Cache for IPv4 Addresses. If set to None, then ARP is disabled.
 pub struct ArpCache(Option<HashTtlCache<Ipv4Addr, Record>>);
 
