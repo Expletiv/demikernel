@@ -74,17 +74,17 @@ impl SharedUdpSocket {
         let remote: SocketAddrV4 = if let Some(remote) = remote {
             unwrap_socketaddr(remote)?
         } else {
-            let cause: String = String::from("udp socket requires a remote address");
-            error!("pushto(): {}", &cause);
-            return Err(Fail::new(libc::ENOTSUP, &cause));
+            let cause: &'static str = "udp socket requires a remote address";
+            error!("pushto(): {}", cause);
+            return Err(Fail::new(libc::ENOTSUP, cause));
         };
         // Check that the socket is bound.
         let port: u16 = if let Some(addr) = self.local() {
             addr.port()
         } else {
-            let cause: String = String::from("queue is not bound");
-            error!("pushto(): {}", &cause);
-            return Err(Fail::new(libc::ENOTSUP, &cause));
+            let cause: &'static str = "queue is not bound";
+            error!("pushto(): {}", cause);
+            return Err(Fail::new(libc::ENOTSUP, cause));
         };
         let udp_header: UdpHeader = UdpHeader::new(port, remote.port());
         debug!("L4 OUTGOING  {:?}", udp_header);

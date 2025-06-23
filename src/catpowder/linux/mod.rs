@@ -99,7 +99,7 @@ impl PhysicalLayer for LinuxRuntime {
             Err(e) => {
                 let cause = "send failed";
                 warn!("transmit(): {} {:?}", cause, e);
-                Err(Fail::new(libc::EIO, &cause))
+                Err(Fail::new(libc::EIO, cause))
             },
         }
     }

@@ -350,13 +350,13 @@ impl Simulation {
             Some(local_fd) => match self.local_qd {
                 Some((fd, qd)) if fd == local_fd => qd,
                 _ => {
-                    let cause: String = "local queue descriptor mismatch".to_string();
+                    let cause: &'static str = "local queue descriptor mismatch";
                     info!("run_bind_syscall(): {:?}", cause);
                     anyhow::bail!(cause);
                 },
             },
             None => {
-                let cause: String = "local queue descriptor must have been previously assigned".to_string();
+                let cause: &'static str = "local queue descriptor must have been previously assigned";
                 info!("run_bind_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -376,7 +376,7 @@ impl Simulation {
         let backlog: usize = match args.backlog {
             Some(backlog) => backlog,
             None => {
-                let cause: String = "backlog length must be informed".to_string();
+                let cause: &'static str = "backlog length must be informed";
                 info!("run_listen_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -386,13 +386,13 @@ impl Simulation {
             Some(local_fd) => match self.local_qd {
                 Some((fd, qd)) if fd == local_fd => qd,
                 _ => {
-                    let cause: String = "local queue descriptor mismatch".to_string();
+                    let cause: &'static str = "local queue descriptor mismatch";
                     info!("run_listen_syscall(): {:?}", cause);
                     anyhow::bail!(cause);
                 },
             },
             None => {
-                let cause: String = "local queue descriptor must have been previously assigned".to_string();
+                let cause: &'static str = "local queue descriptor must have been previously assigned";
                 info!("run_listen_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -413,13 +413,13 @@ impl Simulation {
             Some(local_fd) => match self.local_qd {
                 Some((fd, qd)) if fd == local_fd => qd,
                 _ => {
-                    let cause: String = "local queue descriptor mismatch".to_string();
+                    let cause: &'static str = "local queue descriptor mismatch";
                     info!("run_accept_syscall(): {:?}", cause);
                     anyhow::bail!(cause);
                 },
             },
             None => {
-                let cause: String = "local queue descriptor must have been previously assigned".to_string();
+                let cause: &'static str = "local queue descriptor must have been previously assigned";
                 info!("run_accept_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -443,7 +443,7 @@ impl Simulation {
         let local_qd: QDesc = match self.local_qd {
             Some((_, qd)) => qd,
             None => {
-                let cause: String = "local queue descriptor must have been previously assigned".to_string();
+                let cause: &'static str = "local queue descriptor must have been previously assigned";
                 info!("run_connect_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -479,7 +479,7 @@ impl Simulation {
         let buf_len: usize = match args.len {
             Some(len) => len.try_into()?,
             None => {
-                let cause: String = "buffer length must be informed".to_string();
+                let cause: &'static str = "buffer length must be informed";
                 info!("run_push_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -560,7 +560,7 @@ impl Simulation {
                 },
             },
             _ => {
-                let cause: String = "protocol must have been previously assigned".to_string();
+                let cause: &'static str = "protocol must have been previously assigned";
                 info!("run_pop_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -608,7 +608,7 @@ impl Simulation {
         let buf_len: usize = match args.len {
             Some(len) => len.try_into()?,
             None => {
-                let cause: String = "buffer length must be informed".to_string();
+                let cause: &'static str = "buffer length must be informed";
                 info!("run_pushto_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },

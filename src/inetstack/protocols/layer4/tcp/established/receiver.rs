@@ -398,9 +398,9 @@ impl Receiver {
                         trace!("check_segment_in_window(): send ack on duplicate segment");
                         Sender::send_ack(cb, layer3_endpoint);
                     }
-                    let cause: String = String::from("duplicate packet");
+                    let cause: &'static str = "duplicate packet";
                     error!("check_segment_in_window(): {}", cause);
-                    return Err(Fail::new(libc::EBADMSG, &cause));
+                    return Err(Fail::new(libc::EBADMSG, cause));
                 } else {
                     // Some of this segment's data is new.  Cut the duplicate data off of the front.
                     // If there is a SYN at the start of this segment, remove it too.
@@ -425,9 +425,9 @@ impl Receiver {
                         trace!("check_segment_in_window(): send ack on out-of-window segment");
                         Sender::send_ack(cb, layer3_endpoint);
                     }
-                    let cause: String = String::from("packet outside of receive window");
+                    let cause: &'static str = "packet outside of receive window";
                     error!("check_segment_in_window(): {}", cause);
-                    return Err(Fail::new(libc::EBADMSG, &cause));
+                    return Err(Fail::new(libc::EBADMSG, cause));
                 }
 
                 // At least the beginning of this segment is in the window.  We'll check the end below.
@@ -496,14 +496,14 @@ impl Receiver {
             // TODO: RFC 5961 "Blind Reset Attack Using the SYN Bit" prevention would have us always ACK and drop here.
 
             // Receiving a SYN here is an error.
-            let cause: String = String::from("Received in-window SYN on established connection.");
+            let cause: &'static str = "Received in-window SYN on established connection.";
             error!("{}", cause);
             // TODO: Send Reset.
             // TODO: Return all outstanding Receive and Send requests with "reset" responses.
             // TODO: Flush all segment queues.
 
             // TODO: Start the close coroutine
-            return Err(Fail::new(libc::EBADMSG, &cause));
+            return Err(Fail::new(libc::EBADMSG, cause));
         }
         Ok(())
     }
@@ -512,9 +512,9 @@ impl Receiver {
     fn check_and_process_ack(cb: &mut ControlBlock, header: &TcpHeader, now: Instant) -> Result<(), Fail> {
         if !header.ack {
             // All segments on established connections should be ACKs.  Drop this segment.
-            let cause: String = String::from("Received non-ACK segment on established connection");
+            let cause: &'static str = "Received non-ACK segment on established connection";
             error!("{}", cause);
-            return Err(Fail::new(libc::EBADMSG, &cause));
+            return Err(Fail::new(libc::EBADMSG, cause));
         }
 
         // TODO: RFC 5961 "Blind Data Injection Attack" prevention would have us perform additional ACK validation

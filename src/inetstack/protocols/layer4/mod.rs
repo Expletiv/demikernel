@@ -126,9 +126,9 @@ impl Peer {
         match sd {
             Socket::Tcp(socket) => self.tcp.set_socket_option(socket, option),
             Socket::Udp(_) => {
-                let cause: String = String::from("Socket options are not supported on UDP sockets");
+                let cause: &'static str = "Socket options are not supported on UDP sockets";
                 error!("get_socket_option(): {}", cause);
-                Err(Fail::new(libc::ENOTSUP, &cause))
+                Err(Fail::new(libc::ENOTSUP, cause))
             },
         }
     }
@@ -139,9 +139,9 @@ impl Peer {
         match sd {
             Socket::Tcp(socket) => self.tcp.get_socket_option(socket, option),
             Socket::Udp(_) => {
-                let cause: String = String::from("Socket options are not supported on UDP sockets");
+                let cause: &'static str = "Socket options are not supported on UDP sockets";
                 error!("get_socket_option(): {}", cause);
-                Err(Fail::new(libc::ENOTSUP, &cause))
+                Err(Fail::new(libc::ENOTSUP, cause))
             },
         }
     }
@@ -150,9 +150,9 @@ impl Peer {
         match sd {
             Socket::Tcp(socket) => self.tcp.getpeername(socket),
             Socket::Udp(_) => {
-                let cause: String = String::from("Getting peer address is not supported on UDP sockets");
+                let cause: &'static str = "Getting peer address is not supported on UDP sockets";
                 error!("getpeername(): {}", cause);
-                Err(Fail::new(libc::ENOTSUP, &cause))
+                Err(Fail::new(libc::ENOTSUP, cause))
             },
         }
     }
@@ -219,9 +219,9 @@ impl Peer {
         match sd {
             Socket::Tcp(socket) => self.tcp.listen(socket, backlog),
             _ => {
-                let cause: String = String::from("opperation not supported");
+                let cause: &'static str = "operation not supported";
                 error!("listen(): {}", cause);
-                Err(Fail::new(libc::ENOTSUP, &cause))
+                Err(Fail::new(libc::ENOTSUP, cause))
             },
         }
     }
@@ -250,9 +250,9 @@ impl Peer {
             },
             // This queue descriptor does not concern a TCP socket.
             _ => {
-                let cause: String = String::from("opperation not supported");
+                let cause: &'static str = "operation not supported";
                 error!("accept(): {}", cause);
-                Err(Fail::new(libc::ENOTSUP, &cause))
+                Err(Fail::new(libc::ENOTSUP, cause))
             },
         }
     }

@@ -56,9 +56,9 @@ pub fn sgaalloc<M: DemiMemoryAllocator>(size: usize, mem_alloc: &M) -> Result<de
 
     // We can't allocate a zero-sized buffer.
     if size == 0 {
-        let cause: String = String::from("cannot allocate a zero-sized buffer");
+        let cause: &'static str = "cannot allocate a zero-sized buffer";
         error!("sgaalloc(): {}", cause);
-        return Err(Fail::new(libc::EINVAL, &cause));
+        return Err(Fail::new(libc::EINVAL, cause));
     }
 
     // We can't allocate more than a single buffer.
