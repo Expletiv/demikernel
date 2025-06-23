@@ -298,7 +298,7 @@ impl Simulation {
                         self.protocol = Some(IpProtocol::TCP);
                         Ok(())
                     },
-                    Err(err) if ret as i32 == err.errno => Ok(()),
+                    Err(err) if ret == err.errno => Ok(()),
                     _ => {
                         info!("run_socket_syscall(): ret={:?}", ret);
                         anyhow::bail!("unexpected return for socket syscall");
@@ -321,7 +321,7 @@ impl Simulation {
                         self.protocol = Some(IpProtocol::UDP);
                         Ok(())
                     },
-                    Err(err) if ret as i32 == err.errno => Ok(()),
+                    Err(err) if ret == err.errno => Ok(()),
                     _ => {
                         info!("run_socket_syscall(): ret={:?}", ret);
                         anyhow::bail!("unexpected return for socket syscall");
@@ -364,7 +364,7 @@ impl Simulation {
 
         match self.engine.tcp_bind(local_qd, local_bind_addr) {
             Ok(()) if ret == 0 => Ok(()),
-            Err(err) if ret as i32 == err.errno => Ok(()),
+            Err(err) if ret == err.errno => Ok(()),
             _ => {
                 info!("run_bind_syscall(): ret={:?}", ret);
                 anyhow::bail!("unexpected return for bind syscall");
@@ -400,7 +400,7 @@ impl Simulation {
 
         match self.engine.tcp_listen(local_qd, backlog) {
             Ok(()) if ret == 0 => Ok(()),
-            Err(err) if ret as i32 == err.errno => Ok(()),
+            Err(err) if ret == err.errno => Ok(()),
             _ => {
                 info!("run_listen_syscall(): ret={:?}", ret);
                 anyhow::bail!("unexpected return for listen syscall");
@@ -431,7 +431,7 @@ impl Simulation {
                 self.inflight.push_back(accept_qt);
                 Ok(())
             },
-            Err(err) if ret as i32 == err.errno => Ok(()),
+            Err(err) if ret == err.errno => Ok(()),
             _ => {
                 info!("run_accept_syscall(): ret={:?}", ret);
                 anyhow::bail!("unexpected return for accept syscall");
@@ -467,7 +467,7 @@ impl Simulation {
                 self.inflight.push_back(connect_qt);
                 Ok(())
             },
-            Err(err) if ret as i32 == err.errno => Ok(()),
+            Err(err) if ret == err.errno => Ok(()),
             _ => {
                 info!("run_accept_syscall(): ret={:?}", ret);
                 anyhow::bail!("unexpected return for connect syscall");
@@ -510,7 +510,7 @@ impl Simulation {
                 self.inflight.push_back(push_qt);
                 Ok(())
             },
-            Err(err) if ret as i32 == err.errno => Ok(()),
+            Err(err) if ret == err.errno => Ok(()),
             _ => {
                 info!("run_push_syscall(): ret={:?}", ret);
                 anyhow::bail!("unexpected return for push syscall");
@@ -542,7 +542,7 @@ impl Simulation {
                     self.inflight.push_back(pop_qt);
                     Ok(())
                 },
-                Err(err) if ret as i32 == err.errno => Ok(()),
+                Err(err) if ret == err.errno => Ok(()),
                 _ => {
                     info!("run_pop_syscall(): ret={:?}", ret);
                     anyhow::bail!("unexpected return for pop syscall");
@@ -553,7 +553,7 @@ impl Simulation {
                     self.inflight.push_back(pop_qt);
                     Ok(())
                 },
-                Err(err) if ret as i32 == err.errno => Ok(()),
+                Err(err) if ret == err.errno => Ok(()),
                 _ => {
                     info!("run_pop_syscall(): ret={:?}", ret);
                     anyhow::bail!("unexpected return for pop syscall");
@@ -591,7 +591,7 @@ impl Simulation {
                     info!("close completed as expected (qd={:?})", qd);
                     Ok(())
                 },
-                OperationResult::Failed(e) if e.errno == ret as i32 => {
+                OperationResult::Failed(e) if e.errno == ret => {
                     info!("operation failed as expected (qd={:?}, errno={:?})", qd, e.errno);
                     Ok(())
                 },
@@ -680,7 +680,7 @@ impl Simulation {
                 self.inflight.push_back(close_qt);
                 Ok(())
             },
-            Err(err) if ret as i32 == err.errno => Ok(()),
+            Err(err) if ret == err.errno => Ok(()),
             _ => {
                 error!("run_close_syscall(): ret={:?}", ret);
                 anyhow::bail!("unexpected return for close syscall");
