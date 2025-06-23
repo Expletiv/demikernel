@@ -169,7 +169,7 @@ impl Simulation {
         info!("Local: sockaddr={:?}, macaddr={:?}", local_ipv4, local_mac);
         info!("Remote: sockaddr={:?}, macaddr={:?}", remote_ipv4, remote_mac);
 
-        let lines: Vec<String> = Self::read_input_file(&filename)?;
+        let lines: Vec<String> = Self::read_input_file(filename)?;
         Ok(Simulation {
             protocol: None,
             local_mac: local_mac.clone(),
@@ -207,7 +207,7 @@ impl Simulation {
                 info!("Line: {:?}", line);
             }
 
-            if let Some(event) = network_simulator::run_parser(&line, verbose)? {
+            if let Some(event) = network_simulator::run_parser(line, verbose)? {
                 self.run_event(&event)?;
             }
         }
@@ -772,7 +772,7 @@ impl Simulation {
     }
 
     fn build_tcp_segment(&self, tcp_packet: &TcpPacket) -> DemiBuffer {
-        let tcp_hdr: TcpHeader = self.build_tcp_header(&tcp_packet);
+        let tcp_hdr: TcpHeader = self.build_tcp_header(tcp_packet);
         let mut pkt: DemiBuffer = if tcp_packet.seqnum.win > 0 {
             Self::prepare_dummy_buffer(tcp_packet.seqnum.win as usize, None)
         } else {
@@ -785,10 +785,10 @@ impl Simulation {
     }
 
     fn build_udp_datagram(&self, udp_packet: &UdpPacket) -> DemiBuffer {
-        let udp_hdr: UdpHeader = self.build_udp_header(&udp_packet);
+        let udp_hdr: UdpHeader = self.build_udp_header(udp_packet);
         let mut pkt: DemiBuffer = Self::prepare_dummy_buffer(udp_packet.len as usize, None);
         // This is an incoming packet, so the source is the remote address and the destination is the local address.
-        udp_hdr.serialize_and_attach(&mut pkt, &self.remote_sockaddr.ip(), &self.local_sockaddr.ip(), false);
+        udp_hdr.serialize_and_attach(&mut pkt, self.remote_sockaddr.ip(), self.local_sockaddr.ip(), false);
         self.prepend_ipv4_header(IpProtocol::UDP, &mut pkt);
         self.prepend_ethernet_header(&mut pkt);
         pkt
@@ -805,13 +805,13 @@ impl Simulation {
     }
 
     fn run_incoming_packet(&mut self, tcp_packet: &TcpPacket) -> Result<()> {
-        let buf: DemiBuffer = self.build_tcp_segment(&tcp_packet);
+        let buf: DemiBuffer = self.build_tcp_segment(tcp_packet);
         self.engine.push_frame(buf);
         Ok(())
     }
 
     fn run_incoming_udp_packet(&mut self, udp_packet: &UdpPacket) -> Result<()> {
-        let buf: DemiBuffer = self.build_udp_datagram(&udp_packet);
+        let buf: DemiBuffer = self.build_udp_datagram(udp_packet);
         self.engine.push_frame(buf);
         Ok(())
     }
@@ -915,7 +915,7 @@ impl Simulation {
         let dest_ipv4_addr: Ipv4Addr = ipv4_header.get_dest_addr();
         let tcp_header: TcpHeader = TcpHeader::parse_and_strip(&src_ipv4_addr, &dest_ipv4_addr, pkt, true)?;
         ensure_eq!(tcp_packet.seqnum.win as usize, pkt.len());
-        self.check_tcp_header(&tcp_header, &tcp_packet)?;
+        self.check_tcp_header(&tcp_header, tcp_packet)?;
 
         Ok(())
     }
@@ -932,9 +932,9 @@ impl Simulation {
         self.check_ipv4_header(&ipv4_header, IpProtocol::UDP)?;
 
         let udp_header: UdpHeader =
-            UdpHeader::parse_and_strip(&self.local_sockaddr.ip(), &self.remote_sockaddr.ip(), pkt, true)?;
+            UdpHeader::parse_and_strip(self.local_sockaddr.ip(), self.remote_sockaddr.ip(), pkt, true)?;
         ensure_eq!(udp_packet.len as usize, pkt.len());
-        self.check_udp_header(&udp_header, &udp_packet)?;
+        self.check_udp_header(&udp_header, udp_packet)?;
 
         Ok(())
     }
