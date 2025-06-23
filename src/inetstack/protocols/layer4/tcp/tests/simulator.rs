@@ -300,9 +300,8 @@ impl Simulation {
                     },
                     Err(err) if ret as i32 == err.errno => Ok(()),
                     _ => {
-                        let cause: String = format!("unexpected return for socket syscall");
                         info!("run_socket_syscall(): ret={:?}", ret);
-                        anyhow::bail!(cause);
+                        anyhow::bail!("unexpected return for socket syscall");
                     },
                 }
             },
@@ -324,9 +323,8 @@ impl Simulation {
                     },
                     Err(err) if ret as i32 == err.errno => Ok(()),
                     _ => {
-                        let cause: String = format!("unexpected return for socket syscall");
                         info!("run_socket_syscall(): ret={:?}", ret);
-                        anyhow::bail!(cause);
+                        anyhow::bail!("unexpected return for socket syscall");
                     },
                 }
             },
@@ -352,13 +350,13 @@ impl Simulation {
             Some(local_fd) => match self.local_qd {
                 Some((fd, qd)) if fd == local_fd => qd,
                 _ => {
-                    let cause: String = format!("local queue descriptor mismatch");
+                    let cause: String = "local queue descriptor mismatch".to_string();
                     info!("run_bind_syscall(): {:?}", cause);
                     anyhow::bail!(cause);
                 },
             },
             None => {
-                let cause: String = format!("local queue descriptor must have been previously assigned");
+                let cause: String = "local queue descriptor must have been previously assigned".to_string();
                 info!("run_bind_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -368,9 +366,8 @@ impl Simulation {
             Ok(()) if ret == 0 => Ok(()),
             Err(err) if ret as i32 == err.errno => Ok(()),
             _ => {
-                let cause: String = format!("unexpected return for bind syscall");
                 info!("run_bind_syscall(): ret={:?}", ret);
-                anyhow::bail!(cause);
+                anyhow::bail!("unexpected return for bind syscall");
             },
         }
     }
@@ -379,7 +376,7 @@ impl Simulation {
         let backlog: usize = match args.backlog {
             Some(backlog) => backlog,
             None => {
-                let cause: String = format!("backlog length must be informed");
+                let cause: String = "backlog length must be informed".to_string();
                 info!("run_listen_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -389,13 +386,13 @@ impl Simulation {
             Some(local_fd) => match self.local_qd {
                 Some((fd, qd)) if fd == local_fd => qd,
                 _ => {
-                    let cause: String = format!("local queue descriptor mismatch");
+                    let cause: String = "local queue descriptor mismatch".to_string();
                     info!("run_listen_syscall(): {:?}", cause);
                     anyhow::bail!(cause);
                 },
             },
             None => {
-                let cause: String = format!("local queue descriptor must have been previously assigned");
+                let cause: String = "local queue descriptor must have been previously assigned".to_string();
                 info!("run_listen_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -405,9 +402,8 @@ impl Simulation {
             Ok(()) if ret == 0 => Ok(()),
             Err(err) if ret as i32 == err.errno => Ok(()),
             _ => {
-                let cause: String = format!("unexpected return for listen syscall");
                 info!("run_listen_syscall(): ret={:?}", ret);
-                anyhow::bail!(cause);
+                anyhow::bail!("unexpected return for listen syscall");
             },
         }
     }
@@ -417,13 +413,13 @@ impl Simulation {
             Some(local_fd) => match self.local_qd {
                 Some((fd, qd)) if fd == local_fd => qd,
                 _ => {
-                    let cause: String = format!("local queue descriptor mismatch");
+                    let cause: String = "local queue descriptor mismatch".to_string();
                     info!("run_accept_syscall(): {:?}", cause);
                     anyhow::bail!(cause);
                 },
             },
             None => {
-                let cause: String = format!("local queue descriptor must have been previously assigned");
+                let cause: String = "local queue descriptor must have been previously assigned".to_string();
                 info!("run_accept_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -437,9 +433,8 @@ impl Simulation {
             },
             Err(err) if ret as i32 == err.errno => Ok(()),
             _ => {
-                let cause: String = format!("unexpected return for accept syscall");
                 info!("run_accept_syscall(): ret={:?}", ret);
-                anyhow::bail!(cause);
+                anyhow::bail!("unexpected return for accept syscall");
             },
         }
     }
@@ -448,7 +443,7 @@ impl Simulation {
         let local_qd: QDesc = match self.local_qd {
             Some((_, qd)) => qd,
             None => {
-                let cause: String = format!("local queue descriptor must have been previously assigned");
+                let cause: String = "local queue descriptor must have been previously assigned".to_string();
                 info!("run_connect_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -474,9 +469,8 @@ impl Simulation {
             },
             Err(err) if ret as i32 == err.errno => Ok(()),
             _ => {
-                let cause: String = format!("unexpected return for connect syscall");
                 info!("run_accept_syscall(): ret={:?}", ret);
-                anyhow::bail!(cause);
+                anyhow::bail!("unexpected return for connect syscall");
             },
         }
     }
@@ -485,7 +479,7 @@ impl Simulation {
         let buf_len: usize = match args.len {
             Some(len) => len.try_into()?,
             None => {
-                let cause: String = format!("buffer length must be informed");
+                let cause: String = "buffer length must be informed".to_string();
                 info!("run_push_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -497,17 +491,15 @@ impl Simulation {
             Some(qd) if qd == 500 => match self.local_qd {
                 Some((_, qd)) => qd,
                 None => {
-                    let cause: String = format!("unexpected return for push syscall");
                     info!("run_push_syscall(): ret={:?}", ret);
-                    anyhow::bail!(cause);
+                    anyhow::bail!("unexpected return for push syscall");
                 },
             },
             _ => match self.remote_qd {
                 Some((_, Some(qd))) => qd,
                 _ => {
-                    let cause: String = format!("unexpected return for push syscall");
                     info!("run_push_syscall(): ret={:?}", ret);
-                    anyhow::bail!(cause);
+                    anyhow::bail!("unexpected return for push syscall");
                 },
             },
         };
@@ -520,9 +512,8 @@ impl Simulation {
             },
             Err(err) if ret as i32 == err.errno => Ok(()),
             _ => {
-                let cause: String = format!("unexpected return for push syscall");
                 info!("run_push_syscall(): ret={:?}", ret);
-                anyhow::bail!(cause);
+                anyhow::bail!("unexpected return for push syscall");
             },
         }
     }
@@ -532,17 +523,15 @@ impl Simulation {
             qd if qd == 500 => match self.local_qd {
                 Some((_, qd)) => qd,
                 None => {
-                    let cause: String = format!("unexpected return for pushto syscall");
                     info!("run_pop_syscall(): ret={:?}", ret);
-                    anyhow::bail!(cause);
+                    anyhow::bail!("unexpected return for pushto syscall");
                 },
             },
             _ => match self.remote_qd {
                 Some((_, Some(qd))) => qd,
                 _ => {
-                    let cause: String = format!("unexpected return for pop syscall");
                     info!("run_pop_syscall(): ret={:?}", ret);
-                    anyhow::bail!(cause);
+                    anyhow::bail!("unexpected return for pop syscall");
                 },
             },
         };
@@ -555,9 +544,8 @@ impl Simulation {
                 },
                 Err(err) if ret as i32 == err.errno => Ok(()),
                 _ => {
-                    let cause: String = format!("unexpected return for pop syscall");
                     info!("run_pop_syscall(): ret={:?}", ret);
-                    anyhow::bail!(cause);
+                    anyhow::bail!("unexpected return for pop syscall");
                 },
             },
             Some(IpProtocol::UDP) => match self.engine.udp_pop(remote_qd) {
@@ -567,13 +555,12 @@ impl Simulation {
                 },
                 Err(err) if ret as i32 == err.errno => Ok(()),
                 _ => {
-                    let cause: String = format!("unexpected return for pop syscall");
                     info!("run_pop_syscall(): ret={:?}", ret);
-                    anyhow::bail!(cause);
+                    anyhow::bail!("unexpected return for pop syscall");
                 },
             },
             _ => {
-                let cause: String = format!("protocol must have been previously assigned");
+                let cause: String = "protocol must have been previously assigned".to_string();
                 info!("run_pop_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -621,7 +608,7 @@ impl Simulation {
         let buf_len: usize = match args.len {
             Some(len) => len.try_into()?,
             None => {
-                let cause: String = format!("buffer length must be informed");
+                let cause: String = "buffer length must be informed".to_string();
                 info!("run_pushto_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -644,17 +631,15 @@ impl Simulation {
             Some(qd) if qd == 500 => match self.local_qd {
                 Some((_, qd)) => qd,
                 None => {
-                    let cause: String = format!("unexpected return for pushto syscall");
                     info!("run_pushto_syscall(): ret={:?}", ret);
-                    anyhow::bail!(cause);
+                    anyhow::bail!("unexpected return for pushto syscall");
                 },
             },
             _ => match self.remote_qd {
                 Some((_, Some(qd))) => qd,
                 _ => {
-                    let cause: String = format!("unexpected return for pushto syscall");
                     info!("run_pushto_syscall(): ret={:?}", ret);
-                    anyhow::bail!(cause);
+                    anyhow::bail!("unexpected return for pushto syscall");
                 },
             },
         };
@@ -666,9 +651,8 @@ impl Simulation {
                 Ok(())
             },
             _ => {
-                let cause: String = format!("unexpected return for pushto syscall");
                 info!("run_pushto_syscall(): ret={:?}", ret);
-                anyhow::bail!(cause);
+                anyhow::bail!("unexpected return for pushto syscall");
             },
         }
     }
@@ -678,17 +662,15 @@ impl Simulation {
             qd if qd == 500 => match self.local_qd {
                 Some((_, qd)) => qd,
                 None => {
-                    let cause: String = format!("unexpected return for close syscall");
                     info!("run_close_syscall(): ret={:?}", ret);
-                    anyhow::bail!(cause);
+                    anyhow::bail!("unexpected return for close syscall");
                 },
             },
             _ => match self.remote_qd {
                 Some((_, Some(qd))) => qd,
                 _ => {
-                    let cause: String = format!("unexpected return for close syscall");
                     info!("run_close_syscall(): ret={:?}", ret);
-                    anyhow::bail!(cause);
+                    anyhow::bail!("unexpected return for close syscall");
                 },
             },
         };
@@ -700,9 +682,8 @@ impl Simulation {
             },
             Err(err) if ret as i32 == err.errno => Ok(()),
             _ => {
-                let cause: String = format!("unexpected return for close syscall");
                 error!("run_close_syscall(): ret={:?}", ret);
-                anyhow::bail!(cause);
+                anyhow::bail!("unexpected return for close syscall");
             },
         }
     }
