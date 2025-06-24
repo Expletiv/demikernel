@@ -488,7 +488,7 @@ impl Simulation {
         let syscall_qd: QDesc = match args.qd {
             // 500 in the annotation will represent the local queue descriptor number because they are allocated
             // starting at 500.
-            Some(qd) if qd == 500 => match self.local_qd {
+            Some(500) => match self.local_qd {
                 Some((_, qd)) => qd,
                 None => {
                     info!("run_push_syscall(): ret={:?}", ret);
@@ -520,7 +520,7 @@ impl Simulation {
 
     fn run_pop_syscall(&mut self, args: &PopArgs, ret: i32) -> Result<()> {
         let remote_qd: QDesc = match args.qd {
-            qd if qd == 500 => match self.local_qd {
+            500 => match self.local_qd {
                 Some((_, qd)) => qd,
                 None => {
                     info!("run_pop_syscall(): ret={:?}", ret);
@@ -628,7 +628,7 @@ impl Simulation {
         };
 
         let remote_qd: QDesc = match args.qd {
-            Some(qd) if qd == 500 => match self.local_qd {
+            Some(500) => match self.local_qd {
                 Some((_, qd)) => qd,
                 None => {
                     info!("run_pushto_syscall(): ret={:?}", ret);
@@ -659,7 +659,7 @@ impl Simulation {
 
     fn run_close_syscall(&mut self, args: &CloseArgs, ret: i32) -> Result<()> {
         let qd: QDesc = match args.qd {
-            qd if qd == 500 => match self.local_qd {
+            500 => match self.local_qd {
                 Some((_, qd)) => qd,
                 None => {
                     info!("run_close_syscall(): ret={:?}", ret);
