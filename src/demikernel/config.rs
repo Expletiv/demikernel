@@ -131,7 +131,7 @@ impl Config {
         File::open(config_path).unwrap().read_to_string(&mut config_s).unwrap();
         let config: Vec<Yaml> = YamlLoader::load_from_str(&config_s).unwrap();
         let config_obj: &Yaml = match &config[..] {
-            &[ref c] => c,
+            [c] => c,
             _ => return Err(Fail::new(libc::EINVAL, "Wrong number of config objects")),
         };
 

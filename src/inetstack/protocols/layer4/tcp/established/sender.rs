@@ -589,8 +589,8 @@ impl Sender {
             // if the ACK is for the original or the retransmission).  Remove the transmission timestamp from the entry.
             segment.initial_tx.take();
 
-            // Clone the segment data for retransmission.
-            let data: Option<DemiBuffer> = segment.bytes.as_ref().map(|b| b.clone());
+            // Clone the segment data here for retransmission.
+            let data: Option<DemiBuffer> = segment.bytes.clone();
 
             // TODO: Issue #198 Repacketization - we should send a full MSS (and set the FIN flag if applicable).
 

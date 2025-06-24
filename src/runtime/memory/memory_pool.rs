@@ -201,7 +201,7 @@ impl BufferCursor {
 
         // Safety: the offset from cursor is within the originally allocated span and not larger than isize::MAX.
         let result: &mut [MaybeUninit<u8>] = unsafe { std::slice::from_raw_parts_mut(self.cursor.as_ptr(), bytes) };
-        self.cursor = unsafe { NonNull::new_unchecked(self.cursor.as_ptr().offset(bytes as isize)) };
+        self.cursor = unsafe { NonNull::new_unchecked(self.cursor.as_ptr().add(bytes)) };
         self.len -= bytes;
         result
     }

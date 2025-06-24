@@ -38,3 +38,4 @@ Cargo.lock
 # code coverage
 .coverage
 coverage.xml
+coverage.info
