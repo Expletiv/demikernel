@@ -240,16 +240,16 @@ impl Simulation {
     fn run_syscall(&mut self, syscall: &SyscallEvent) -> Result<()> {
         info!("{:?}: {:?}", self.now, syscall);
         match &syscall.syscall {
-            DemikernelSyscall::Socket(args, ret) => self.run_socket_syscall(args, ret.clone())?,
-            DemikernelSyscall::Bind(args, ret) => self.run_bind_syscall(args, ret.clone())?,
-            DemikernelSyscall::Listen(args, ret) => self.run_listen_syscall(args, ret.clone())?,
-            DemikernelSyscall::Accept(args, fd) => self.run_accept_syscall(args, fd.clone())?,
-            DemikernelSyscall::Connect(args, ret) => self.run_connect_syscall(args, ret.clone())?,
-            DemikernelSyscall::Push(args, ret) => self.run_push_syscall(args, ret.clone())?,
-            DemikernelSyscall::PushTo(args, ret) => self.run_pushto_syscall(args, ret.clone())?,
-            DemikernelSyscall::Pop(args, ret) => self.run_pop_syscall(args, ret.clone())?,
-            DemikernelSyscall::Wait(args, ret) => self.run_wait_syscall(args, ret.clone())?,
-            DemikernelSyscall::Close(args, ret) => self.run_close_syscall(args, ret.clone())?,
+            DemikernelSyscall::Socket(args, ret) => self.run_socket_syscall(args, *ret)?,
+            DemikernelSyscall::Bind(args, ret) => self.run_bind_syscall(args, *ret)?,
+            DemikernelSyscall::Listen(args, ret) => self.run_listen_syscall(args, *ret)?,
+            DemikernelSyscall::Accept(args, fd) => self.run_accept_syscall(args, *fd)?,
+            DemikernelSyscall::Connect(args, ret) => self.run_connect_syscall(args, *ret)?,
+            DemikernelSyscall::Push(args, ret) => self.run_push_syscall(args, *ret)?,
+            DemikernelSyscall::PushTo(args, ret) => self.run_pushto_syscall(args, *ret)?,
+            DemikernelSyscall::Pop(args, ret) => self.run_pop_syscall(args, *ret)?,
+            DemikernelSyscall::Wait(args, ret) => self.run_wait_syscall(args, *ret)?,
+            DemikernelSyscall::Close(args, ret) => self.run_close_syscall(args, *ret)?,
             DemikernelSyscall::Unsupported => {
                 error!("Unsupported syscall");
             },
