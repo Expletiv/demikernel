@@ -173,7 +173,6 @@ mod test {
     #[test]
     fn evict_by_explicit_ttl_case1() -> Result<()> {
         let now = Instant::now();
-        let now = now;
         let ttl = Duration::from_secs(1);
         let later = now + ttl;
         let mut cache = HashTtlCache::new(now, None);
