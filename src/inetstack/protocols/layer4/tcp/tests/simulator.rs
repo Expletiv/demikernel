@@ -179,9 +179,9 @@ impl Simulation {
             local_qd: None,
             remote_qd: None,
             inflight: VecDeque::with_capacity(4),
-            local_sockaddr: SocketAddrV4::new(local_ipv4.clone(), local_ephemeral_port),
+            local_sockaddr: SocketAddrV4::new(*local_ipv4, local_ephemeral_port),
             local_port,
-            remote_sockaddr: SocketAddrV4::new(remote_ipv4.clone(), remote_ephemeral_port),
+            remote_sockaddr: SocketAddrV4::new(*remote_ipv4, remote_ephemeral_port),
             remote_port,
             lines,
         })
@@ -451,7 +451,7 @@ impl Simulation {
 
         let remote_addr: SocketAddrV4 = match args.addr {
             None => {
-                self.remote_sockaddr = SocketAddrV4::new(self.remote_sockaddr.ip().clone(), self.remote_port);
+                self.remote_sockaddr = SocketAddrV4::new(*self.remote_sockaddr.ip(), self.remote_port);
                 self.remote_sockaddr
             },
             Some(addr) => {
@@ -616,7 +616,7 @@ impl Simulation {
 
         let remote_addr: SocketAddrV4 = match args.addr {
             None => {
-                self.remote_sockaddr = SocketAddrV4::new(self.remote_sockaddr.ip().clone(), self.remote_port);
+                self.remote_sockaddr = SocketAddrV4::new(*self.remote_sockaddr.ip(), self.remote_port);
                 self.remote_sockaddr
             },
             Some(addr) => {

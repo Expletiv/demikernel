@@ -201,9 +201,9 @@ fn build_arp_query(local_mac: &MacAddress, local_ipv4: &Ipv4Addr, remote_ipv4: &
     let body: ArpHeader = ArpHeader::new(
         ArpOperation::Request,
         local_mac.clone(),
-        local_ipv4.clone(),
+        *local_ipv4,
         MacAddress::broadcast(),
-        remote_ipv4.clone(),
+        *remote_ipv4,
     );
     let mut pkt: DemiBuffer = body.create_and_serialize();
     let eth2_header: Ethernet2Header =
