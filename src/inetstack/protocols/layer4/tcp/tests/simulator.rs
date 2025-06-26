@@ -172,8 +172,8 @@ impl Simulation {
         let lines: Vec<String> = Self::read_input_file(filename)?;
         Ok(Simulation {
             protocol: None,
-            local_mac: local_mac.clone(),
-            remote_mac: remote_mac.clone(),
+            local_mac: *local_mac,
+            remote_mac: *remote_mac,
             engine: local,
             now,
             local_qd: None,
