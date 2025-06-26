@@ -168,7 +168,7 @@ impl SharedDemiRuntime {
         #[cfg(feature = "profiler")]
         let coroutine = coroutine_timer!(task_name, coroutine);
         let task: TaskWithResult<F::Output> = TaskWithResult::<F::Output>::new(task_name, coroutine);
-        match self.scheduler.insert_task(group_id, task) {
+        match self.scheduler.insert_and_poll_task(group_id, task) {
             Some(InsertResult::Inserted(task_id)) => {
                 let qt: QToken = self.qtoken_to_scheduler_id.insert_with_new_id(task_id).unwrap();
                 self.scheduler
