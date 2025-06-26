@@ -161,7 +161,7 @@ impl ActiveSocketData {
         // Trim the buffer and leave for next read if we got more than expected.
         if let Ok(remainder) = incoming.split_back(bytes_read) {
             if !remainder.is_empty() {
-                self.recv_queue.push_front(Ok((addr.clone(), remainder)));
+                self.recv_queue.push_front(Ok((addr, remainder)));
             }
         }
 

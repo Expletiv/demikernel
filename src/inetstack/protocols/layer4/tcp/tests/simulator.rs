@@ -695,12 +695,12 @@ impl Simulation {
         for option in options {
             match option {
                 TcpOption::Noop => option_list.push(TcpOptions2::NoOperation),
-                TcpOption::Mss(mss) => option_list.push(TcpOptions2::MaximumSegmentSize(mss.clone())),
-                TcpOption::WindowScale(wscale) => option_list.push(TcpOptions2::WindowScale(wscale.clone())),
+                TcpOption::Mss(mss) => option_list.push(TcpOptions2::MaximumSegmentSize(*mss)),
+                TcpOption::WindowScale(wscale) => option_list.push(TcpOptions2::WindowScale(*wscale)),
                 TcpOption::SackOk => option_list.push(TcpOptions2::SelectiveAcknowlegementPermitted),
                 TcpOption::Timestamp(sender, echo) => option_list.push(TcpOptions2::Timestamp {
-                    sender_timestamp: sender.clone(),
-                    echo_timestamp: echo.clone(),
+                    sender_timestamp: *sender,
+                    echo_timestamp: *echo,
                 }),
                 TcpOption::EndOfOptions => option_list.push(TcpOptions2::EndOfOptionsList),
             }
