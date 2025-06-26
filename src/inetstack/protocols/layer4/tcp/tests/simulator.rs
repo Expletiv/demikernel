@@ -102,7 +102,7 @@ fn collect_tests(test_path: &str) -> Result<Vec<String>> {
         directories.push(test_path.to_string());
 
         // Recurse through all directories.
-        while directories.len() > 0 {
+        while !directories.is_empty() {
             let directory: String = directories.pop().unwrap();
             for entry in std::fs::read_dir(&directory)? {
                 let entry: DirEntry = entry?;
