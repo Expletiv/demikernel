@@ -1,6 +1,8 @@
 // Copyright (c) Microsoft Corporation. All rights reserved.
 // Licensed under the MIT license.
 
+use ::std::collections::hash_map::Entry;
+
 //======================================================================================================================
 // Constants
 //======================================================================================================================
@@ -38,8 +40,8 @@ impl<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Cop
         // Otherwise, allocate a new external id.
         for _ in 0..MAX_RETRIES_ID_ALLOC {
             let external_id: E = E::from(self.generate_id());
-            if !self.ids.contains_key(&external_id) {
-                self.ids.insert(external_id, internal_id);
+            if let Entry::Vacant(e) = self.ids.entry(external_id) {
+                e.insert(internal_id);
                 return Some(external_id);
             }
         }
@@ -75,8 +77,8 @@ impl<E: Eq + Hash + From<u32> + Into<u32> + Copy, I: From<u32> + Into<u32> + Cop
     pub fn insert_with_new_id(&mut self, internal_id: I) -> Option<E> {
         for _ in 0..MAX_RETRIES_ID_ALLOC {
             let external_id: E = E::from(self.generate_id());
-            if !self.ids.contains_key(&external_id) {
-                self.ids.insert(external_id, internal_id);
+            if let Entry::Vacant(e) = self.ids.entry(external_id) {
+                e.insert(internal_id);
                 return Some(external_id);
             }
         }
