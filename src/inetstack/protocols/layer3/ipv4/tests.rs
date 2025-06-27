@@ -18,7 +18,6 @@ use ::anyhow::Result;
 // Helper Functions
 //======================================================================================================================
 
-/// NOTE: that we can use this function to create invalid IPv4 headers
 fn build_ipv4_header(
     buf: &mut [u8],
     version: u8,
@@ -48,7 +47,7 @@ fn build_ipv4_header(
     buf[4..6].copy_from_slice(&id.to_be_bytes());
 
     // Flags + Offset.
-    let field: u16 = ((flags as u16 & 7) << 13) | (fragment_offset & 0x1fff);
+    let field = ((flags as u16 & 7) << 13) | (fragment_offset & 0x1fff);
     buf[6..8].copy_from_slice(&field.to_be_bytes());
 
     // Time to live.
@@ -65,7 +64,7 @@ fn build_ipv4_header(
 
     // Header checksum.
     if checksum.is_none() {
-        let header_size: usize = (ihl as usize) << 2;
+        let header_size = (ihl as usize) << 2;
         checksum = Some(Ipv4Header::compute_checksum(&buf[..header_size]));
     }
     buf[10..12].copy_from_slice(&checksum.unwrap().to_be_bytes());
@@ -75,21 +74,24 @@ fn build_ipv4_header(
 // Unit-Tests for Happy Path
 //======================================================================================================================
 
-/// Parses a well-formed IPv4 header.
 #[test]
 fn test_ipv4_header_parse_good() -> Result<()> {
     const HEADER_MAX_SIZE: usize = (5 + 10) << 2;
     const PAYLOAD_SIZE: usize = 8;
     const DATAGRAM_SIZE: usize = HEADER_MAX_SIZE + PAYLOAD_SIZE;
-    let mut buf: [u8; DATAGRAM_SIZE] = [0; DATAGRAM_SIZE];
-    let data: [u8; PAYLOAD_SIZE] = [1, 2, 3, 4, 5, 6, 7, 8];
-    let data_bytes: DemiBuffer = DemiBuffer::from_slice(&data).expect("'data' should fit in a DemiBuffer");
 
-    for ihl in 5..16 {
-        let header_size: usize = (ihl as usize) << 2;
-        let datagram_size: usize = header_size + PAYLOAD_SIZE;
+    let mut raw_bytes = [0; DATAGRAM_SIZE];
+    let data = [1, 2, 3, 4, 5, 6, 7, 8];
+
+    let data_bytes = DemiBuffer::from_slice(&data).expect("'data' should fit in a DemiBuffer");
+    let ihl_values = 5..16;
+
+    for ihl in ihl_values {
+        let header_size = (ihl as usize) << 2;
+        let datagram_size = header_size + PAYLOAD_SIZE;
+
         build_ipv4_header(
-            &mut buf[..header_size],
+            &mut raw_bytes[..header_size],
             4,
             ihl,
             0,
@@ -106,19 +108,20 @@ fn test_ipv4_header_parse_good() -> Result<()> {
         );
 
         // Payload
-        buf[header_size..datagram_size].copy_from_slice(&data);
+        raw_bytes[header_size..datagram_size].copy_from_slice(&data);
 
-        let mut buf: DemiBuffer = match DemiBuffer::from_slice(&buf[..datagram_size]) {
-            Ok(buf) => buf,
-            Err(e) => anyhow::bail!("'buf' should fit: {:?}", e),
+        let mut buffer = match DemiBuffer::from_slice(&raw_bytes[..datagram_size]) {
+            Ok(b) => b,
+            Err(e) => anyhow::bail!("failed to create buffer: {:?}", e),
         };
-        match Ipv4Header::parse_and_strip(&mut buf) {
+
+        match Ipv4Header::parse_and_strip(&mut buffer) {
             Ok(ipv4_hdr) => {
                 assert_eq!(ipv4_hdr.get_src_addr(), ALICE_IPV4);
                 assert_eq!(ipv4_hdr.get_dest_addr(), BOB_IPV4);
                 assert_eq!(ipv4_hdr.get_protocol(), IpProtocol::UDP);
-                assert_eq!(buf.len(), PAYLOAD_SIZE);
-                assert_eq!(buf[..], data_bytes[..]);
+                assert_eq!(buffer.len(), PAYLOAD_SIZE);
+                assert_eq!(buffer[..], data_bytes[..]);
             },
             Err(e) => anyhow::bail!("{:?}", e),
         }
@@ -131,18 +134,18 @@ fn test_ipv4_header_parse_good() -> Result<()> {
 // Unit-Tests for Invalid Path
 //======================================================================================================================
 
-/// Parses a malformed IPv4 header with invalid version number.
 #[test]
 fn test_ipv4_header_parse_invalid_version() -> Result<()> {
     const HEADER_SIZE: usize = 20;
     const PAYLOAD_SIZE: usize = 0;
     const DATAGRAM_SIZE: usize = HEADER_SIZE + PAYLOAD_SIZE;
-    let mut buf: [u8; DATAGRAM_SIZE] = [0; DATAGRAM_SIZE];
 
-    // Iterate over all invalid version numbers.
-    for version in [0, 1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15] {
+    let mut raw_bytes = [0; DATAGRAM_SIZE];
+    let invalid_versions = [0, 1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+
+    for version in invalid_versions {
         build_ipv4_header(
-            &mut buf,
+            &mut raw_bytes,
             version,
             5,
             0,
@@ -158,31 +161,32 @@ fn test_ipv4_header_parse_invalid_version() -> Result<()> {
             None,
         );
 
-        let mut buf: DemiBuffer = match DemiBuffer::from_slice(&buf) {
-            Ok(buf) => buf,
-            Err(e) => anyhow::bail!("'buf' should fit: {:?}", e),
+        let mut buffer = match DemiBuffer::from_slice(&raw_bytes) {
+            Ok(b) => b,
+            Err(e) => anyhow::bail!("failed to create buffer: {:?}", e),
         };
-        match Ipv4Header::parse_and_strip(&mut buf) {
-            Ok(_) => anyhow::bail!("parsed ipv4_header with invalid version={:?}", version),
-            Err(_) => {},
-        };
+
+        if Ipv4Header::parse_and_strip(&mut buffer).is_ok() {
+            anyhow::bail!("parsed ipv4_header with invalid version: {:?}", version);
+        }
     }
 
     Ok(())
 }
 
-/// Parses a malformed IPv4 header with invalid internet header length.
+/// IHL is Internet Header Length
 #[test]
 fn test_ipv4_header_parse_invalid_ihl() -> Result<()> {
     const HEADER_SIZE: usize = 20;
     const PAYLOAD_SIZE: usize = 0;
     const DATAGRAM_SIZE: usize = HEADER_SIZE + PAYLOAD_SIZE;
-    let mut buf: [u8; DATAGRAM_SIZE] = [0; DATAGRAM_SIZE];
 
-    // Iterate over invalid values for IHL.
-    for ihl in [0, 1, 2, 3, 4] {
+    let mut raw_bytes = [0; DATAGRAM_SIZE];
+    let invalid_ihl_values = [0, 1, 2, 3, 4];
+
+    for ihl in invalid_ihl_values {
         build_ipv4_header(
-            &mut buf,
+            &mut raw_bytes,
             4,
             ihl,
             0,
@@ -198,32 +202,31 @@ fn test_ipv4_header_parse_invalid_ihl() -> Result<()> {
             None,
         );
 
-        let mut buf: DemiBuffer = match DemiBuffer::from_slice(&buf) {
+        let mut buffer = match DemiBuffer::from_slice(&raw_bytes) {
             Ok(buf) => buf,
-            Err(e) => anyhow::bail!("'buf' should fit: {:?}", e),
+            Err(e) => anyhow::bail!("failed to create buffer: {:?}", e),
         };
 
-        match Ipv4Header::parse_and_strip(&mut buf) {
-            Ok(_) => anyhow::bail!("parsed ipv4 header with invalid ihl={:?}", ihl),
-            Err(_) => {},
+        if Ipv4Header::parse_and_strip(&mut buffer).is_ok() {
+            anyhow::bail!("parsed ipv4 header with invalid IHL: {:?}", ihl)
         };
     }
 
     Ok(())
 }
 
-/// Parses a malformed IPv4 header with invalid total length field.
 #[test]
 fn test_ipv4_header_parse_invalid_total_length() -> Result<()> {
     const HEADER_SIZE: usize = 20;
     const PAYLOAD_SIZE: usize = 0;
     const DATAGRAM_SIZE: usize = HEADER_SIZE + PAYLOAD_SIZE;
-    let mut buf: [u8; DATAGRAM_SIZE] = [0; DATAGRAM_SIZE];
 
-    // Iterate over invalid values for IHL.
-    for total_length in 0..20 {
+    let mut raw_bytes = [0; DATAGRAM_SIZE];
+    let invalid_total_lengths = 0..20;
+
+    for total_length in invalid_total_lengths {
         build_ipv4_header(
-            &mut buf,
+            &mut raw_bytes,
             4,
             5,
             0,
@@ -239,32 +242,31 @@ fn test_ipv4_header_parse_invalid_total_length() -> Result<()> {
             None,
         );
 
-        let mut buf: DemiBuffer = match DemiBuffer::from_slice(&buf) {
-            Ok(buf) => buf,
-            Err(e) => anyhow::bail!("'buf' should fit in a DemiBuffer: {:?}", e),
+        let mut buffer = match DemiBuffer::from_slice(&raw_bytes) {
+            Ok(b) => b,
+            Err(e) => anyhow::bail!("failed to create buffer: {:?}", e),
         };
 
-        match Ipv4Header::parse_and_strip(&mut buf) {
-            Ok(_) => anyhow::bail!("parsed ipv4 header with invalid total_length={:?}", total_length),
-            Err(_) => {},
+        if Ipv4Header::parse_and_strip(&mut buffer).is_ok() {
+            anyhow::bail!("parsed ipv4 header with invalid total_length: {:?}", total_length)
         };
     }
 
     Ok(())
 }
 
-/// Parses a malformed IPv4 header with invalid flags field.
 #[test]
 fn test_ipv4_header_parse_invalid_flags() -> Result<()> {
     const HEADER_SIZE: usize = 20;
     const PAYLOAD_SIZE: usize = 0;
     const DATAGRAM_SIZE: usize = HEADER_SIZE + PAYLOAD_SIZE;
-    let mut buf: [u8; DATAGRAM_SIZE] = [0; DATAGRAM_SIZE];
 
+    let mut raw_bytes = [0; DATAGRAM_SIZE];
     // Flags field must have bit 3 zeroed as it is marked Reserved.
-    let flags: u8 = 0x4;
+    let flags = 0x4;
+
     build_ipv4_header(
-        &mut buf,
+        &mut raw_bytes,
         4,
         5,
         0,
@@ -280,29 +282,31 @@ fn test_ipv4_header_parse_invalid_flags() -> Result<()> {
         None,
     );
 
-    let mut buf: DemiBuffer = match DemiBuffer::from_slice(&buf) {
-        Ok(buf) => buf,
-        Err(e) => anyhow::bail!("'buf' should fit: {:?}", e),
+    let mut buffer = match DemiBuffer::from_slice(&raw_bytes) {
+        Ok(b) => b,
+        Err(e) => anyhow::bail!("failed to create buffer: {:?}", e),
     };
 
-    match Ipv4Header::parse_and_strip(&mut buf) {
-        Ok(_) => anyhow::bail!("parsed ipv4 header with invalid flags={:?}", flags),
-        Err(_) => Ok(()),
+    if Ipv4Header::parse_and_strip(&mut buffer).is_ok() {
+        anyhow::bail!("parsed ipv4 header with invalid flags: {:?}", flags)
     }
+
+    Ok(())
 }
 
-/// Parses a malformed IPv4 header with invalid time to live field.
+/// TTL is Time To Live
 #[test]
 fn test_ipv4_header_parse_invalid_ttl() -> Result<()> {
     const HEADER_SIZE: usize = 20;
     const PAYLOAD_SIZE: usize = 0;
     const DATAGRAM_SIZE: usize = HEADER_SIZE + PAYLOAD_SIZE;
-    let mut buf: [u8; DATAGRAM_SIZE] = [0; DATAGRAM_SIZE];
 
+    let mut raw_bytes = [0; DATAGRAM_SIZE];
     // Datagrams with zeroed TTL values must me dropped.
-    let ttl: u8 = 0x0;
+    let ttl = 0x0;
+
     build_ipv4_header(
-        &mut buf,
+        &mut raw_bytes,
         4,
         5,
         0,
@@ -318,29 +322,30 @@ fn test_ipv4_header_parse_invalid_ttl() -> Result<()> {
         None,
     );
 
-    let mut buf: DemiBuffer = match DemiBuffer::from_slice(&buf) {
-        Ok(buf) => buf,
-        Err(e) => anyhow::bail!("'buf' should fit: {:?}", e),
+    let mut buffer = match DemiBuffer::from_slice(&raw_bytes) {
+        Ok(b) => b,
+        Err(e) => anyhow::bail!("failed to create buffer: {:?}", e),
     };
 
-    match Ipv4Header::parse_and_strip(&mut buf) {
-        Ok(_) => anyhow::bail!("parsed ipv4 header with invalid ttl={:?}", ttl),
-        Err(_) => Ok(()),
+    if Ipv4Header::parse_and_strip(&mut buffer).is_ok() {
+        anyhow::bail!("parsed ipv4 header with invalid ttl: {:?}", ttl);
     }
+
+    Ok(())
 }
 
-/// Parses a malformed IPv4 header with invalid protocol field.
 #[test]
 fn test_ipv4_header_parse_invalid_protocol() -> Result<()> {
     const HEADER_SIZE: usize = 20;
     const PAYLOAD_SIZE: usize = 0;
     const DATAGRAM_SIZE: usize = HEADER_SIZE + PAYLOAD_SIZE;
-    let mut buf: [u8; DATAGRAM_SIZE] = [0; DATAGRAM_SIZE];
 
-    // Iterate over invalid values for protocol.
-    for protocol in 144..252 {
+    let mut raw_bytes = [0; DATAGRAM_SIZE];
+    let invalid_protocol_values = 144..252;
+
+    for protocol in invalid_protocol_values {
         build_ipv4_header(
-            &mut buf,
+            &mut raw_bytes,
             4,
             5,
             0,
@@ -356,32 +361,31 @@ fn test_ipv4_header_parse_invalid_protocol() -> Result<()> {
             None,
         );
 
-        let mut buf: DemiBuffer = match DemiBuffer::from_slice(&buf) {
-            Ok(buf) => buf,
-            Err(e) => anyhow::bail!("'buf' should fit: {:?}", e),
+        let mut buffer = match DemiBuffer::from_slice(&raw_bytes) {
+            Ok(b) => b,
+            Err(e) => anyhow::bail!("failed to create buffer: {:?}", e),
         };
 
-        match Ipv4Header::parse_and_strip(&mut buf) {
-            Ok(_) => anyhow::ensure!(false, "parsed ipv4 header with invalid protocol={:?}", protocol),
-            Err(_) => {},
+        if Ipv4Header::parse_and_strip(&mut buffer).is_ok() {
+            anyhow::ensure!(false, "parsed ipv4 header with invalid protocol: {:?}", protocol)
         };
     }
 
     Ok(())
 }
 
-/// Parses a malformed IPv4 header with invalid checksum.
 #[test]
 fn test_ipv4_header_parse_invalid_header_checksum() -> Result<()> {
     const HEADER_SIZE: usize = 20;
     const PAYLOAD_SIZE: usize = 0;
     const DATAGRAM_SIZE: usize = HEADER_SIZE + PAYLOAD_SIZE;
-    let mut buf: [u8; DATAGRAM_SIZE] = [0; DATAGRAM_SIZE];
 
+    let mut raw_bytes = [0; DATAGRAM_SIZE];
     // Datagrams with invalid header checksum must me dropped.
-    let hdr_checksum: u16 = 0x1;
+    let hdr_checksum = 0x1;
+
     build_ipv4_header(
-        &mut buf,
+        &mut raw_bytes,
         4,
         5,
         0,
@@ -397,33 +401,34 @@ fn test_ipv4_header_parse_invalid_header_checksum() -> Result<()> {
         Some(hdr_checksum),
     );
 
-    let mut buf: DemiBuffer = match DemiBuffer::from_slice(&buf) {
-        Ok(buf) => buf,
-        Err(e) => anyhow::bail!("'buf' should fit: {:?}", e),
+    let mut buffer = match DemiBuffer::from_slice(&raw_bytes) {
+        Ok(b) => b,
+        Err(e) => anyhow::bail!("failed to create buffer: {:?}", e),
     };
 
-    match Ipv4Header::parse_and_strip(&mut buf) {
-        Ok(_) => anyhow::bail!("parsed ipv4 header with invalid header checksum={:?}", hdr_checksum),
-        Err(_) => Ok(()),
+    if Ipv4Header::parse_and_strip(&mut buffer).is_ok() {
+        anyhow::bail!("parsed ipv4 header with invalid header checksum: {:?}", hdr_checksum);
     }
+
+    Ok(())
 }
 
 //======================================================================================================================
 // Unit-Tests for Unsupported Paths
 //======================================================================================================================
 
-/// Parses a malformed IPv4 header with unsupported DSCP field.
 #[test]
 fn test_ipv4_header_parse_unsupported_dscp() -> Result<()> {
     const HEADER_SIZE: usize = 20;
     const PAYLOAD_SIZE: usize = 0;
     const DATAGRAM_SIZE: usize = HEADER_SIZE + PAYLOAD_SIZE;
-    let mut buf: [u8; DATAGRAM_SIZE] = [0; DATAGRAM_SIZE];
 
-    // Iterate over unsupported values for DSCP.
-    for dscp in 1..63 {
+    let mut raw_bytes = [0; DATAGRAM_SIZE];
+    let unsupported_dscp_values = 1..63;
+
+    for dscp in unsupported_dscp_values {
         build_ipv4_header(
-            &mut buf,
+            &mut raw_bytes,
             4,
             5,
             dscp,
@@ -439,32 +444,31 @@ fn test_ipv4_header_parse_unsupported_dscp() -> Result<()> {
             None,
         );
 
-        let mut buf: DemiBuffer = match DemiBuffer::from_slice(&buf) {
-            Ok(buf) => buf,
-            Err(e) => anyhow::bail!("'buf' should fit: {:?}", e),
+        let mut buffer = match DemiBuffer::from_slice(&raw_bytes) {
+            Ok(b) => b,
+            Err(e) => anyhow::bail!("failed to create buffer: {:?}", e),
         };
 
-        match Ipv4Header::parse_and_strip(&mut buf) {
-            Ok(_) => {},
-            Err(_) => anyhow::bail!("dscp field should be ignored (dscp={:?})", dscp),
-        };
+        if Ipv4Header::parse_and_strip(&mut buffer).is_err() {
+            anyhow::bail!("dscp field should be ignored (dscp: {:?})", dscp);
+        }
     }
 
     Ok(())
 }
 
-/// Parses a malformed IPv4 header with unsupported ECN field.
 #[test]
 fn test_ipv4_header_parse_unsupported_ecn() -> Result<()> {
     const HEADER_SIZE: usize = 20;
     const PAYLOAD_SIZE: usize = 0;
     const DATAGRAM_SIZE: usize = HEADER_SIZE + PAYLOAD_SIZE;
-    let mut buf: [u8; DATAGRAM_SIZE] = [0; DATAGRAM_SIZE];
 
-    // Iterate over unsupported values for ECN.
-    for ecn in 1..3 {
+    let mut raw_bytes = [0; DATAGRAM_SIZE];
+    let unsupported_ecn_values = 1..3;
+
+    for ecn in unsupported_ecn_values {
         build_ipv4_header(
-            &mut buf,
+            &mut raw_bytes,
             4,
             5,
             0,
@@ -480,35 +484,33 @@ fn test_ipv4_header_parse_unsupported_ecn() -> Result<()> {
             None,
         );
 
-        let mut buf: DemiBuffer = match DemiBuffer::from_slice(&buf) {
-            Ok(buf) => buf,
-            Err(e) => anyhow::bail!("'buf' should fit: {:?}", e),
+        let mut buffer = match DemiBuffer::from_slice(&raw_bytes) {
+            Ok(b) => b,
+            Err(e) => anyhow::bail!("failed to create buffer: {:?}", e),
         };
 
-        match Ipv4Header::parse_and_strip(&mut buf) {
-            Ok(_) => {},
-            Err(_) => anyhow::bail!("ecn field should be ignored (ecn={:?})", ecn),
+        if Ipv4Header::parse_and_strip(&mut buffer).is_err() {
+            anyhow::bail!("ecn field should be ignored (ecn: {:?})", ecn);
         };
     }
 
     Ok(())
 }
 
-/// Parses a malformed IPv4 header with unsupported fragmentation fields.
-///
 /// TODO: Drop this test once we support fragmentation.
 #[test]
 fn test_ipv4_header_parse_unsupported_fragmentation() -> Result<()> {
     const HEADER_SIZE: usize = 20;
     const PAYLOAD_SIZE: usize = 0;
     const DATAGRAM_SIZE: usize = HEADER_SIZE + PAYLOAD_SIZE;
-    let mut buf: [u8; DATAGRAM_SIZE] = [0; DATAGRAM_SIZE];
 
+    let mut raw_bytes = [0; DATAGRAM_SIZE];
     // Fragmented packets are unsupported.
     // Fragments are detected by having either the MF bit set in Flags or a non-zero Fragment Offset field.
-    let flags: u8 = 0x1; // Set MF bit.
+    let flags = 0x1; // Set MF bit.
+                     //
     build_ipv4_header(
-        &mut buf,
+        &mut raw_bytes,
         4,
         5,
         0,
@@ -524,21 +526,21 @@ fn test_ipv4_header_parse_unsupported_fragmentation() -> Result<()> {
         None,
     );
 
-    let mut buf: DemiBuffer = match DemiBuffer::from_slice(&buf) {
-        Ok(buf) => buf,
-        Err(e) => anyhow::bail!("'buf' should fit: {:?}", e),
+    let mut buffer = match DemiBuffer::from_slice(&raw_bytes) {
+        Ok(b) => b,
+        Err(e) => anyhow::bail!("failed to create buffer: {:?}", e),
     };
 
-    match Ipv4Header::parse_and_strip(&mut buf) {
-        Ok(_) => anyhow::bail!("parsed ipv4 header with Flags={:?}. Do we support it now?", flags,),
-        Err(_) => {},
+    if Ipv4Header::parse_and_strip(&mut buffer).is_ok() {
+        anyhow::bail!("parsed ipv4 header with Flags: {:?}. Do we support it now?", flags);
     };
 
     // Fragmented packets are unsupported.
     // Fragments are detected by having either the MF bit set in Flags or a non-zero Fragment Offset field.
-    let fragment_offset: u16 = 1;
+    let fragment_offset = 1;
+
     build_ipv4_header(
-        &mut buf,
+        &mut buffer,
         4,
         5,
         0,
@@ -554,29 +556,28 @@ fn test_ipv4_header_parse_unsupported_fragmentation() -> Result<()> {
         None,
     );
 
-    let mut buf: DemiBuffer = match DemiBuffer::from_slice(&buf) {
-        Ok(buf) => buf,
-        Err(e) => anyhow::bail!("'buf' should fit: {:?}", e),
+    let mut buffer = match DemiBuffer::from_slice(&buffer) {
+        Ok(b) => b,
+        Err(e) => anyhow::bail!("failed to create buffer: {:?}", e),
     };
 
-    match Ipv4Header::parse_and_strip(&mut buf) {
-        Ok(_) => anyhow::bail!(
-            "parsed ipv4 header with fragment_offset={:?}. Do we support it now?",
+    if Ipv4Header::parse_and_strip(&mut buffer).is_ok() {
+        anyhow::bail!(
+            "parsed ipv4 header with fragment_offset: {:?}. Do we support it now?",
             fragment_offset,
-        ),
-        Err(_) => Ok(()),
+        );
     }
+
+    Ok(())
 }
 
-/// Parses a malformed IPv4 header with unsupported protocol field.
-///
 /// TODO: Drop this test once we support them.
 #[test]
 fn test_ipv4_header_parse_unsupported_protocol() -> Result<()> {
     const HEADER_SIZE: usize = 20;
     const PAYLOAD_SIZE: usize = 0;
     const DATAGRAM_SIZE: usize = HEADER_SIZE + PAYLOAD_SIZE;
-    let mut buf: [u8; DATAGRAM_SIZE] = [0; DATAGRAM_SIZE];
+    let mut raw_bytes = [0; DATAGRAM_SIZE];
 
     // Iterate over unsupported values for fragment flags.
     for protocol in 0..143 {
@@ -585,7 +586,7 @@ fn test_ipv4_header_parse_unsupported_protocol() -> Result<()> {
             1 | 6 | 17 => continue,
             _ => {
                 build_ipv4_header(
-                    &mut buf,
+                    &mut raw_bytes,
                     4,
                     5,
                     0,
@@ -601,14 +602,13 @@ fn test_ipv4_header_parse_unsupported_protocol() -> Result<()> {
                     None,
                 );
 
-                let mut buf: DemiBuffer = match DemiBuffer::from_slice(&buf) {
+                let mut buffer = match DemiBuffer::from_slice(&raw_bytes) {
                     Ok(buf) => buf,
-                    Err(e) => anyhow::bail!("'buf' should fit: {:?}", e),
+                    Err(e) => anyhow::bail!("failed to create buffer: {:?}", e),
                 };
 
-                match Ipv4Header::parse_and_strip(&mut buf) {
-                    Ok(_) => anyhow::bail!("parsed ipv4 header with protocol={:?}. Do we support it now?", protocol,),
-                    Err(_) => {},
+                if Ipv4Header::parse_and_strip(&mut buffer).is_ok() {
+                    anyhow::bail!("parsed ipv4 header with protocol: {:?}. Now supported?", protocol);
                 };
             },
         };
