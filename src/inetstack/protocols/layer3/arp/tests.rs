@@ -200,14 +200,13 @@ fn arp_cache_timeout() -> Result<()> {
 fn build_arp_query(local_mac: &MacAddress, local_ipv4: &Ipv4Addr, remote_ipv4: &Ipv4Addr) -> DemiBuffer {
     let body: ArpHeader = ArpHeader::new(
         ArpOperation::Request,
-        local_mac.clone(),
-        local_ipv4.clone(),
+        *local_mac,
+        *local_ipv4,
         MacAddress::broadcast(),
-        remote_ipv4.clone(),
+        *remote_ipv4,
     );
     let mut pkt: DemiBuffer = body.create_and_serialize();
-    let eth2_header: Ethernet2Header =
-        Ethernet2Header::new(MacAddress::broadcast(), local_mac.clone(), EtherType2::Arp);
+    let eth2_header: Ethernet2Header = Ethernet2Header::new(MacAddress::broadcast(), *local_mac, EtherType2::Arp);
     eth2_header.serialize_and_attach(&mut pkt);
     pkt
 }

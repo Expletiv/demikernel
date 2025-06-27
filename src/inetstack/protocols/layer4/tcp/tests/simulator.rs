@@ -102,7 +102,7 @@ fn collect_tests(test_path: &str) -> Result<Vec<String>> {
         directories.push(test_path.to_string());
 
         // Recurse through all directories.
-        while directories.len() > 0 {
+        while !directories.is_empty() {
             let directory: String = directories.pop().unwrap();
             for entry in std::fs::read_dir(&directory)? {
                 let entry: DirEntry = entry?;
@@ -172,16 +172,16 @@ impl Simulation {
         let lines: Vec<String> = Self::read_input_file(filename)?;
         Ok(Simulation {
             protocol: None,
-            local_mac: local_mac.clone(),
-            remote_mac: remote_mac.clone(),
+            local_mac: *local_mac,
+            remote_mac: *remote_mac,
             engine: local,
             now,
             local_qd: None,
             remote_qd: None,
             inflight: VecDeque::with_capacity(4),
-            local_sockaddr: SocketAddrV4::new(local_ipv4.clone(), local_ephemeral_port),
+            local_sockaddr: SocketAddrV4::new(*local_ipv4, local_ephemeral_port),
             local_port,
-            remote_sockaddr: SocketAddrV4::new(remote_ipv4.clone(), remote_ephemeral_port),
+            remote_sockaddr: SocketAddrV4::new(*remote_ipv4, remote_ephemeral_port),
             remote_port,
             lines,
         })
@@ -451,7 +451,7 @@ impl Simulation {
 
         let remote_addr: SocketAddrV4 = match args.addr {
             None => {
-                self.remote_sockaddr = SocketAddrV4::new(self.remote_sockaddr.ip().clone(), self.remote_port);
+                self.remote_sockaddr = SocketAddrV4::new(*self.remote_sockaddr.ip(), self.remote_port);
                 self.remote_sockaddr
             },
             Some(addr) => {
@@ -616,7 +616,7 @@ impl Simulation {
 
         let remote_addr: SocketAddrV4 = match args.addr {
             None => {
-                self.remote_sockaddr = SocketAddrV4::new(self.remote_sockaddr.ip().clone(), self.remote_port);
+                self.remote_sockaddr = SocketAddrV4::new(*self.remote_sockaddr.ip(), self.remote_port);
                 self.remote_sockaddr
             },
             Some(addr) => {
@@ -695,12 +695,12 @@ impl Simulation {
         for option in options {
             match option {
                 TcpOption::Noop => option_list.push(TcpOptions2::NoOperation),
-                TcpOption::Mss(mss) => option_list.push(TcpOptions2::MaximumSegmentSize(mss.clone())),
-                TcpOption::WindowScale(wscale) => option_list.push(TcpOptions2::WindowScale(wscale.clone())),
+                TcpOption::Mss(mss) => option_list.push(TcpOptions2::MaximumSegmentSize(*mss)),
+                TcpOption::WindowScale(wscale) => option_list.push(TcpOptions2::WindowScale(*wscale)),
                 TcpOption::SackOk => option_list.push(TcpOptions2::SelectiveAcknowlegementPermitted),
                 TcpOption::Timestamp(sender, echo) => option_list.push(TcpOptions2::Timestamp {
-                    sender_timestamp: sender.clone(),
-                    echo_timestamp: echo.clone(),
+                    sender_timestamp: *sender,
+                    echo_timestamp: *echo,
                 }),
                 TcpOption::EndOfOptions => option_list.push(TcpOptions2::EndOfOptionsList),
             }

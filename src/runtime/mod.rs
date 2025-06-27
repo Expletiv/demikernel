@@ -733,8 +733,8 @@ mod tests {
         let mut qts: [QToken; NUM_TASKS] = [QToken::from(0); NUM_TASKS];
         let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
         // Insert a large number of coroutines.
-        for i in 0..NUM_TASKS {
-            qts[i] = expect_ok!(
+        for qt in qts.iter_mut().take(NUM_TASKS) {
+            *qt = expect_ok!(
                 runtime.insert_nonpolling_coroutine(
                     "dummy coroutine",
                     Box::pin(dummy_coroutine(1000000000, QDesc::from(0)).fuse())
@@ -753,8 +753,8 @@ mod tests {
         let mut qts: [QToken; NUM_TASKS] = [QToken::from(0); NUM_TASKS];
         let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
         // Insert a large number of coroutines.
-        for i in 0..NUM_TASKS {
-            qts[i] = expect_ok!(
+        for qt in qts.iter_mut().take(NUM_TASKS) {
+            *qt = expect_ok!(
                 runtime.insert_io_polling_coroutine(
                     "dummy background coroutine",
                     Box::pin(dummy_background_coroutine().fuse()),
