@@ -8,7 +8,7 @@
 use crate::check_for_network_error;
 use ::anyhow::Result;
 use ::demikernel::{runtime::types::demi_opcode_t, LibOS, QDesc, QToken};
-use ::std::net::SocketAddr;
+use ::std::{net::SocketAddr, time::Duration};
 
 //======================================================================================================================
 // Constants
@@ -182,7 +182,7 @@ fn wait_after_async_close_connecting_socket(libos: &mut LibOS, remote: &SocketAd
 // Attempt to wait on an invalid queue token.
 fn wait_on_invalid_queue_token_returns_einval(libos: &mut LibOS) -> Result<()> {
     // Wait on an invalid queue token made from u64 MAX value.
-    match libos.wait(QToken::from(u64::MAX), None) {
+    match libos.wait(QToken::from(u64::MAX), Some(Duration::ZERO)) {
         Ok(_) => anyhow::bail!("wait() should not succeed on invalid token"),
         // If we are using direct mapping, this will time out because we do not have a data structure to track valid and
         // invalid qtokens. Instead, we will never find a completed qtoken.
@@ -194,7 +194,7 @@ fn wait_on_invalid_queue_token_returns_einval(libos: &mut LibOS) -> Result<()> {
     }
 
     // Wait on an invalid queue token made from 0 value.
-    match libos.wait(QToken::from(0), None) {
+    match libos.wait(QToken::from(0), Some(Duration::ZERO)) {
         Ok(_) => anyhow::bail!("wait() should not succeed on invalid token"),
         // If we are using direct mapping, this will time out because we do not have a data structure to track valid and
         // invalid qtokens. Instead, we will never find a completed qtoken.
