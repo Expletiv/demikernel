@@ -105,16 +105,16 @@ impl SharedActiveOpenSocket {
 
         // Check if our peer is refusing our connection request.
         if header.rst {
-            let cause: String = String::from("connection refused");
+            let cause: &'static str = "connection refused";
             error!("process_ack(): {}", cause);
-            return Err(Fail::new(libc::ECONNREFUSED, &cause));
+            return Err(Fail::new(libc::ECONNREFUSED, cause));
         }
 
         // Bail if we didn't receive a SYN packet.
         if !header.syn {
-            let cause: String = String::from("is not a syn packet");
+            let cause: &'static str = "is not a syn packet";
             error!("process_ack(): {}", cause);
-            return Err(Fail::new(libc::EAGAIN, &cause));
+            return Err(Fail::new(libc::EAGAIN, cause));
         }
 
         debug!("Received SYN+ACK: {:?}", header);
@@ -259,7 +259,7 @@ impl SharedActiveOpenSocket {
             select_biased! {
             r = state.wait_for_change(None).fuse() => if let Ok(r) = r {
                 if r == State::Closed {
-                    let cause: &str = "Closing socket while connecting";
+                    let cause: &'static str = "Closing socket while connecting";
                     warn!("{}", cause);
                     return Err(Fail::new(libc::ECONNABORTED, cause));
                 }
@@ -280,9 +280,9 @@ impl SharedActiveOpenSocket {
             }
         }
 
-        let cause: String = String::from("connection handshake timed out");
+        let cause: &'static str = "connection handshake timed out";
         error!("connect(): {}", cause);
-        Err(Fail::new(libc::ECONNREFUSED, &cause))
+        Err(Fail::new(libc::ECONNREFUSED, cause))
     }
 
     pub fn close(&mut self) {

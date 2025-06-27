@@ -111,9 +111,9 @@ impl RingStateMachine {
     /// Ensures that the target [RingState] is not [RingState::Closing].
     fn ensure_not_closing(&self) -> Result<(), Fail> {
         if self.current == RingState::Closing {
-            let cause: String = String::from("ring is closing");
+            let cause: &'static str = "ring is closing";
             error!("ensure_not_closing(): {}", cause);
-            return Err(Fail::new(libc::EBADF, &cause));
+            return Err(Fail::new(libc::EBADF, cause));
         }
         Ok(())
     }
@@ -121,9 +121,9 @@ impl RingStateMachine {
     /// Ensures that the target [RingState] is not [RingState::Closed].
     fn ensure_not_closed(&self) -> Result<(), Fail> {
         if self.current == RingState::Closed {
-            let cause: String = String::from("ring is closed");
+            let cause: &'static str = "ring is closed";
             error!("ensure_not_clossed(): {}", cause);
-            return Err(Fail::new(libc::EBADF, &cause));
+            return Err(Fail::new(libc::EBADF, cause));
         }
         Ok(())
     }

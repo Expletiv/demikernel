@@ -110,7 +110,7 @@ impl SharedScope {
         let duration_sum: f64 = self.duration_sum as f64;
 
         // Write markers.
-        let mut markers = String::from("+");
+        let mut markers = "+".to_string();
         for _ in 0..depth {
             markers.push('+');
         }

@@ -47,7 +47,7 @@ fn arp_immediate_reply() -> Result<()> {
     let local_ipv4: Ipv4Addr = test_helpers::ALICE_IPV4;
     let remote_mac: MacAddress = test_helpers::BOB_MAC;
     let remote_ipv4: Ipv4Addr = test_helpers::BOB_IPV4;
-    let mut engine: SharedEngine = new_engine(now, &test_helpers::ALICE_CONFIG_PATH)?;
+    let mut engine: SharedEngine = new_engine(now, test_helpers::ALICE_CONFIG_PATH)?;
 
     // Create an ARP query request to the local IP address.
     let buf: DemiBuffer = build_arp_query(&remote_mac, &remote_ipv4, &local_ipv4);
@@ -88,7 +88,7 @@ fn arp_no_reply() -> Result<()> {
     let remote_mac: MacAddress = test_helpers::BOB_MAC;
     let remote_ipv4: Ipv4Addr = test_helpers::BOB_IPV4;
     let other_remote_ipv4: Ipv4Addr = test_helpers::CARRIE_IPV4;
-    let mut engine: SharedEngine = new_engine(now, &test_helpers::ALICE_CONFIG_PATH)?;
+    let mut engine: SharedEngine = new_engine(now, test_helpers::ALICE_CONFIG_PATH)?;
 
     // Create an ARP query request to a different IP address.
     let buf: DemiBuffer = build_arp_query(&remote_mac, &remote_ipv4, &other_remote_ipv4);
@@ -115,7 +115,7 @@ fn arp_cache_update() -> Result<()> {
     let local_ipv4: Ipv4Addr = test_helpers::BOB_IPV4;
     let other_remote_mac: MacAddress = test_helpers::CARRIE_MAC;
     let other_remote_ipv4: Ipv4Addr = test_helpers::CARRIE_IPV4;
-    let mut engine: SharedEngine = new_engine(now, &test_helpers::BOB_CONFIG_PATH)?;
+    let mut engine: SharedEngine = new_engine(now, test_helpers::BOB_CONFIG_PATH)?;
 
     // Create an ARP query request to the local IP address.
     let buf: DemiBuffer = build_arp_query(&other_remote_mac, &other_remote_ipv4, &local_ipv4);

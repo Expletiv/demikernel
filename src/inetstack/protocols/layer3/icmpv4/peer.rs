@@ -226,10 +226,10 @@ impl SharedIcmpv4Peer {
                 Ok(self.runtime.get_now() - t0)
             },
             Err(_) => {
-                let message: String = String::from("timer expired");
+                let message: &'static str = "timer expired";
                 self.inflight.remove(&(id, seq_num));
                 error!("ping(): {}", message);
-                Err(Fail::new(libc::ETIMEDOUT, &message))
+                Err(Fail::new(libc::ETIMEDOUT, message))
             },
         }
     }

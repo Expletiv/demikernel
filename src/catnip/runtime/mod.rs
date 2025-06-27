@@ -251,17 +251,17 @@ impl SharedDPDKRuntime {
                 }
             }
             if rte_eth_dev_start(port_id) != 0 {
-                let cause: String = format!("Failed to set up ethernet device");
+                let cause: &'static str = "Failed to set up ethernet device";
                 error!("initialize_dpdk_port(): {}", cause);
-                return Err(Fail::new(libc::EIO, &cause));
+                return Err(Fail::new(libc::EIO, cause));
             }
             rte_eth_promiscuous_enable(port_id);
         }
 
         if unsafe { rte_eth_dev_is_valid_port(port_id) } == 0 {
-            let cause: String = format!("Invalid port id");
+            let cause: &'static str = "Invalid port id";
             error!("initialize_dpdk_port(): {}", cause);
-            return Err(Fail::new(libc::EIO, &cause));
+            return Err(Fail::new(libc::EIO, cause));
         }
 
         let sleep_duration: Duration = Duration::from_millis(100);
@@ -287,9 +287,9 @@ impl SharedDPDKRuntime {
                 rte_delay_us_block(sleep_duration.as_micros() as u32);
             }
             if retry_count == 0 {
-                let cause: String = format!("Link never came up");
+                let cause: &'static str = "Link never came up";
                 error!("initialize_dpdk_port(): {}", cause);
-                return Err(Fail::new(libc::EIO, &cause));
+                return Err(Fail::new(libc::EIO, cause));
             }
             retry_count -= 1;
         }

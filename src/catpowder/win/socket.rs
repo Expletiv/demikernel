@@ -44,9 +44,9 @@ impl XdpSocket {
                 false => Err(Fail::from(&error)),
             }
         } else {
-            let cause: String = format!("XskCreate is not implemented");
-            error!("create(): {:?}", &cause);
-            Err(Fail::new(libc::ENOSYS, &cause))
+            let cause: &'static str = "XskCreate is not implemented";
+            error!("create(): {:?}", cause);
+            Err(Fail::new(libc::ENOSYS, cause))
         }
     }
 
@@ -65,9 +65,9 @@ impl XdpSocket {
                 },
             }
         } else {
-            let cause: String = format!("XskBind is not implemented");
-            error!("bind(): {:?}", &cause);
-            Err(Fail::new(libc::ENOSYS, &cause))
+            let cause: &'static str = "XskBind is not implemented";
+            error!("bind(): {:?}", cause);
+            Err(Fail::new(libc::ENOSYS, cause))
         }
     }
 
@@ -89,9 +89,9 @@ impl XdpSocket {
                 false => return Err(Fail::from(&error)),
             }
         } else {
-            let cause: String = format!("XskSetSockopt is not implemented");
-            error!("setsockopt(): {:?}", &cause);
-            return Err(Fail::new(libc::ENOSYS, &cause));
+            let cause: &'static str = "XskSetSockopt is not implemented";
+            error!("setsockopt(): {:?}", cause);
+            return Err(Fail::new(libc::ENOSYS, cause));
         }
     }
 
@@ -113,9 +113,9 @@ impl XdpSocket {
                 false => return Err(Fail::from(&error)),
             }
         } else {
-            let cause: String = format!("XskGetSockopt is not implemented");
-            error!("getsockopt(): {:?}", &cause);
-            return Err(Fail::new(libc::ENOSYS, &cause));
+            let cause: &'static str = "XskGetSockopt is not implemented";
+            error!("getsockopt(): {:?}", cause);
+            return Err(Fail::new(libc::ENOSYS, cause));
         }
     }
 
@@ -131,9 +131,9 @@ impl XdpSocket {
                 false => Err(Fail::from(&error)),
             }
         } else {
-            let cause: String = format!("XskActivate is not implemented");
-            error!("activate(): {:?}", &cause);
-            Err(Fail::new(libc::ENOSYS, &cause))
+            let cause: &'static str = "XskActivate is not implemented";
+            error!("activate(): {:?}", cause);
+            Err(Fail::new(libc::ENOSYS, cause))
         }
     }
 
@@ -155,9 +155,9 @@ impl XdpSocket {
                 false => Err(Fail::from(&error)),
             }
         } else {
-            let cause: String = format!("XskNotifySocket is not implemented");
-            error!("notify_socket(): {:?}", &cause);
-            Err(Fail::new(libc::ENOSYS, &cause))
+            let cause: &'static str = "XskNotifySocket is not implemented";
+            error!("notify_socket(): {:?}", cause);
+            Err(Fail::new(libc::ENOSYS, cause))
         }
     }
 

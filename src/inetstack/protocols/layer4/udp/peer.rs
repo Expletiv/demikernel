@@ -70,9 +70,9 @@ impl SharedUdpPeer {
     /// Binds a UDP socket to a local endpoint address.
     pub fn bind(&mut self, socket: &mut SharedUdpSocket, addr: SocketAddrV4) -> Result<(), Fail> {
         if socket.local().is_some() {
-            let cause: String = String::from("cannot bind to already bound socket");
+            let cause: &'static str = "cannot bind to already bound socket";
             error!("bind(): {}", cause);
-            return Err(Fail::new(libc::EADDRINUSE, &cause));
+            return Err(Fail::new(libc::EADDRINUSE, cause));
         }
 
         socket.bind(addr)?;
@@ -103,9 +103,9 @@ impl SharedUdpPeer {
         // TODO: Allocate ephemeral port if not bound.
         // FIXME: https://github.com/microsoft/demikernel/issues/973
         if !socket.is_bound() {
-            let cause: String = String::from("queue is not bound");
-            error!("pushto(): {}", &cause);
-            return Err(Fail::new(libc::ENOTSUP, &cause));
+            let cause: &'static str = "queue is not bound";
+            error!("pushto(): {}", cause);
+            return Err(Fail::new(libc::ENOTSUP, cause));
         }
         // TODO: Remove copy once we actually use push coroutine for send.
         socket.push(remote, buf.clone()).await?;

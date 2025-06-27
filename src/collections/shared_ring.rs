@@ -84,7 +84,7 @@ mod test {
     /// Tests if we succeed to perform sequential accesses to a shared ring buffer.
     #[test]
     fn ring_buffer_on_shm_sequential() -> Result<()> {
-        let shm_name: String = "shm-test-ring-buffer-serial".to_string();
+        let shm_name: &'static str = "shm-test-ring-buffer-serial";
         let mut ring: SharedRingBuffer<RingBuffer<u8>> =
             match SharedRingBuffer::<RingBuffer<u8>>::create(&shm_name, RING_BUFFER_CAPACITY) {
                 Ok(ring) => ring,
@@ -124,7 +124,7 @@ mod test {
     /// Tests if we succeed to perform concurrent accesses to a shared ring buffer..
     #[test]
     fn ring_buffer_on_shm_concurrent() -> Result<()> {
-        let shm_name: String = "shm-test-ring-buffer-concurrent".to_string();
+        let shm_name: &'static str = "shm-test-ring-buffer-concurrent";
         let mut result: Result<()> = Ok(());
         let barrier: Barrier = Barrier::new(2);
 

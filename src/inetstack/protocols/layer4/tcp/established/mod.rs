@@ -195,9 +195,9 @@ impl SharedEstablishedSocket {
             State::Established => self.local_close().await,
             State::CloseWait => self.remote_already_closed().await,
             _ => {
-                let cause: String = String::from("socket is already closing");
+                let cause: &'static str = "socket is already closing";
                 error!("close(): {}", cause);
-                Err(Fail::new(libc::EBADF, &cause))
+                Err(Fail::new(libc::EBADF, cause))
             },
         }
     }

@@ -765,9 +765,9 @@ impl DemiBuffer {
     fn split(&mut self, split_front: bool, offset: usize) -> Result<Self, Fail> {
         // Check if this is a multi-segment buffer.
         if self.is_multi_segment() {
-            let cause: String = String::from("cannot split a multi-segment buffer");
-            error!("split_front(): {}", &cause);
-            return Err(Fail::new(libc::EINVAL, &cause));
+            let cause: &'static str = "cannot split a multi-segment buffer";
+            error!("split_front(): {}", cause);
+            return Err(Fail::new(libc::EINVAL, cause));
         }
 
         // Check if split offset is valid.
@@ -1367,7 +1367,7 @@ mod tests {
     #[test]
     fn split_back() -> Result<()> {
         // Create a new (heap-allocated) `DemiBuffer` by copying a slice of a `String`.
-        let str: String = String::from("word one two three four five six seven eight nine");
+        let str: &'static str = "word one two three four five six seven eight nine";
         let slice: &[u8] = str.as_bytes();
         // `DemiBuffer::from_slice` shouldn't fail, as we passed it a valid slice of a `DemiBuffer`-allowable length.
         let mut buf: DemiBuffer = match DemiBuffer::from_slice(slice) {
@@ -1420,7 +1420,7 @@ mod tests {
     #[test]
     fn split_front() -> Result<()> {
         // Create a new (heap-allocated) `DemiBuffer` by copying a slice of a `String`.
-        let str: String = String::from("word one two three four five six seven eight nine");
+        let str: &'static str = "word one two three four five six seven eight nine";
         let slice: &[u8] = str.as_bytes();
         // `DemiBuffer::from_slice` shouldn't fail, as we passed it a valid slice of a `DemiBuffer`-allowable length.
         let mut buf: DemiBuffer = match DemiBuffer::from_slice(slice) {
