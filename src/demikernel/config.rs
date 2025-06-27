@@ -243,51 +243,50 @@ impl Config {
         }
     }
 
-    /// Tcp Config: Reads the "ARP table" parameter from the underlying configuration file. If no ARP table is present,
-    /// then ARP is disabled. This cannot be passed in as an environment variable.
+    /// If no ARP table is present, then ARP is disabled. This cannot be passed in as an environment variable.
     pub fn arp_table(&self) -> Result<Option<HashMap<Ipv4Addr, MacAddress>>, Fail> {
-        if let Ok(arp_table) = Self::get_typed_option(
-            self.get_inetstack_config()?,
-            inetstack_config::ARP_TABLE,
-            |yaml: &Yaml| yaml.as_hash(),
-        ) {
-            let mut result: HashMap<Ipv4Addr, MacAddress> =
-                HashMap::<Ipv4Addr, MacAddress>::with_capacity(arp_table.len());
-            for (k, v) in arp_table {
-                let link_addr: MacAddress = match k.as_str() {
-                    Some(link_string) => MacAddress::parse_canonical_str(link_string)?,
-                    None => {
-                        let cause: &'static str = "Couldn't parse ARP table link_addr in config";
-                        error!("arp_table(): {:?}", cause);
-                        return Err(Fail::new(libc::EINVAL, cause));
-                    },
-                };
-                let ipv4_addr: Ipv4Addr = match v.as_str() {
-                    Some(ip_string) => match ip_string.parse() {
-                        Ok(ip) => ip,
-                        Err(e) => {
-                            let cause: String = format!("Couldn't parse ARP table ip_addr in config: {:?}", e);
-                            error!("arp_table(): {:?}", cause);
-                            return Err(Fail::new(libc::EINVAL, &cause));
-                        },
-                    },
-                    None => return Err(Fail::new(libc::EINVAL, "Couldn't find ARP table link_addr in config")),
-                };
-                result.insert(ipv4_addr, link_addr);
-            }
-            return Ok(Some(result));
-        };
-        Ok(None)
+        let config = self.get_inetstack_config()?;
+        let arp_yaml = Self::get_typed_option(config, inetstack_config::ARP_TABLE, |yaml| yaml.as_hash());
+
+        if arp_yaml.is_err() {
+            return Ok(None);
+        }
+
+        let arp_entries = arp_yaml?;
+        let mut table = HashMap::with_capacity(arp_entries.len());
+
+        for (mac_str_yaml, ip_str_yaml) in arp_entries {
+            let mac_str = mac_str_yaml
+                .as_str()
+                .ok_or_else(|| Fail::new(libc::EINVAL, "Invalid MAC address key in ARP table config"))?;
+
+            let mac = MacAddress::parse_canonical_str(mac_str)
+                .map_err(|_| Fail::new(libc::EINVAL, "Failed to parse MAC address in ARP table config"))?;
+
+            let ip_str = ip_str_yaml
+                .as_str()
+                .ok_or_else(|| Fail::new(libc::EINVAL, "Missing IP address value in ARP table config"))?;
+
+            let ip = ip_str.parse::<Ipv4Addr>().map_err(|e| {
+                let msg = format!("Failed to parse IP address in ARP table config: {:?}", e);
+                Fail::new(libc::EINVAL, &msg)
+            })?;
+
+            table.insert(ip, mac);
+        }
+
+        Ok(Some(table))
     }
 
     pub fn arp_cache_ttl(&self) -> Result<Duration, Fail> {
-        self.get_int_env_or_option(inetstack_config::ARP_CACHE_TTL, Self::get_inetstack_config)
-            .map(|ttl: u64| Duration::from_secs(ttl))
+        let ttl_secs = self.get_int_env_or_option(inetstack_config::ARP_CACHE_TTL, Self::get_inetstack_config)?;
+        Ok(Duration::from_secs(ttl_secs))
     }
 
     pub fn arp_request_timeout(&self) -> Result<Duration, Fail> {
-        self.get_int_env_or_option(inetstack_config::ARP_REQUEST_TIMEOUT, Self::get_inetstack_config)
-            .map(|timeout: u64| Duration::from_secs(timeout))
+        let timeout_secs =
+            self.get_int_env_or_option(inetstack_config::ARP_REQUEST_TIMEOUT, Self::get_inetstack_config)?;
+        Ok(Duration::from_secs(timeout_secs))
     }
 
     pub fn arp_request_retries(&self) -> Result<usize, Fail> {
