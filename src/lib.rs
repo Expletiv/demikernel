@@ -203,7 +203,7 @@ macro_rules! expect_ok {
 macro_rules! timer {
     ($name:expr) => {
         #[cfg(feature = "profiler")]
-        let _guard = $crate::perftools::profiler::PROFILER.with(|p| p.clone().sync_scope($name));
+        let _guard = $crate::perftools::profiler::PROFILER.with(|p| p.clone().create_and_enter_sync_scope($name));
     };
 }
 
@@ -213,7 +213,7 @@ macro_rules! async_timer {
     ($name:expr, $future:expr) => {
         async {
             std::pin::pin!($crate::perftools::profiler::AsyncScope::new(
-                $crate::perftools::profiler::PROFILER.with(|p| p.clone().get_or_create_scope($name)),
+                $name,
                 std::pin::pin!($future).as_mut()
             ))
             .await
@@ -233,7 +233,7 @@ macro_rules! async_timer {
 #[macro_export]
 macro_rules! coroutine_timer {
     ($name:expr, $future:expr) => {
-        Box::pin($crate::perftools::profiler::SharedProfiler::coroutine_scope($name, $future).fuse())
+        Box::pin($crate::perftools::profiler::coroutine_scope($name, $future).fuse())
     };
 }
 
