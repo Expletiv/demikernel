@@ -240,16 +240,16 @@ impl Simulation {
     fn run_syscall(&mut self, syscall: &SyscallEvent) -> Result<()> {
         info!("{:?}: {:?}", self.now, syscall);
         match &syscall.syscall {
-            DemikernelSyscall::Socket(args, ret) => self.run_socket_syscall(args, ret.clone())?,
-            DemikernelSyscall::Bind(args, ret) => self.run_bind_syscall(args, ret.clone())?,
-            DemikernelSyscall::Listen(args, ret) => self.run_listen_syscall(args, ret.clone())?,
-            DemikernelSyscall::Accept(args, fd) => self.run_accept_syscall(args, fd.clone())?,
-            DemikernelSyscall::Connect(args, ret) => self.run_connect_syscall(args, ret.clone())?,
-            DemikernelSyscall::Push(args, ret) => self.run_push_syscall(args, ret.clone())?,
-            DemikernelSyscall::PushTo(args, ret) => self.run_pushto_syscall(args, ret.clone())?,
-            DemikernelSyscall::Pop(args, ret) => self.run_pop_syscall(args, ret.clone())?,
-            DemikernelSyscall::Wait(args, ret) => self.run_wait_syscall(args, ret.clone())?,
-            DemikernelSyscall::Close(args, ret) => self.run_close_syscall(args, ret.clone())?,
+            DemikernelSyscall::Socket(args, ret) => self.run_socket_syscall(args, *ret)?,
+            DemikernelSyscall::Bind(args, ret) => self.run_bind_syscall(args, *ret)?,
+            DemikernelSyscall::Listen(args, ret) => self.run_listen_syscall(args, *ret)?,
+            DemikernelSyscall::Accept(args, fd) => self.run_accept_syscall(args, *fd)?,
+            DemikernelSyscall::Connect(args, ret) => self.run_connect_syscall(args, *ret)?,
+            DemikernelSyscall::Push(args, ret) => self.run_push_syscall(args, *ret)?,
+            DemikernelSyscall::PushTo(args, ret) => self.run_pushto_syscall(args, *ret)?,
+            DemikernelSyscall::Pop(args, ret) => self.run_pop_syscall(args, *ret)?,
+            DemikernelSyscall::Wait(args, ret) => self.run_wait_syscall(args, *ret)?,
+            DemikernelSyscall::Close(args, ret) => self.run_close_syscall(args, *ret)?,
             DemikernelSyscall::Unsupported => {
                 error!("Unsupported syscall");
             },
@@ -298,7 +298,7 @@ impl Simulation {
                         self.protocol = Some(IpProtocol::TCP);
                         Ok(())
                     },
-                    Err(err) if ret as i32 == err.errno => Ok(()),
+                    Err(err) if ret == err.errno => Ok(()),
                     _ => {
                         info!("run_socket_syscall(): ret={:?}", ret);
                         anyhow::bail!("unexpected return for socket syscall");
@@ -321,7 +321,7 @@ impl Simulation {
                         self.protocol = Some(IpProtocol::UDP);
                         Ok(())
                     },
-                    Err(err) if ret as i32 == err.errno => Ok(()),
+                    Err(err) if ret == err.errno => Ok(()),
                     _ => {
                         info!("run_socket_syscall(): ret={:?}", ret);
                         anyhow::bail!("unexpected return for socket syscall");
@@ -364,7 +364,7 @@ impl Simulation {
 
         match self.engine.tcp_bind(local_qd, local_bind_addr) {
             Ok(()) if ret == 0 => Ok(()),
-            Err(err) if ret as i32 == err.errno => Ok(()),
+            Err(err) if ret == err.errno => Ok(()),
             _ => {
                 info!("run_bind_syscall(): ret={:?}", ret);
                 anyhow::bail!("unexpected return for bind syscall");
@@ -400,7 +400,7 @@ impl Simulation {
 
         match self.engine.tcp_listen(local_qd, backlog) {
             Ok(()) if ret == 0 => Ok(()),
-            Err(err) if ret as i32 == err.errno => Ok(()),
+            Err(err) if ret == err.errno => Ok(()),
             _ => {
                 info!("run_listen_syscall(): ret={:?}", ret);
                 anyhow::bail!("unexpected return for listen syscall");
@@ -431,7 +431,7 @@ impl Simulation {
                 self.inflight.push_back(accept_qt);
                 Ok(())
             },
-            Err(err) if ret as i32 == err.errno => Ok(()),
+            Err(err) if ret == err.errno => Ok(()),
             _ => {
                 info!("run_accept_syscall(): ret={:?}", ret);
                 anyhow::bail!("unexpected return for accept syscall");
@@ -467,7 +467,7 @@ impl Simulation {
                 self.inflight.push_back(connect_qt);
                 Ok(())
             },
-            Err(err) if ret as i32 == err.errno => Ok(()),
+            Err(err) if ret == err.errno => Ok(()),
             _ => {
                 info!("run_accept_syscall(): ret={:?}", ret);
                 anyhow::bail!("unexpected return for connect syscall");
@@ -488,7 +488,7 @@ impl Simulation {
         let syscall_qd: QDesc = match args.qd {
             // 500 in the annotation will represent the local queue descriptor number because they are allocated
             // starting at 500.
-            Some(qd) if qd == 500 => match self.local_qd {
+            Some(500) => match self.local_qd {
                 Some((_, qd)) => qd,
                 None => {
                     info!("run_push_syscall(): ret={:?}", ret);
@@ -510,7 +510,7 @@ impl Simulation {
                 self.inflight.push_back(push_qt);
                 Ok(())
             },
-            Err(err) if ret as i32 == err.errno => Ok(()),
+            Err(err) if ret == err.errno => Ok(()),
             _ => {
                 info!("run_push_syscall(): ret={:?}", ret);
                 anyhow::bail!("unexpected return for push syscall");
@@ -520,7 +520,7 @@ impl Simulation {
 
     fn run_pop_syscall(&mut self, args: &PopArgs, ret: i32) -> Result<()> {
         let remote_qd: QDesc = match args.qd {
-            qd if qd == 500 => match self.local_qd {
+            500 => match self.local_qd {
                 Some((_, qd)) => qd,
                 None => {
                     info!("run_pop_syscall(): ret={:?}", ret);
@@ -542,7 +542,7 @@ impl Simulation {
                     self.inflight.push_back(pop_qt);
                     Ok(())
                 },
-                Err(err) if ret as i32 == err.errno => Ok(()),
+                Err(err) if ret == err.errno => Ok(()),
                 _ => {
                     info!("run_pop_syscall(): ret={:?}", ret);
                     anyhow::bail!("unexpected return for pop syscall");
@@ -553,7 +553,7 @@ impl Simulation {
                     self.inflight.push_back(pop_qt);
                     Ok(())
                 },
-                Err(err) if ret as i32 == err.errno => Ok(()),
+                Err(err) if ret == err.errno => Ok(()),
                 _ => {
                     info!("run_pop_syscall(): ret={:?}", ret);
                     anyhow::bail!("unexpected return for pop syscall");
@@ -591,7 +591,7 @@ impl Simulation {
                     info!("close completed as expected (qd={:?})", qd);
                     Ok(())
                 },
-                OperationResult::Failed(e) if e.errno == ret as i32 => {
+                OperationResult::Failed(e) if e.errno == ret => {
                     info!("operation failed as expected (qd={:?}, errno={:?})", qd, e.errno);
                     Ok(())
                 },
@@ -628,7 +628,7 @@ impl Simulation {
         };
 
         let remote_qd: QDesc = match args.qd {
-            Some(qd) if qd == 500 => match self.local_qd {
+            Some(500) => match self.local_qd {
                 Some((_, qd)) => qd,
                 None => {
                     info!("run_pushto_syscall(): ret={:?}", ret);
@@ -659,7 +659,7 @@ impl Simulation {
 
     fn run_close_syscall(&mut self, args: &CloseArgs, ret: i32) -> Result<()> {
         let qd: QDesc = match args.qd {
-            qd if qd == 500 => match self.local_qd {
+            500 => match self.local_qd {
                 Some((_, qd)) => qd,
                 None => {
                     info!("run_close_syscall(): ret={:?}", ret);
@@ -680,7 +680,7 @@ impl Simulation {
                 self.inflight.push_back(close_qt);
                 Ok(())
             },
-            Err(err) if ret as i32 == err.errno => Ok(()),
+            Err(err) if ret == err.errno => Ok(()),
             _ => {
                 error!("run_close_syscall(): ret={:?}", ret);
                 anyhow::bail!("unexpected return for close syscall");

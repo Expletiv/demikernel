@@ -195,11 +195,11 @@ mod tests {
 
         // All futures are inserted in the scheduler with notification flag set.
         // By polling once, our future should complete.
-        if let Some(_) = scheduler.poll_group_once(group_id, None).pop() {
-            Ok(())
-        } else {
+        if scheduler.poll_group_once(group_id, None).pop().is_none() {
             anyhow::bail!("task should have completed")
         }
+
+        Ok(())
     }
 
     #[test]
@@ -220,11 +220,11 @@ mod tests {
         crate::ensure_eq!(result.is_some(), false);
 
         // This shall make the future ready.
-        if let Some(_) = scheduler.poll_group_once(group_id, None).pop() {
-            Ok(())
-        } else {
+        if scheduler.poll_group_once(group_id, None).pop().is_none() {
             anyhow::bail!("task should have completed");
         }
+
+        Ok(())
     }
 
     #[test]
@@ -240,11 +240,11 @@ mod tests {
 
         // All futures are inserted in the scheduler with notification flag set.
         // By polling until the task completes, our future should complete.
-        if let Some(_) = scheduler.poll_group_until_unrunnable(group_id, None).pop() {
-            Ok(())
-        } else {
+        if scheduler.poll_group_until_unrunnable(group_id, None).pop().is_none() {
             anyhow::bail!("task should have completed")
         }
+
+        Ok(())
     }
 
     #[bench]
