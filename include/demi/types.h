@@ -29,7 +29,7 @@ extern "C"
 /**
  * @brief Maximum number of segments in a scatter-gather array.
  */
-#define DEMI_SGARRAY_MAXSIZE 1
+#define DEMI_SGARRAY_MAXSIZE 20
 
     /**
      * @brief An I/O queue token.
@@ -47,8 +47,9 @@ extern "C"
         typedef struct __attribute__((__packed__)) demi_sgaseg
 #endif
     {
-        void *sgaseg_buf;    /**< Underlying data.       */
-        uint32_t sgaseg_len; /**< Size in bytes of data. */
+        void *sgaseg_md;         /**< Reserved for Demikernel metadata.       */
+        void *data_buf_ptr;      /**< Underlying data.       */
+        uint32_t data_len_bytes; /**< Size in bytes of data. */
     } demi_sgaseg_t;
 #ifdef _WIN32
 #pragma pack(pop)
@@ -65,9 +66,8 @@ extern "C"
         typedef struct __attribute__((__packed__)) demi_sgarray
 #endif
     {
-        void *sga_buf;                                /**< Reserved.                                       */
         uint32_t sga_numsegs;                         /**< Number of segments in the scatter-gather array. */
-        demi_sgaseg_t sga_segs[DEMI_SGARRAY_MAXSIZE]; /**< Scatter-gather array segments.                  */
+        demi_sgaseg_t segments[DEMI_SGARRAY_MAXSIZE]; /**< Scatter-gather array segments.                  */
         struct sockaddr_in sga_addr;                  /**< Source address of scatter-gather array.         */
     } demi_sgarray_t;
 #ifdef _WIN32
@@ -148,8 +148,9 @@ extern "C"
         DemiLogLevel_Trace = 5,
     } demi_log_level_t;
 
-    // Logging callback. Arguments are: level, module name, module length, file name, file name length, line number, message, message length, 
-    typedef void (*demi_log_callback_t)(demi_log_level_t, const char*, uint32_t, const char*, uint32_t, uint32_t, const char*, uint32_t);
+    // Logging callback. Demikernel will call an external C function on each logged stat for inclusion into a
+    // performance tracking system.
+    typedef void (*demi_log_callback_t)(demi_log_level_t log_level, const char *module_name, uint32_t module_name_len_bytes, const char *file_name, uint32_t file_name_len_bytes, uint32_t line_number, const char *message, uint32_t message_len_bytes);
 
 /**
  * @brief Arguments for Demikernel.

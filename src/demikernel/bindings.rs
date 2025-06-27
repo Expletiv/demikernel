@@ -14,7 +14,7 @@ use crate::{
     runtime::{
         fail::Fail,
         logging::{self, CallbackLogWriter},
-        types::{demi_args_t, demi_qresult_t, demi_qtoken_t, demi_sgarray_t, demi_sgaseg_t},
+        types::{demi_args_t, demi_qresult_t, demi_qtoken_t, demi_sgarray_t},
         QToken,
     },
     SocketOption,
@@ -599,17 +599,7 @@ pub unsafe extern "C" fn demi_wait_next_n(
 pub unsafe extern "C" fn demi_sgaalloc(size: libc::size_t) -> demi_sgarray_t {
     trace!("demi_sgaalloc()");
 
-    let null_sga = {
-        demi_sgarray_t {
-            sga_buf: ptr::null_mut() as *mut _,
-            sga_numsegs: 0,
-            sga_segs: [demi_sgaseg_t {
-                sgaseg_buf: ptr::null_mut(),
-                sgaseg_len: 0,
-            }; 1],
-            sga_addr: unsafe { mem::zeroed() },
-        }
-    };
+    let null_sga = demi_sgarray_t::default();
 
     let ret = do_syscall(|libos| -> demi_sgarray_t {
         match libos.sgaalloc(size) {

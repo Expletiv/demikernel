@@ -45,14 +45,14 @@
  *====================================================================================================================*/
 
 // The following sizes are intentionally hardcoded.
-#define SGASEG_BUF_SIZE 8
-#define SGASEG_LEN_SIZE 4
-#define DEMI_SGASEG_T_SIZE (SGASEG_BUF_SIZE + SGASEG_LEN_SIZE)
-#define SGA_BUF_SIZE 8
+#define SGASEG_MD_SIZE 8
+#define data_buf_ptr_SIZE 8
+#define data_len_bytes_SIZE 4
+#define DEMI_SGASEG_T_SIZE (SGASEG_MD_SIZE + data_buf_ptr_SIZE + data_len_bytes_SIZE)
 #define SGA_NUMSEGS_SIZE 4
-#define SGA_SEGS_SIZE (DEMI_SGASEG_T_SIZE * DEMI_SGARRAY_MAXSIZE)
+#define segments_SIZE (DEMI_SGASEG_T_SIZE * DEMI_SGARRAY_MAXSIZE)
 #define SGA_ADDR_SIZE 16
-#define DEMI_SGARRAY_T_SIZE (SGA_BUF_SIZE + SGA_NUMSEGS_SIZE + SGA_SEGS_SIZE + SGA_ADDR_SIZE)
+#define DEMI_SGARRAY_T_SIZE (SGA_NUMSEGS_SIZE + segments_SIZE + SGA_ADDR_SIZE)
 #define QD_SIZE 4
 #define SADDR_SIZE 16
 #define DEMI_ACCEPT_RESULT_T_SIZE (QD_SIZE + SADDR_SIZE)

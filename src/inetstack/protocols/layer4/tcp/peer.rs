@@ -9,6 +9,7 @@ use crate::{
     demikernel::config::Config,
     inetstack::{
         config::TcpConfig,
+        consts::MAX_BATCH_SIZE_NUM_PACKETS,
         protocols::{
             layer3::SharedLayer3Endpoint,
             layer4::tcp::{header::TcpHeader, isn_generator::IsnGenerator, socket::SharedTcpSocket, SeqNumber},
@@ -24,6 +25,7 @@ use crate::{
         SharedDemiRuntime, SharedObject,
     },
 };
+use ::arrayvec::ArrayVec;
 use ::rand::{prelude::SmallRng, Rng, SeedableRng};
 
 use ::std::{
@@ -170,11 +172,13 @@ impl SharedTcpPeer {
     }
 
     /// Pushes immediately to the socket and returns the result asynchronously.
-    pub async fn push(&self, socket: &mut SharedTcpSocket, buf: &mut DemiBuffer) -> Result<(), Fail> {
-        // TODO: Remove this copy after merging with the transport trait.
+    pub async fn push(
+        &self,
+        socket: &mut SharedTcpSocket,
+        bufs: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>,
+    ) -> Result<(), Fail> {
         // Wait for push to complete.
-        socket.push(buf.clone()).await?;
-        buf.trim(buf.len())
+        socket.push(bufs).await
     }
 
     /// Sets up a coroutine for popping data from the socket.
@@ -182,11 +186,11 @@ impl SharedTcpPeer {
         &self,
         socket: &mut SharedTcpSocket,
         size: usize,
-    ) -> Result<(Option<SocketAddr>, DemiBuffer), Fail> {
+    ) -> Result<(Option<SocketAddr>, ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>), Fail> {
         // Grab the queue, make sure it hasn't been closed in the meantime.
         // This will bump the Rc refcount so the coroutine can have it's own reference to the shared queue data
         // structure and the SharedTcpQueue will not be freed until this coroutine finishes.
-        let incoming: DemiBuffer = socket.pop(Some(size)).await?;
+        let incoming: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS> = socket.pop(Some(size)).await?;
         Ok((None, incoming))
     }
 

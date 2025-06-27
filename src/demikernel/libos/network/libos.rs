@@ -19,11 +19,14 @@ use crate::{
             unwrap_socketaddr,
         },
         queue::{downcast_queue, IoQueue, OperationResult},
-        types::{demi_accept_result_t, demi_opcode_t, demi_qr_value_t, demi_qresult_t, demi_sgarray_t},
+        types::{
+            demi_accept_result_t, demi_opcode_t, demi_qr_value_t, demi_qresult_t, demi_sgarray_t, DEMI_SGARRAY_MAXLEN,
+        },
         QDesc, QToken, SharedDemiRuntime, SharedObject,
     },
     QType,
 };
+use ::arrayvec::ArrayVec;
 use ::futures::FutureExt;
 use ::socket2::{Domain, Protocol, Type};
 use ::std::{
@@ -300,16 +303,23 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
     /// coroutine that asynchronously runs the push and any synchronous multi-queue functionality before the push
     /// begins.
     pub fn push(&mut self, qd: QDesc, sga: &demi_sgarray_t) -> Result<QToken, Fail> {
-        let buf: DemiBuffer = clone_sgarray(sga)?;
-        if buf.is_empty() {
-            let cause: &'static str = "zero-length buffer";
+        let bufs = clone_sgarray(sga)?;
+        if bufs.is_empty() {
+            let cause = "zero-length list of buffers";
             warn!("push(): {}", cause);
-            return Err(Fail::new(libc::EINVAL, cause));
-        };
+            return Err(Fail::new(libc::EINVAL, &cause));
+        }
+        for buf in bufs.iter() {
+            if buf.is_empty() {
+                let cause = "zero-length buffer";
+                warn!("push(): {}", cause);
+                return Err(Fail::new(libc::EINVAL, &cause));
+            };
+        }
 
         let mut queue: SharedNetworkQueue<T> = self.get_shared_queue(&qd)?;
         let coroutine_constructor = || -> Result<QToken, Fail> {
-            let coroutine = Box::pin(self.clone().push_coroutine(qd, buf, None).fuse());
+            let coroutine = Box::pin(self.clone().push_coroutine(qd, bufs, None).fuse());
             self.runtime
                 .clone()
                 .insert_nonpolling_coroutine("ioc::network::libos::push", coroutine)
@@ -321,7 +331,12 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
     /// Asynchronous code to push [buf] to a SharedNetworkQueue and its underlying POSIX socket. This function returns a
     /// coroutine that runs asynchronously to push a queue and its underlying POSIX socket and performs any necessary
     /// multi-queue operations at the LibOS-level after the push succeeds or fails.
-    async fn push_coroutine(self, qd: QDesc, buf: DemiBuffer, addr: Option<SocketAddr>) -> (QDesc, OperationResult) {
+    async fn push_coroutine(
+        self,
+        qd: QDesc,
+        bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>,
+        addr: Option<SocketAddr>,
+    ) -> (QDesc, OperationResult) {
         // Grab the queue, make sure it hasn't been closed in the meantime.
         // This will bump the Rc refcount so the coroutine can have it's own reference to the shared queue data
         // structure and the SharedNetworkQueue will not be freed until this coroutine finishes.
@@ -330,7 +345,7 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
             Err(e) => return (qd, OperationResult::Failed(e)),
         };
         // Wait for push to complete.
-        match queue.push_coroutine(buf, addr).await {
+        match queue.push_coroutine(bufs, addr).await {
             Ok(()) => (qd, OperationResult::Push),
             Err(e) => {
                 warn!("push() qd={:?}: {:?}", qd, &e);
@@ -345,14 +360,14 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
     pub fn pushto(&mut self, qd: QDesc, sga: &demi_sgarray_t, remote: SocketAddr) -> Result<QToken, Fail> {
         trace!("pushto() qd={:?}", qd);
 
-        let buf: DemiBuffer = clone_sgarray(sga)?;
-        if buf.is_empty() {
-            return Err(Fail::new(libc::EINVAL, "zero-length buffer"));
+        let bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN> = clone_sgarray(sga)?;
+        if bufs.is_empty() {
+            return Err(Fail::new(libc::EINVAL, "zero buffers to send"));
         }
 
         let mut queue: SharedNetworkQueue<T> = self.get_shared_queue(&qd)?;
         let coroutine_constructor = || -> Result<QToken, Fail> {
-            let coroutine = Box::pin(self.clone().push_coroutine(qd, buf, Some(remote)).fuse());
+            let coroutine = Box::pin(self.clone().push_coroutine(qd, bufs, Some(remote)).fuse());
             self.runtime
                 .clone()
                 .insert_nonpolling_coroutine("ioc::network::libos::pushto", coroutine)
@@ -400,7 +415,7 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
                 qd,
                 OperationResult::Pop(Some(expect_ok!(unwrap_socketaddr(addr), "we only support IPv4")), buf),
             ),
-            Ok((None, buf)) => (qd, OperationResult::Pop(None, buf)),
+            Ok((None, bufs)) => (qd, OperationResult::Pop(None, bufs)),
             Err(e) => {
                 warn!("pop() qd={:?}: {:?}", qd, &e);
                 (qd, OperationResult::Failed(e))
@@ -477,7 +492,7 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
             OperationResult::Pop(addr, bytes) => match into_sgarray(bytes) {
                 Ok(mut sga) => {
                     if let Some(addr) = addr {
-                        sga.sga_addr = socketaddrv4_to_sockaddr(&addr);
+                        sga.sockaddr_src = socketaddrv4_to_sockaddr(&addr);
                     }
                     let qr_value: demi_qr_value_t = demi_qr_value_t { sga };
                     demi_qresult_t {

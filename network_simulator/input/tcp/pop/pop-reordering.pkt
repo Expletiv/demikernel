@@ -17,7 +17,7 @@
 +.0 wait(500, ...) = 0
 
 // Read data.
-+.1 read(501, ..., 1000) = 1000
++.1 read(501, ..., 2000) = 2000
 
 // Receive out of order data packet.
 +.1 TCP < P. seq 11001(1000) ack 12346 win 65535 <nop>
@@ -33,9 +33,3 @@
 
 // Send ACK packet
 +.6 TCP > . seq 12346(0) ack 12001 win 63535 <nop>
-
-// Read data.
-+.1 read(501, ..., 1000) = 1000
-
-// Data read.
-+.0 wait(501, ...) = 0

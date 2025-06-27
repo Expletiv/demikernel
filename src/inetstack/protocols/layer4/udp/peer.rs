@@ -97,7 +97,7 @@ impl SharedUdpPeer {
     pub async fn push(
         &mut self,
         socket: &mut SharedUdpSocket,
-        buf: &mut DemiBuffer,
+        buf: DemiBuffer,
         remote: Option<SocketAddr>,
     ) -> Result<(), Fail> {
         // TODO: Allocate ephemeral port if not bound.
@@ -107,9 +107,7 @@ impl SharedUdpPeer {
             error!("pushto(): {}", cause);
             return Err(Fail::new(libc::ENOTSUP, cause));
         }
-        // TODO: Remove copy once we actually use push coroutine for send.
-        socket.push(remote, buf.clone()).await?;
-        buf.trim(buf.len())
+        socket.push(remote, buf).await
     }
 
     /// Pops data from a socket.

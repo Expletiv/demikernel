@@ -13,19 +13,23 @@ use ::std::{
 use crate::{
     collections::{async_queue::AsyncQueue, async_value::SharedAsyncValue},
     expect_ok,
-    inetstack::protocols::{
-        layer3::SharedLayer3Endpoint,
-        layer4::tcp::{
-            established::{
-                ctrlblk::State, ControlBlock, Sender, MAX_WINDOW_SIZE_WITHOUT_SCALING, MAX_WINDOW_SIZE_WITH_SCALING,
+    inetstack::{
+        consts::MAX_BATCH_SIZE_NUM_PACKETS,
+        protocols::{
+            layer3::SharedLayer3Endpoint,
+            layer4::tcp::{
+                established::{
+                    ctrlblk::State, ControlBlock, Sender, MAX_WINDOW_SIZE_WITHOUT_SCALING, MAX_WINDOW_SIZE_WITH_SCALING,
+                },
+                header::TcpHeader,
+                SeqNumber,
             },
-            header::TcpHeader,
-            SeqNumber,
         },
     },
     runtime::{fail::Fail, memory::DemiBuffer},
 };
 
+use ::arrayvec::ArrayVec;
 use ::futures::never::Never;
 
 //======================================================================================================================
@@ -112,31 +116,43 @@ impl Receiver {
     }
 
     // Block until some data is received, up to an optional size.
-    pub async fn pop(&mut self, size: Option<usize>) -> Result<DemiBuffer, Fail> {
-        debug!("waiting on pop {:?}", size);
-        let buffer = if let Some(size) = size {
-            let mut buffer = self.pop_queue.pop(None).await?;
-            // Split the buffer if it's too big.
-            if buffer.len() > size {
-                buffer.split_front(size)?
-            } else {
-                buffer
+    pub async fn pop(
+        &mut self,
+        mut size: Option<usize>,
+    ) -> Result<ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>, Fail> {
+        let mut bufs = ArrayVec::new();
+        let mut buf = self.pop_queue.pop(None).await?;
+        loop {
+            if let Some(size) = size.as_mut() {
+                if buf.len() > *size {
+                    let remaining_buf = buf.split_front(*size)?;
+                    self.pop_queue.push_front(remaining_buf);
+                }
+                *size -= buf.len();
             }
-        } else {
-            self.pop_queue.pop(None).await?
-        };
+            match buf.len() {
+                len if len > 0 => {
+                    self.reader_next_seq_no = self.reader_next_seq_no + SeqNumber::from(buf.len() as u32);
+                },
+                _ => {
+                    debug!("found FIN");
+                    self.reader_next_seq_no = self.reader_next_seq_no + 1.into();
+                    bufs.push(buf);
 
-        match buffer.len() {
-            len if len > 0 => {
-                self.reader_next_seq_no = self.reader_next_seq_no + SeqNumber::from(buffer.len() as u32);
-            },
-            _ => {
-                debug!("found FIN");
-                self.reader_next_seq_no = self.reader_next_seq_no + 1.into();
-            },
+                    break;
+                },
+            }
+            bufs.push(buf);
+            match size {
+                Some(0) => break,
+                _ => match self.pop_queue.try_pop() {
+                    Some(next_buf) => buf = next_buf,
+                    None => break,
+                },
+            }
         }
 
-        Ok(buffer)
+        Ok(bufs)
     }
 
     // Receive a single incoming packet from layer3.

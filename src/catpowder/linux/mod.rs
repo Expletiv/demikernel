@@ -11,7 +11,7 @@ use crate::{
     catpowder::linux::rawsocket::{RawSocket, RawSocketAddr},
     demikernel::config::Config,
     expect_ok,
-    inetstack::consts::{MAX_HEADER_SIZE, RECEIVE_BATCH_SIZE},
+    inetstack::consts::{MAX_BATCH_SIZE_NUM_PACKETS, MAX_HEADER_SIZE},
     inetstack::protocols::{layer1::PhysicalLayer, layer2::Ethernet2Header},
     runtime::{
         fail::Fail,
@@ -35,6 +35,7 @@ use ::std::{
 pub struct LinuxRuntime {
     ifindex: i32,
     socket: SharedObject<RawSocket>,
+    max_body_size: usize,
 }
 
 //======================================================================================================================
@@ -52,9 +53,12 @@ impl LinuxRuntime {
         let sockaddr: RawSocketAddr = RawSocketAddr::new(ifindex, &mac_addr);
         socket.bind(&sockaddr)?;
 
+        let max_body_size = config.mtu()? as usize - MAX_HEADER_SIZE;
+
         Ok(Self {
             ifindex,
             socket: SharedObject::<RawSocket>::new(socket),
+            max_body_size,
         })
     }
 
@@ -71,6 +75,10 @@ impl LinuxRuntime {
 //======================================================================================================================
 
 impl DemiMemoryAllocator for LinuxRuntime {
+    fn get_max_buffer_size_bytes(&self) -> usize {
+        self.max_body_size
+    }
+
     fn allocate_demi_buffer(&self, size: usize) -> Result<DemiBuffer, Fail> {
         Ok(DemiBuffer::new_with_headroom(size as u16, MAX_HEADER_SIZE as u16))
     }
@@ -79,33 +87,36 @@ impl DemiMemoryAllocator for LinuxRuntime {
 impl Runtime for LinuxRuntime {}
 
 impl PhysicalLayer for LinuxRuntime {
-    fn transmit(&mut self, pkt: DemiBuffer) -> Result<(), Fail> {
-        // We clone the packet so as to not remove the ethernet header from the outgoing message.
-        let header = Ethernet2Header::parse_and_strip(&mut pkt.clone()).unwrap();
-        let dest_addr_arr: [u8; 6] = header.dst_addr().to_array();
-        let dest_sockaddr: RawSocketAddr = RawSocketAddr::new(self.ifindex, &dest_addr_arr);
+    fn transmit(&mut self, pkts: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) -> Result<(), Fail> {
+        for pkt in pkts {
+            // We clone the packet so as to not remove the ethernet header from the outgoing message.
+            let header = Ethernet2Header::parse_and_strip(&mut pkt.clone()).unwrap();
+            let dest_addr_arr: [u8; 6] = header.dst_addr().to_array();
+            let dest_sockaddr: RawSocketAddr = RawSocketAddr::new(self.ifindex, &dest_addr_arr);
 
-        match self.socket.sendto(&pkt, &dest_sockaddr) {
-            Ok(size) if size == pkt.len() => Ok(()),
-            Ok(size) => {
-                let cause = format!(
-                    "Incorrect number of bytes sent: packet_size={:?} sent={:?}",
-                    pkt.len(),
-                    size
-                );
-                warn!("{}", cause);
-                Err(Fail::new(libc::EAGAIN, &cause))
-            },
-            Err(e) => {
-                let cause = "send failed";
-                warn!("transmit(): {} {:?}", cause, e);
-                Err(Fail::new(libc::EIO, cause))
-            },
+            match self.socket.sendto(&pkt, &dest_sockaddr) {
+                Ok(size) if size == pkt.len() => (),
+                Ok(size) => {
+                    let cause = format!(
+                        "Incorrect number of bytes sent: packet_size={:?} sent={:?}",
+                        pkt.len(),
+                        size
+                    );
+                    warn!("{}", cause);
+                    return Err(Fail::new(libc::EAGAIN, &cause));
+                },
+                Err(e) => {
+                    let cause = "send failed";
+                    warn!("transmit(): {} {:?}", cause, e);
+                    return Err(Fail::new(libc::EIO, &cause));
+                },
+            }
         }
+        Ok(())
     }
 
     // TODO: This routine currently only tries to receive a single packet buffer, not a batch of them.
-    fn receive(&mut self) -> Result<ArrayVec<DemiBuffer, RECEIVE_BATCH_SIZE>, Fail> {
+    fn receive(&mut self) -> Result<ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>, Fail> {
         // TODO: This routine contains an extra copy of the entire incoming packet that could potentially be removed.
 
         // TODO: change this function to operate directly on DemiBuffer rather than on MaybeUninit<u8>.
@@ -114,7 +125,7 @@ impl PhysicalLayer for LinuxRuntime {
         let mut out: [MaybeUninit<u8>; limits::RECVBUF_SIZE_MAX] =
             [unsafe { MaybeUninit::uninit().assume_init() }; limits::RECVBUF_SIZE_MAX];
         if let Ok((nbytes, _origin_addr)) = self.socket.recvfrom(&mut out[..]) {
-            let mut ret: ArrayVec<DemiBuffer, RECEIVE_BATCH_SIZE> = ArrayVec::new();
+            let mut ret: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS> = ArrayVec::new();
             unsafe {
                 let bytes: [u8; limits::RECVBUF_SIZE_MAX] =
                     mem::transmute::<[MaybeUninit<u8>; limits::RECVBUF_SIZE_MAX], [u8; limits::RECVBUF_SIZE_MAX]>(out);

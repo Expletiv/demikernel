@@ -25,11 +25,14 @@ use crate::{
             socket::option::{SocketOption, TcpSocketOptions},
             transport::NetworkTransport,
         },
-        poll_yield, DemiRuntime, SharedDemiRuntime, SharedObject,
+        poll_yield,
+        types::DEMI_SGARRAY_MAXLEN,
+        DemiRuntime, SharedDemiRuntime, SharedObject,
     },
 };
+use ::arrayvec::ArrayVec;
 use ::futures::FutureExt;
-use std::{
+use ::std::{
     net::{SocketAddr, SocketAddrV4},
     pin::Pin,
 };
@@ -244,7 +247,7 @@ impl NetworkTransport for SharedCatnapTransport {
         &mut self,
         socket: &mut Self::SocketDescriptor,
         size: usize,
-    ) -> Result<(Option<SocketAddr>, DemiBuffer), Fail> {
+    ) -> Result<(Option<SocketAddr>, ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>), Fail> {
         let mut buffer = DemiBuffer::new(size as u16);
         unsafe {
             self.0.iocp.do_io(
@@ -265,7 +268,9 @@ impl NetworkTransport for SharedCatnapTransport {
             } else {
                 trace!("not data received");
             }
-            Ok((sockaddr, buffer))
+            let mut result = ArrayVec::new();
+            result.push(buffer);
+            Ok((sockaddr, result))
         })
     }
 
@@ -275,40 +280,40 @@ impl NetworkTransport for SharedCatnapTransport {
     async fn push(
         &mut self,
         socket: &mut Self::SocketDescriptor,
-        buf: &mut DemiBuffer,
+        bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>,
         addr: Option<SocketAddr>,
     ) -> Result<(), Fail> {
-        loop {
-            let result = unsafe {
-                self.0.iocp.do_io(
-                    SocketOpState::Push(buf.clone()),
-                    |state: Pin<&mut SocketOpState>, overlapped: *mut OVERLAPPED| -> Result<(), Fail> {
-                        socket.start_push(state, addr, overlapped)
-                    },
-                    |_: Pin<&mut SocketOpState>, result: OverlappedResult| -> Result<usize, Fail> {
-                        socket.finish_push(result)
-                    },
-                )
-            }
-            .await;
+        for mut buf in bufs {
+            while !buf.is_empty() {
+                let result: Result<usize, Fail> = unsafe {
+                    self.0.iocp.do_io(
+                        SocketOpState::Push(buf.clone()),
+                        |state: Pin<&mut SocketOpState>, overlapped: *mut OVERLAPPED| -> Result<(), Fail> {
+                            socket.start_push(state, addr, overlapped)
+                        },
+                        |_: Pin<&mut SocketOpState>, result: OverlappedResult| -> Result<usize, Fail> {
+                            socket.finish_push(result)
+                        },
+                    )
+                }
+                .await;
 
-            match result {
-                Ok(nbytes) => {
-                    trace!("data pushed ({:?}/{:?} bytes)", nbytes, buf.len());
-                    buf.adjust(nbytes)?;
-                    if buf.is_empty() {
-                        return Ok(());
-                    }
-                },
+                match result {
+                    Ok(nbytes) => {
+                        trace!("data pushed ({:?}/{:?} bytes)", nbytes, buf.len());
+                        buf.adjust(nbytes)?;
+                    },
 
-                Err(fail) => {
-                    if !DemiRuntime::should_retry(fail.errno) {
-                        let msg = format!("push failed: {}", fail.cause);
-                        return Err(Fail::new(fail.errno, msg.as_str()));
-                    }
-                },
+                    Err(fail) => {
+                        if !DemiRuntime::should_retry(fail.errno) {
+                            let message: String = format!("push failed: {}", fail.cause);
+                            return Err(Fail::new(fail.errno, message.as_str()));
+                        }
+                    },
+                }
             }
         }
+        Ok(())
     }
 
     fn get_runtime(&self) -> &SharedDemiRuntime {

@@ -10,10 +10,13 @@ use crate::{
     demikernel::{config::Config, libos::network::libos::SharedNetworkLibOS},
     inetstack::{test_helpers::SharedTestPhysicalLayer, types::MacAddress, SharedInetStack},
     runtime::{
-        fail::Fail, memory::into_sgarray, memory::DemiBuffer, OperationResult, QDesc, QToken, SharedDemiRuntime,
-        SharedObject,
+        fail::Fail,
+        memory::{into_sgarray, DemiBuffer},
+        types::DEMI_SGARRAY_MAXLEN,
+        OperationResult, QDesc, QToken, SharedDemiRuntime, SharedObject,
     },
 };
+use ::arrayvec::ArrayVec;
 use ::socket2::{Domain, Protocol, Type};
 use ::std::{
     collections::{HashMap, VecDeque},
@@ -90,7 +93,10 @@ impl SharedEngine {
     }
 
     pub fn udp_pushto(&mut self, qd: QDesc, buf: DemiBuffer, to: SocketAddrV4) -> Result<QToken, Fail> {
-        let data: demi_sgarray_t = into_sgarray(buf)?;
+        let mut bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN> = ArrayVec::new();
+        bufs.push(buf);
+        let data: demi_sgarray_t = into_sgarray(bufs)?;
+        debug!("sgarray");
         self.libos.pushto(qd, &data, to.into())
     }
 
@@ -131,7 +137,9 @@ impl SharedEngine {
     }
 
     pub fn tcp_push(&mut self, socket_fd: QDesc, buf: DemiBuffer) -> Result<QToken, Fail> {
-        let data: demi_sgarray_t = into_sgarray(buf)?;
+        let mut bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN> = ArrayVec::new();
+        bufs.push(buf);
+        let data: demi_sgarray_t = into_sgarray(bufs)?;
         self.libos.push(socket_fd, &data)
     }
 

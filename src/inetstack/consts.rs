@@ -5,7 +5,7 @@
 // Imports
 //======================================================================================================================
 
-use crate::inetstack::protocols::*;
+use crate::{inetstack::protocols::*, runtime::types::DEMI_SGARRAY_MAXLEN};
 use ::std::time::Duration;
 
 //======================================================================================================================
@@ -37,10 +37,10 @@ pub const TCP_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(3);
 /// TODO: Auto-Discovery MTU Size
 pub const DEFAULT_MSS: usize = 1450;
 
-/// Length of a [crate::memory::DemiBuffer] batch.
-///
-/// TODO: This Should be Generic
-pub const RECEIVE_BATCH_SIZE: usize = 4;
+/// Max batch size of packets for both transmit and receive up and down the stack. This is based on the
+/// DEMI_SGARRAY_MAXLEN and should always be bigger than that to receiving an entire sga worth of packets at once.
+pub const MAX_BATCH_SIZE_NUM_PACKETS: usize = 20;
+const _: () = debug_assert!(DEMI_SGARRAY_MAXLEN <= MAX_BATCH_SIZE_NUM_PACKETS);
 
 /// Maximum local and remote window scaling factor.
 /// See: RFC 1323, Section 2.3.

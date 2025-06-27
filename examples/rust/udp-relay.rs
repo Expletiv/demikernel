@@ -166,7 +166,7 @@ impl Application {
                 demi_opcode_t::DEMI_OPC_POP => {
                     let sga: demi_sgarray_t = unsafe { qr.qr_value.sga };
 
-                    num_bytes += sga.sga_segs[0].sgaseg_len as usize;
+                    num_bytes += sga.segments[0].data_len_bytes as usize;
 
                     let qt: QToken = match self.libos.pushto(self.sockqd, &sga, self.remote_socket_addr) {
                         Ok(qt) => qt,

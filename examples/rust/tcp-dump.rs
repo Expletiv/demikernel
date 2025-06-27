@@ -176,7 +176,7 @@ impl Application {
                     let sockqd: QDesc = qr.qr_qd.into();
                     let sga: demi_sgarray_t = unsafe { qr.qr_value.sga };
 
-                    num_bytes += sga.sga_segs[0].sgaseg_len as usize;
+                    num_bytes += sga.segments[0].data_len_bytes as usize;
 
                     if let Err(e) = self.libos.sgafree(sga) {
                         println!("ERROR: sgafree() failed (error={:?})", e);

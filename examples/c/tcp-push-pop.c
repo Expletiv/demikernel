@@ -52,8 +52,8 @@ static int pop_get_received_nbytes(int sockqd)
     assert(demi_pop(&tok, sockqd) == 0);
     assert(demi_wait(&res, tok, NULL) == 0);
     assert(res.qr_opcode == DEMI_OPC_POP);
-    assert(res.qr_value.sga.sga_segs != 0);
-    recv_bytes = res.qr_value.sga.sga_segs[0].sgaseg_len;
+    assert(res.qr_value.sga.segments != 0);
+    recv_bytes = res.qr_value.sga.segments[0].data_len_bytes;
     assert(demi_sgafree(&res.qr_value.sga) == 0);
     return recv_bytes;
 }
@@ -91,14 +91,14 @@ static int push_get_sent_nbytes(const int sockqd, size_t data_size)
     demi_sgarray_t sga = demi_sgaalloc(data_size);
     int sent_bytes = 0;
 
-    assert(sga.sga_segs != 0);
-    memset(sga.sga_segs[0].sgaseg_buf, 1, data_size);
+    assert(sga.segments != 0);
+    memset(sga.segments[0].data_buf_ptr, 1, data_size);
     // ToDo: demi_pushto() also must work for TCP on all LibOSes.
     // FIXME: https://github.com/microsoft/demikernel/issues/137
     assert(demi_push(&tok, sockqd, &sga) == 0);
     assert(demi_wait(&res, tok, NULL) == 0);
     assert(res.qr_opcode == DEMI_OPC_PUSH);
-    sent_bytes = sga.sga_segs[0].sgaseg_len;
+    sent_bytes = sga.segments[0].data_len_bytes;
     assert(demi_sgafree(&sga) == 0);
     return sent_bytes;
 }
@@ -161,9 +161,12 @@ int main(int argc, char *const argv[])
         };
         assert(demi_init(&args) == 0);
 
-        if (!strcmp(argv[1], "--server")) {
+        if (!strcmp(argv[1], "--server"))
+        {
             run_server(&addr, data_size, max_msgs);
-        } else if (!strcmp(argv[1], "--client")) {
+        }
+        else if (!strcmp(argv[1], "--client"))
+        {
             run_client(&addr, data_size, max_msgs);
         }
 

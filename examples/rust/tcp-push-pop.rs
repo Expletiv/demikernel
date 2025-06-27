@@ -40,11 +40,11 @@ fn mksga(libos: &mut LibOS, value: u8) -> Result<demi_sgarray_t> {
     };
 
     // Create pointer for filling the array.
-    let ptr: *mut u8 = sga.sga_segs[0].sgaseg_buf as *mut u8;
+    let ptr: *mut u8 = sga.segments[0].data_buf_ptr as *mut u8;
     // Ensure that allocated array has the requested size.
-    if sga.sga_segs[0].sgaseg_len as usize != BUF_SIZE_BYTES || ptr.is_null() {
+    if sga.segments[0].data_len_bytes as usize != BUF_SIZE_BYTES || ptr.is_null() {
         freesga(libos, sga);
-        let seglen: usize = sga.sga_segs[0].sgaseg_len as usize;
+        let seglen: usize = sga.segments[0].data_len_bytes as usize;
         anyhow::bail!(
             "failed to allocate scatter-gather array: expected size={:?} allocated size={:?}",
             BUF_SIZE_BYTES,
@@ -119,8 +119,8 @@ impl TcpServer {
             };
 
             // Sanity check received data.
-            let ptr: *mut u8 = sga.sga_segs[0].sgaseg_buf as *mut u8;
-            let bytes: usize = sga.sga_segs[0].sgaseg_len as usize;
+            let ptr: *mut u8 = sga.segments[0].data_buf_ptr as *mut u8;
+            let bytes: usize = sga.segments[0].data_len_bytes as usize;
             debug_assert_eq!(bytes, BUF_SIZE_BYTES);
             debug_assert!(ptr.is_aligned());
             debug_assert_eq!(ptr.is_null(), false);

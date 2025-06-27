@@ -5,10 +5,13 @@
 // Imports
 //======================================================================================================================
 
+use ::arrayvec::ArrayVec;
+
 use crate::{
     expect_some,
     inetstack::{
         config::TcpConfig,
+        consts::MAX_BATCH_SIZE_NUM_PACKETS,
         protocols::{
             layer3::SharedLayer3Endpoint,
             layer4::tcp::{
@@ -197,18 +200,18 @@ impl SharedTcpSocket {
         Ok(())
     }
 
-    pub async fn push(&mut self, buf: DemiBuffer) -> Result<(), Fail> {
+    pub async fn push(&mut self, bufs: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) -> Result<(), Fail> {
         // Send synchronously.
         match self.state {
             SocketState::Established(ref mut socket) => {
                 // Wait for ack.
-                socket.push(buf).await
+                socket.push(bufs).await
             },
             _ => unreachable!("State machine check should ensure that this socket is connected"),
         }
     }
 
-    pub async fn pop(&mut self, size: Option<usize>) -> Result<DemiBuffer, Fail> {
+    pub async fn pop(&mut self, size: Option<usize>) -> Result<ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>, Fail> {
         match self.state {
             SocketState::Established(ref mut socket) => socket.pop(size).await,
             _ => unreachable!("State machine check should ensure that this socket is connected"),

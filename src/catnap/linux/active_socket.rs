@@ -12,7 +12,7 @@ use crate::{
     runtime::{fail::Fail, limits, memory::DemiBuffer, DemiRuntime},
 };
 use ::socket2::Socket;
-use ::std::{cmp::min, mem::MaybeUninit, net::SocketAddr, slice};
+use ::std::{cmp::min, mem::MaybeUninit, net::SocketAddr, slice, time::Duration};
 
 //======================================================================================================================
 // Structures
@@ -153,18 +153,27 @@ impl ActiveSocketData {
         }
     }
 
-    /// Pops data from the socket. Blocks until some data is found but does not wait until the buffer has reached [size].
-    pub async fn pop(&mut self, size: usize) -> Result<(Option<SocketAddr>, DemiBuffer), Fail> {
-        let (addr, mut buffer) = self.recv_queue.pop(None).await??;
+    /// Pops data from the socket. Blocks until some data is found but does not wait until the buf has reached [size].
+    pub async fn pop(
+        &mut self,
+        size: usize,
+        timeout: Option<Duration>,
+    ) -> Result<(Option<SocketAddr>, DemiBuffer), Fail> {
+        let (addr, mut buffer) = self.recv_queue.pop(timeout).await??;
         // Figure out how much data we got.
         let bytes_read = min(buffer.len(), size);
         // Trim the buffer and leave for next read if we got more than expected.
         if let Ok(remainder) = buffer.split_back(bytes_read) {
             if !remainder.is_empty() {
-                self.recv_queue.push_front(Ok((addr, remainder)));
+                self.push_front(remainder, addr.clone());
             }
         }
         Ok((addr, buffer))
+    }
+
+    /// Puts data back into the socket queue.
+    pub fn push_front(&mut self, buf: DemiBuffer, addr: Option<SocketAddr>) {
+        self.recv_queue.push_front(Ok((addr, buf)));
     }
 
     pub fn get_socket(&self) -> &Socket {

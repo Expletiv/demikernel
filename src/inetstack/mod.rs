@@ -9,23 +9,25 @@
 use crate::inetstack::types::MacAddress;
 use crate::{
     demikernel::config::Config,
-    inetstack::{
-        consts::MAX_RECV_ITERS,
-        protocols::layer4::{Peer, Socket},
-    },
     runtime::{
         fail::Fail,
         memory::{DemiBuffer, DemiMemoryAllocator},
         network::{socket::option::SocketOption, transport::NetworkTransport},
-        poll_yield, SharedDemiRuntime, SharedObject,
+        poll_yield,
+        types::DEMI_SGARRAY_MAXLEN,
+        SharedDemiRuntime, SharedObject,
     },
 };
+use ::arrayvec::ArrayVec;
 use ::socket2::{Domain, Type};
 #[cfg(test)]
 use ::std::{collections::HashMap, hash::RandomState, net::Ipv4Addr, time::Duration};
+use consts::MAX_RECV_ITERS;
 use protocols::{
-    layer1::PhysicalLayer, layer2::SharedLayer2Endpoint, layer3::SharedLayer3Endpoint,
-    layer4::ephemeral::EphemeralPorts,
+    layer1::PhysicalLayer,
+    layer2::SharedLayer2Endpoint,
+    layer3::SharedLayer3Endpoint,
+    layer4::{ephemeral::EphemeralPorts, Peer, Socket},
 };
 
 use ::futures::FutureExt;
@@ -268,10 +270,10 @@ impl NetworkTransport for SharedInetStack {
     async fn push(
         &mut self,
         sd: &mut Self::SocketDescriptor,
-        buf: &mut DemiBuffer,
+        bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>,
         addr: Option<SocketAddr>,
     ) -> Result<(), Fail> {
-        self.layer4_endpoint.push(sd, buf, addr).await
+        self.layer4_endpoint.push(sd, bufs, addr).await
     }
 
     /// Create a pop request to write data from IO connection represented by `qd` into a buffer
@@ -280,7 +282,7 @@ impl NetworkTransport for SharedInetStack {
         &mut self,
         sd: &mut Self::SocketDescriptor,
         size: usize,
-    ) -> Result<(Option<SocketAddr>, DemiBuffer), Fail> {
+    ) -> Result<(Option<SocketAddr>, ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>), Fail> {
         self.layer4_endpoint.pop(sd, size).await
     }
 

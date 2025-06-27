@@ -5,7 +5,9 @@
 // Imports
 //======================================================================================================================
 
-use crate::runtime::{fail::Fail, memory::DemiBuffer, QDesc};
+use ::arrayvec::ArrayVec;
+
+use crate::runtime::{fail::Fail, memory::DemiBuffer, types::DEMI_SGARRAY_MAXLEN, QDesc};
 use ::std::{fmt, net::SocketAddrV4};
 
 //======================================================================================================================
@@ -17,7 +19,7 @@ pub enum OperationResult {
     Connect,
     Accept((QDesc, SocketAddrV4)),
     Push,
-    Pop(Option<SocketAddrV4>, DemiBuffer),
+    Pop(Option<SocketAddrV4>, ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>),
     Close,
     Failed(Fail),
 }

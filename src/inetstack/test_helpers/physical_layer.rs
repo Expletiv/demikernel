@@ -6,7 +6,7 @@
 //======================================================================================================================
 
 use crate::{
-    inetstack::consts::{MAX_HEADER_SIZE, RECEIVE_BATCH_SIZE},
+    inetstack::consts::{MAX_BATCH_SIZE_NUM_PACKETS, MAX_HEADER_SIZE},
     inetstack::protocols::layer1::PhysicalLayer,
     runtime::{
         fail::Fail,
@@ -79,22 +79,24 @@ impl SharedTestPhysicalLayer {
 //======================================================================================================================
 
 impl PhysicalLayer for SharedTestPhysicalLayer {
-    fn transmit(&mut self, pkt: DemiBuffer) -> Result<(), Fail> {
-        debug!(
-            "transmit frame: {:?} total packet size: {:?}",
-            self.outgoing.len(),
-            pkt.len()
-        );
+    fn transmit(&mut self, pkts: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) -> Result<(), Fail> {
+        for pkt in pkts {
+            debug!(
+                "transmit frame: {:?} total packet size: {:?}",
+                self.outgoing.len(),
+                pkt.len()
+            );
 
-        // The packet header and body must fit into whatever physical media we're transmitting over.
-        // For this test harness, we 2^16 bytes (u16::MAX) as our limit.
-        assert!(pkt.len() < u16::MAX as usize);
+            // The packet header and body must fit into whatever physical media we're transmitting over.
+            // For this test harness, we 2^16 bytes (u16::MAX) as our limit.
+            assert!(pkt.len() < u16::MAX as usize);
 
-        self.outgoing.push_back(pkt);
+            self.outgoing.push_back(pkt);
+        }
         Ok(())
     }
 
-    fn receive(&mut self) -> Result<ArrayVec<DemiBuffer, RECEIVE_BATCH_SIZE>, Fail> {
+    fn receive(&mut self) -> Result<ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>, Fail> {
         let mut out = ArrayVec::new();
         if let Some(buf) = self.incoming.pop_front() {
             out.push(buf);

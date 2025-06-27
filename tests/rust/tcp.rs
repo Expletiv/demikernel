@@ -10,16 +10,27 @@ mod test {
     //======================================================================================================================
     use crate::common::{libos::*, ALICE_CONFIG_PATH, ALICE_IP, BOB_CONFIG_PATH, BOB_IP, PORT_NUMBER};
     use ::anyhow::Result;
+    use ::arrayvec::ArrayVec;
     use ::crossbeam_channel::{Receiver, Sender};
     use ::demikernel::{
         demi_sgarray_t,
         inetstack::consts::MAX_HEADER_SIZE,
         runtime::{
             memory::{into_sgarray, DemiBuffer},
+            types::DEMI_SGARRAY_MAXLEN,
             OperationResult, QDesc, QToken,
         },
     };
     use ::socket2::{Domain, Protocol, Type};
+
+    use std::{
+        net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6},
+        sync::{Arc, Barrier},
+        thread::{self, JoinHandle},
+        time::Duration,
+    };
+    #[cfg(target_os = "windows")]
+    use windows::Win32::Networking::WinSock;
 
     #[cfg(target_os = "windows")]
     pub const AF_INET: i32 = windows::Win32::Networking::WinSock::AF_INET.0 as i32;
@@ -37,15 +48,6 @@ mod test {
     /// ensure most OS operations will complete.
     const SAFE_TIMEOUT: Duration = Duration::from_secs(5);
     const BAD_WAIT_TIMEOUT_MILLISECONDS: Duration = Duration::from_millis(1);
-
-    use std::{
-        net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV6},
-        sync::{Arc, Barrier},
-        thread::{self, JoinHandle},
-        time::Duration,
-    };
-    #[cfg(target_os = "windows")]
-    use windows::Win32::Networking::WinSock;
 
     //======================================================================================================================
     // Open/Close Passive Socket
@@ -986,11 +988,13 @@ mod test {
 
                     // Push bad data to socket.
                     let zero_bytes: [u8; 0] = [];
-                    let buf: DemiBuffer = match DemiBuffer::from_slice_with_headroom(&zero_bytes, MAX_HEADER_SIZE) {
+                    let buf = match DemiBuffer::from_slice_with_headroom(&zero_bytes, MAX_HEADER_SIZE) {
                         Ok(buf) => buf,
                         Err(e) => anyhow::bail!("(zero-byte) slice should fit in a DemiBuffer: {:?}", e),
                     };
-                    let data: demi_sgarray_t = into_sgarray(buf)?;
+                    let mut bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN> = ArrayVec::new();
+                    bufs.push(buf);
+                    let data: demi_sgarray_t = into_sgarray(bufs)?;
 
                     match libos.push(sockqd, &data) {
                         Ok(_) =>

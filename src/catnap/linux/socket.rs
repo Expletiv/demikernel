@@ -15,6 +15,7 @@ use ::std::{
     net::SocketAddr,
     ops::{Deref, DerefMut},
     os::fd::{AsRawFd, RawFd},
+    time::Duration,
 };
 
 //======================================================================================================================
@@ -115,10 +116,23 @@ impl SharedSocketData {
     }
 
     /// Pop some data on an active established connection.
-    pub async fn pop(&mut self, size: usize) -> Result<(Option<SocketAddr>, DemiBuffer), Fail> {
+    pub async fn pop(
+        &mut self,
+        size: usize,
+        timeout: Option<Duration>,
+    ) -> Result<(Option<SocketAddr>, DemiBuffer), Fail> {
         match self.deref_mut() {
             SocketData::Inactive(_) => unreachable!("Cannot read on an inactive socket"),
-            SocketData::Active(data) => data.pop(size).await,
+            SocketData::Active(data) => data.pop(size, timeout).await,
+            SocketData::Passive(_) => unreachable!("Cannot read on a passive socket"),
+        }
+    }
+
+    /// Put some data back into an active socket.
+    pub fn push_front(&mut self, buf: DemiBuffer, addr: Option<SocketAddr>) {
+        match self.deref_mut() {
+            SocketData::Inactive(_) => unreachable!("Cannot read on an inactive socket"),
+            SocketData::Active(data) => data.push_front(buf, addr),
             SocketData::Passive(_) => unreachable!("Cannot read on a passive socket"),
         }
     }

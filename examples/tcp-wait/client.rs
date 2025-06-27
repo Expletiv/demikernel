@@ -104,9 +104,9 @@ impl TcpClient {
             match self.libos.wait(pop_qt, Some(TIMEOUT_SECONDS)) {
                 Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_POP && qr.qr_ret == 0 => {
                     let sga: demi_sgarray_t = unsafe { qr.qr_value.sga };
-                    let sgaseg_len: u32 = sga.sga_segs[0].sgaseg_len;
+                    let data_len_bytes: u32 = sga.segments[0].data_len_bytes;
                     self.libos.sgafree(sga)?;
-                    if sgaseg_len == 0 {
+                    if data_len_bytes == 0 {
                         // In this testing program, the server does not terminate the connection before the client does.
                         // Therefore, pop() cannot successfully receive a zero-length scatter-gather array.
                         anyhow::bail!("pop() should not sucessfully terminate");
@@ -169,9 +169,9 @@ impl TcpClient {
             match self.libos.wait(pop_qt, Some(TIMEOUT_SECONDS)) {
                 Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_POP && qr.qr_ret == 0 => {
                     let sga: demi_sgarray_t = unsafe { qr.qr_value.sga };
-                    let sgaseg_len: u32 = sga.sga_segs[0].sgaseg_len;
+                    let data_len_bytes: u32 = sga.segments[0].data_len_bytes;
                     self.libos.sgafree(sga)?;
-                    if sgaseg_len == 0 {
+                    if data_len_bytes == 0 {
                         // In this testing program, the server does not terminate the connection before the client does.
                         // Therefore, pop() cannot successfully receive a zero-length scatter-gather array.
                         anyhow::bail!("pop() should not sucessfully terminate");
@@ -230,9 +230,9 @@ impl TcpClient {
             match self.libos.wait(pop_qt, Some(TIMEOUT_SECONDS)) {
                 Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_POP && qr.qr_ret == 0 => {
                     let sga: demi_sgarray_t = unsafe { qr.qr_value.sga };
-                    let sgaseg_len: u32 = sga.sga_segs[0].sgaseg_len;
+                    let data_len_bytes: u32 = sga.segments[0].data_len_bytes;
                     self.libos.sgafree(sga)?;
-                    if sgaseg_len == 0 {
+                    if data_len_bytes == 0 {
                         // In this testing program, the server does not terminate the connection before the client does.
                         // Therefore, pop() cannot successfully receive a zero-length scatter-gather array.
                         anyhow::bail!("pop() should not sucessfully terminate");
@@ -267,11 +267,11 @@ impl TcpClient {
         };
 
         // Ensure that scatter-gather array has the requested size.
-        assert!(sga.sga_segs[0].sgaseg_len as usize == size);
+        assert!(sga.segments[0].data_len_bytes as usize == size);
 
         // Fill in scatter-gather array.
-        let ptr: *mut u8 = sga.sga_segs[0].sgaseg_buf as *mut u8;
-        let len: usize = sga.sga_segs[0].sgaseg_len as usize;
+        let ptr: *mut u8 = sga.segments[0].data_buf_ptr as *mut u8;
+        let len: usize = sga.segments[0].data_len_bytes as usize;
         let slice: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, len) };
         slice.fill(value);
 

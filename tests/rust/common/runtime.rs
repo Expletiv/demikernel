@@ -8,7 +8,7 @@
 use ::arrayvec::ArrayVec;
 use ::demikernel::{
     inetstack::{
-        consts::{MAX_HEADER_SIZE, RECEIVE_BATCH_SIZE},
+        consts::{MAX_BATCH_SIZE_NUM_PACKETS, MAX_HEADER_SIZE},
         protocols::layer1::PhysicalLayer,
     },
     runtime::{
@@ -60,22 +60,24 @@ impl SharedDummyRuntime {
 
 /// Network Runtime Trait Implementation for Dummy Runtime
 impl PhysicalLayer for SharedDummyRuntime {
-    fn transmit(&mut self, pkt: DemiBuffer) -> Result<(), Fail> {
-        trace!("transmitting pkt: size={:?}", pkt.len());
-        // The packet header and body must fit into whatever physical media we're transmitting over.
-        // For this test harness, we 2^16 bytes (u16::MAX) as our limit.
-        assert!(pkt.len() < u16::MAX as usize);
+    fn transmit(&mut self, pkts: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) -> Result<(), Fail> {
+        for pkt in pkts {
+            trace!("transmitting pkt: size={:?}", pkt.len());
+            // The packet header and body must fit into whatever physical media we're transmitting over.
+            // For this test harness, we 2^16 bytes (u16::MAX) as our limit.
+            assert!(pkt.len() < u16::MAX as usize);
 
-        match self.outgoing.try_send(pkt) {
-            Ok(_) => Ok(()),
-            Err(_) => Err(Fail::new(
-                libc::EAGAIN,
-                "Could not push outgoing packet to the shared channel",
-            )),
+            if self.outgoing.try_send(pkt).is_err() {
+                return Err(Fail::new(
+                    libc::EAGAIN,
+                    "Could not push outgoing packet to the shared channel",
+                ));
+            }
         }
+        Ok(())
     }
 
-    fn receive(&mut self) -> Result<ArrayVec<DemiBuffer, RECEIVE_BATCH_SIZE>, Fail> {
+    fn receive(&mut self) -> Result<ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>, Fail> {
         let mut out = ArrayVec::new();
         if let Some(buf) = self.incoming.try_recv().ok() {
             trace!("receiving pkt: size={:?}", buf.len());

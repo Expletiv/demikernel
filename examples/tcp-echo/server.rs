@@ -179,17 +179,25 @@ impl TcpEchoServer {
 
     fn handle_pop(&mut self, qr: &demi_qresult_t) -> Result<()> {
         let qd: QDesc = qr.qr_qd.into();
-        let sga: demi_sgarray_t = unsafe { qr.qr_value.sga };
+        let mut sga: demi_sgarray_t = unsafe { qr.qr_value.sga };
 
-        // Check if we received any data.
-        if sga.sga_segs[0].sgaseg_len == 0 {
+        // Check if we received any data. If last sga element is 0 length, treat as EoF.
+        let closing = if sga.segments[sga.num_segments as usize - 1].data_len_bytes == 0 {
             println!("INFO: client closed connection (qd={:?})", qd);
+            sga.num_segments -= 1;
+            true
+        } else {
+            false
+        };
+        if sga.num_segments > 0 {
+            self.issue_push(qd, &sga)?;
+        }
+        if closing {
             self.handle_close(qd)?;
         } else {
-            self.issue_push(qd, &sga)?;
             // Pop more data.
             self.issue_pop(qd)?;
-        }
+        };
 
         self.libos.sgafree(sga)?;
         Ok(())

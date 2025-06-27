@@ -18,11 +18,7 @@ use crate::{
         mempool::MemoryPool,
     },
     demikernel::config::Config,
-    expect_some,
-    inetstack::{
-        consts::{MAX_HEADER_SIZE, RECEIVE_BATCH_SIZE},
-        protocols::layer1::PhysicalLayer,
-    },
+    inetstack::{consts::MAX_BATCH_SIZE_NUM_PACKETS, protocols::layer1::PhysicalLayer},
     runtime::{
         fail::Fail,
         libdpdk::{
@@ -320,43 +316,48 @@ impl DerefMut for SharedDPDKRuntime {
 }
 
 impl PhysicalLayer for SharedDPDKRuntime {
-    fn transmit(&mut self, pkt: DemiBuffer) -> Result<(), Fail> {
+    fn transmit(&mut self, pkts: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) -> Result<(), Fail> {
         timer!("catnip::runtime::transmit");
+
         // Grab the packet and copy it if necessary. In general, this copy will happen for small packets without
         // payloads because we allocate actual data-carrying application buffers from the DPDK pool.
-        let outgoing_pkt: DemiBuffer = match pkt {
-            buf if buf.is_dpdk_allocated() => buf,
-            buf if buf.len() <= self.max_body_size => {
-                let mut mbuf: DemiBuffer = self.dpdk_allocate_mbuf(buf.len())?;
-                debug_assert_eq!(buf.len(), mbuf.len());
-                mbuf.copy_from_slice(&buf);
+        let len: usize = pkts.len();
+        let mut mbufs: [*mut rte_mbuf; MAX_BATCH_SIZE_NUM_PACKETS] = unsafe { mem::zeroed() };
+        for (i, pkt) in pkts.into_iter().enumerate() {
+            mbufs[i] = match pkt {
+                buf if buf.is_dpdk_allocated() => buf
+                    .into_mbuf()
+                    .ok_or(Fail::new(libc::EINVAL, "should be able to convert into mbuf"))?,
+                buf if buf.len() <= self.max_body_size => {
+                    let mut mbuf: DemiBuffer = self.dpdk_allocate_mbuf(buf.len())?;
+                    debug_assert_eq!(buf.len(), mbuf.len());
+                    mbuf.copy_from_slice(&buf);
 
-                mbuf
-            },
-            buf => {
-                let cause: String = format!(
-                    "Cannot allocate a DPDK buffer that is large enough. Max size={:?} request size={:?}",
-                    self.max_body_size,
-                    buf.len()
-                );
-                warn!("{}", cause);
-                return Err(Fail::new(libc::EINVAL, &cause));
-            },
-        };
+                    mbuf.into_mbuf()
+                        .ok_or(Fail::new(libc::EINVAL, "should be able to convert into mbuf"))?
+                },
+                _ => {
+                    return Err(Fail::new(
+                        libc::EINVAL,
+                        "cannot allocate DPDK buffer that is big enough",
+                    ))
+                },
+            };
+        }
 
-        let mut mbuf_ptr: *mut rte_mbuf = expect_some!(outgoing_pkt.into_mbuf(), "mbuf cannot be empty");
-        let num_sent: u16 = unsafe { rte_eth_tx_burst(self.port_id, 0, &mut mbuf_ptr, 1) };
+        let num_sent: u16 = unsafe { rte_eth_tx_burst(self.port_id, 0, mbufs.as_mut_ptr(), len as u16) };
         debug_assert_eq!(num_sent, 1);
         Ok(())
     }
 
-    fn receive(&mut self) -> Result<ArrayVec<DemiBuffer, RECEIVE_BATCH_SIZE>, Fail> {
+    fn receive(&mut self) -> Result<ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>, Fail> {
         timer!("catnip::runtime::receive");
 
         let mut out = ArrayVec::new();
-        let mut packets: [*mut rte_mbuf; RECEIVE_BATCH_SIZE] = unsafe { mem::zeroed() };
-        let nb_rx = unsafe { rte_eth_rx_burst(self.port_id, 0, packets.as_mut_ptr(), RECEIVE_BATCH_SIZE as u16) };
-        assert!(nb_rx as usize <= RECEIVE_BATCH_SIZE);
+        let mut packets: [*mut rte_mbuf; MAX_BATCH_SIZE_NUM_PACKETS] = unsafe { mem::zeroed() };
+        let nb_rx =
+            unsafe { rte_eth_rx_burst(self.port_id, 0, packets.as_mut_ptr(), MAX_BATCH_SIZE_NUM_PACKETS as u16) };
+        assert!(nb_rx as usize <= MAX_BATCH_SIZE_NUM_PACKETS);
 
         {
             for &packet in &packets[..nb_rx as usize] {
@@ -371,13 +372,12 @@ impl PhysicalLayer for SharedDPDKRuntime {
 }
 
 impl DemiMemoryAllocator for SharedDPDKRuntime {
+    fn get_max_buffer_size_bytes(&self) -> usize {
+        self.max_body_size
+    }
+
     fn allocate_demi_buffer(&self, size: usize) -> Result<DemiBuffer, Fail> {
-        // First allocate the underlying DemiBuffer.
-        if size <= self.max_body_size {
-            self.dpdk_allocate_mbuf(size)
-        } else {
-            // Allocate a heap-managed buffer.
-            Ok(DemiBuffer::new_with_headroom(size as u16, MAX_HEADER_SIZE as u16))
-        }
+        debug_assert!(size < self.max_body_size);
+        self.dpdk_allocate_mbuf(size)
     }
 }
