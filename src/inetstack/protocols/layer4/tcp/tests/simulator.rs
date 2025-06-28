@@ -28,10 +28,10 @@ use ::anyhow::Result;
 use ::std::{
     collections::VecDeque,
     env,
-    fs::{DirEntry, File},
+    fs::File,
     io::{BufRead, BufReader},
     net::{Ipv4Addr, SocketAddrV4},
-    path::{self, Path, PathBuf},
+    path::{self},
     time::Instant,
 };
 use network_simulator::glue::{
@@ -46,29 +46,29 @@ use network_simulator::glue::{
 
 #[test]
 fn test_run_simulation() -> Result<()> {
-    let verbose: bool = false;
-    let local_mac: MacAddress = test_helpers::ALICE_MAC;
-    let remote_mac: MacAddress = test_helpers::BOB_MAC;
-    let local_port: u16 = 12345;
-    let local_ephemeral_port: u16 = 65535;
-    let local_ipv4: Ipv4Addr = test_helpers::ALICE_IPV4;
-    let remote_port: u16 = 23456;
-    let remote_ephemeral_port: u16 = 65535;
-    let remote_ipv4: Ipv4Addr = test_helpers::BOB_IPV4;
+    let verbose = false;
+    let local_mac = test_helpers::ALICE_MAC;
+    let remote_mac = test_helpers::BOB_MAC;
+    let local_port = 12345;
+    let local_ephemeral_port = 65535;
+    let local_ipv4 = test_helpers::ALICE_IPV4;
+    let remote_port = 23456;
+    let remote_ephemeral_port = 65535;
+    let remote_ipv4 = test_helpers::BOB_IPV4;
 
-    let input_path: String = match env::var("INPUT") {
-        Ok(config_path) => config_path,
+    let path = match env::var("INPUT") {
+        Ok(p) => p,
         Err(e) => {
-            let cause: String = format!("missing INPUT environment variable (err={:?})", e);
+            let cause = format!("missing INPUT environment variable (err={:?})", e);
             warn!("test_simulation(): {:?}", cause);
             anyhow::bail!(cause);
         },
     };
 
-    let tests: Vec<String> = collect_tests(&input_path)?;
+    let tests = collect_tests(&path)?;
 
     if tests.is_empty() {
-        let cause: String = format!("no tests found under {:?}", input_path);
+        let cause = format!("no tests found under {:?}", path);
         warn!("test_simulation(): {:?}", cause);
         return Ok(());
     }
@@ -76,7 +76,7 @@ fn test_run_simulation() -> Result<()> {
     for test in &tests {
         eprintln!("running test case: {:?}", test);
 
-        let mut simulation: Simulation = Simulation::new(
+        let mut simulation = Simulation::new(
             test,
             &local_mac,
             local_port,
@@ -94,37 +94,30 @@ fn test_run_simulation() -> Result<()> {
 }
 
 fn collect_tests(test_path: &str) -> Result<Vec<String>> {
-    let mut files: Vec<String> = Vec::new();
-    let path: &Path = path::Path::new(test_path);
+    let mut files = Vec::new();
+    let path = path::Path::new(test_path);
 
     if path.is_dir() {
-        let mut directories: Vec<String> = Vec::new();
-        directories.push(test_path.to_string());
+        let mut directories = vec![test_path.to_string()];
 
         // Recurse through all directories.
-        while !directories.is_empty() {
-            let directory: String = directories.pop().unwrap();
+        while let Some(directory) = directories.pop() {
             for entry in std::fs::read_dir(&directory)? {
-                let entry: DirEntry = entry?;
-                let path: PathBuf = entry.path();
+                let p = entry?.path();
+                let s = p.to_str().unwrap().to_string();
 
-                if path.is_dir() {
-                    // It is a directory, so add it to the list of directories to be processed.
-                    directories.push(path.to_str().unwrap().to_string());
-                } else {
-                    // It is not a directory, so just add the file to the list of files.
-                    let filename: String = path.to_str().unwrap().to_string();
-                    if filename.ends_with(".pkt") {
-                        files.push(filename);
-                    }
+                if p.is_file() && p.extension().is_some_and(|ext| ext == "pkt") {
+                    files.push(s);
+                } else if p.is_dir() {
+                    directories.push(s);
                 }
             }
         }
         files.sort();
     } else {
         // It is not a directory, so just add the file.
-        let filename: String = path.to_str().unwrap().to_string();
-        files.push(filename);
+        let fname = path.to_str().unwrap().to_string();
+        files.push(fname);
     }
     Ok(files)
 }
@@ -161,15 +154,16 @@ impl Simulation {
         remote_ephemeral_port: u16,
         remote_ipv4: &Ipv4Addr,
     ) -> Result<Simulation> {
-        let now: Instant = Instant::now();
+        let now = Instant::now();
 
-        let test_rig: SharedTestPhysicalLayer = SharedTestPhysicalLayer::new(now);
-        let local: SharedEngine = SharedEngine::new(test_helpers::ALICE_CONFIG_PATH, test_rig, now)?;
+        let test_rig = SharedTestPhysicalLayer::new(now);
+        let local = SharedEngine::new(test_helpers::ALICE_CONFIG_PATH, test_rig, now)?;
 
         info!("Local: sockaddr={:?}, macaddr={:?}", local_ipv4, local_mac);
         info!("Remote: sockaddr={:?}, macaddr={:?}", remote_ipv4, remote_mac);
 
-        let lines: Vec<String> = Self::read_input_file(filename)?;
+        let lines = Self::read_input_file(filename)?;
+
         Ok(Simulation {
             protocol: None,
             local_mac: *local_mac,
@@ -188,14 +182,11 @@ impl Simulation {
     }
 
     fn read_input_file(filename: &str) -> Result<Vec<String>> {
-        let mut lines: Vec<String> = Vec::new();
-        let file: File = File::open(filename)?;
-        let reader: BufReader<File> = BufReader::new(file);
+        let reader = BufReader::new(File::open(filename)?);
+        let mut lines = Vec::new();
 
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                lines.push(line);
-            }
+        for line in reader.lines().map_while(Result::ok) {
+            lines.push(line);
         }
 
         Ok(lines)
@@ -213,10 +204,10 @@ impl Simulation {
         }
 
         // Ensure that there are no more events to be processed.
-        let frames: VecDeque<DemiBuffer> = self.engine.pop_expected_frames(0);
+        let frames = self.engine.pop_expected_frames(0);
         if !frames.is_empty() {
-            for frame in &frames {
-                info!("run(): {:?}", frame);
+            for f in &frames {
+                info!("run(): {:?}", f);
             }
             anyhow::bail!("run(): unexpected outgoing frames");
         }
@@ -275,19 +266,16 @@ impl Simulation {
     }
 
     fn run_socket_syscall(&mut self, args: &SocketArgs, ret: i32) -> Result<()> {
-        // Check for unsupported socket domain.
         if args.domain != SocketDomain::AF_INET {
-            let cause: String = format!("unsupported domain socket domain (domain={:?})", args.domain);
+            let cause = format!("unsupported domain socket domain (domain={:?})", args.domain);
             info!("run_socket_syscall(): {:?}", cause);
             anyhow::bail!(cause);
         }
 
         match args.typ {
-            // TCP Socket
             SocketType::SOCK_STREAM => {
-                // Check for unsupported socket protocol
                 if args.protocol != SocketProtocol::IPPROTO_TCP {
-                    let cause: String = format!("unsupported socket protocol (protocol={:?})", args.protocol);
+                    let cause = format!("unsupported socket protocol (protocol={:?})", args.protocol);
                     info!("run_socket_syscall(): {:?}", cause);
                     anyhow::bail!(cause);
                 }
@@ -305,11 +293,9 @@ impl Simulation {
                     },
                 }
             },
-            // UDP Socket
             SocketType::SOCK_DGRAM => {
-                // Check for unsupported socket protocol
                 if args.protocol != SocketProtocol::IPPROTO_UDP {
-                    let cause: String = format!("unsupported socket protocol (protocol={:?})", args.protocol);
+                    let cause = format!("unsupported socket protocol (protocol={:?})", args.protocol);
                     info!("run_socket_syscall(): {:?}", cause);
                     anyhow::bail!(cause);
                 }
@@ -332,7 +318,7 @@ impl Simulation {
     }
 
     fn run_bind_syscall(&mut self, args: &BindArgs, ret: i32) -> Result<()> {
-        let local_bind_addr: SocketAddrV4 = match args.addr {
+        let local_bind_addr = match args.addr {
             None => {
                 self.local_sockaddr.set_port(self.local_port);
                 self.local_sockaddr
@@ -340,23 +326,23 @@ impl Simulation {
 
             // Custom bind address is not supported.
             Some(addr) => {
-                let cause: String = format!("unsupported bind address (addr={:?})", addr);
+                let cause = format!("unsupported bind address (addr={:?})", addr);
                 info!("run_bind_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
         };
 
-        let local_qd: QDesc = match args.qd {
+        let local_qd = match args.qd {
             Some(local_fd) => match self.local_qd {
                 Some((fd, qd)) if fd == local_fd => qd,
                 _ => {
-                    let cause: &'static str = "local queue descriptor mismatch";
+                    let cause = "local queue descriptor mismatch";
                     info!("run_bind_syscall(): {:?}", cause);
                     anyhow::bail!(cause);
                 },
             },
             None => {
-                let cause: &'static str = "local queue descriptor must have been previously assigned";
+                let cause = "local queue descriptor must have been previously assigned";
                 info!("run_bind_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -373,26 +359,26 @@ impl Simulation {
     }
 
     fn run_listen_syscall(&mut self, args: &ListenArgs, ret: i32) -> Result<()> {
-        let backlog: usize = match args.backlog {
-            Some(backlog) => backlog,
+        let backlog = match args.backlog {
+            Some(b) => b,
             None => {
-                let cause: &'static str = "backlog length must be informed";
+                let cause = "backlog length must be informed";
                 info!("run_listen_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
         };
 
-        let local_qd: QDesc = match args.qd {
+        let local_qd = match args.qd {
             Some(local_fd) => match self.local_qd {
                 Some((fd, qd)) if fd == local_fd => qd,
                 _ => {
-                    let cause: &'static str = "local queue descriptor mismatch";
+                    let cause = "local queue descriptor mismatch";
                     info!("run_listen_syscall(): {:?}", cause);
                     anyhow::bail!(cause);
                 },
             },
             None => {
-                let cause: &'static str = "local queue descriptor must have been previously assigned";
+                let cause = "local queue descriptor must have been previously assigned";
                 info!("run_listen_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -409,17 +395,17 @@ impl Simulation {
     }
 
     fn run_accept_syscall(&mut self, args: &AcceptArgs, ret: i32) -> Result<()> {
-        let local_qd: QDesc = match args.qd {
+        let local_qd = match args.qd {
             Some(local_fd) => match self.local_qd {
                 Some((fd, qd)) if fd == local_fd => qd,
                 _ => {
-                    let cause: &'static str = "local queue descriptor mismatch";
+                    let cause = "local queue descriptor mismatch";
                     info!("run_accept_syscall(): {:?}", cause);
                     anyhow::bail!(cause);
                 },
             },
             None => {
-                let cause: &'static str = "local queue descriptor must have been previously assigned";
+                let cause = "local queue descriptor must have been previously assigned";
                 info!("run_accept_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -440,23 +426,23 @@ impl Simulation {
     }
 
     fn run_connect_syscall(&mut self, args: &ConnectArgs, ret: i32) -> Result<()> {
-        let local_qd: QDesc = match self.local_qd {
+        let local_qd = match self.local_qd {
             Some((_, qd)) => qd,
             None => {
-                let cause: &'static str = "local queue descriptor must have been previously assigned";
+                let cause = "local queue descriptor must have been previously assigned";
                 info!("run_connect_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
         };
 
-        let remote_addr: SocketAddrV4 = match args.addr {
+        let remote_addr = match args.addr {
             None => {
                 self.remote_sockaddr = SocketAddrV4::new(*self.remote_sockaddr.ip(), self.remote_port);
                 self.remote_sockaddr
             },
             Some(addr) => {
                 // Unsupported remote address.
-                let cause: String = format!("unsupported remote address (addr={:?})", addr);
+                let cause = format!("unsupported remote address (addr={:?})", addr);
                 info!("run_connect_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -476,16 +462,16 @@ impl Simulation {
     }
 
     fn run_push_syscall(&mut self, args: &PushArgs, ret: i32) -> Result<()> {
-        let buf_len: usize = match args.len {
-            Some(len) => len.try_into()?,
+        let buffer_length = match args.len {
+            Some(l) => l.try_into()?,
             None => {
-                let cause: &'static str = "buffer length must be informed";
+                let cause = "buffer length must be informed";
                 info!("run_push_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
         };
 
-        let syscall_qd: QDesc = match args.qd {
+        let syscall_qd = match args.qd {
             // 500 in the annotation will represent the local queue descriptor number because they are allocated
             // starting at 500.
             Some(500) => match self.local_qd {
@@ -504,8 +490,8 @@ impl Simulation {
             },
         };
 
-        let buf: DemiBuffer = Self::prepare_dummy_buffer(buf_len, None);
-        match self.engine.tcp_push(syscall_qd, buf) {
+        let buffer = Self::prepare_dummy_buffer(buffer_length, None);
+        match self.engine.tcp_push(syscall_qd, buffer) {
             Ok(push_qt) => {
                 self.inflight.push_back(push_qt);
                 Ok(())
@@ -519,7 +505,7 @@ impl Simulation {
     }
 
     fn run_pop_syscall(&mut self, args: &PopArgs, ret: i32) -> Result<()> {
-        let remote_qd: QDesc = match args.qd {
+        let remote_qd = match args.qd {
             500 => match self.local_qd {
                 Some((_, qd)) => qd,
                 None => {
@@ -560,7 +546,7 @@ impl Simulation {
                 },
             },
             _ => {
-                let cause: &'static str = "protocol must have been previously assigned";
+                let cause = "protocol must have been previously assigned";
                 info!("run_pop_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
@@ -605,29 +591,29 @@ impl Simulation {
     }
 
     fn run_pushto_syscall(&mut self, args: &PushToArgs, ret: i32) -> Result<()> {
-        let buf_len: usize = match args.len {
+        let buffer_length = match args.len {
             Some(len) => len.try_into()?,
             None => {
-                let cause: &'static str = "buffer length must be informed";
+                let cause = "buffer length must be informed";
                 info!("run_pushto_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
         };
 
-        let remote_addr: SocketAddrV4 = match args.addr {
+        let remote_addr = match args.addr {
             None => {
                 self.remote_sockaddr = SocketAddrV4::new(*self.remote_sockaddr.ip(), self.remote_port);
                 self.remote_sockaddr
             },
             Some(addr) => {
                 // Unsupported remote address.
-                let cause: String = format!("unsupported remote address (addr={:?})", addr);
+                let cause = format!("unsupported remote address (addr={:?})", addr);
                 info!("run_pushto_syscall(): {:?}", cause);
                 anyhow::bail!(cause);
             },
         };
 
-        let remote_qd: QDesc = match args.qd {
+        let remote_qd = match args.qd {
             Some(500) => match self.local_qd {
                 Some((_, qd)) => qd,
                 None => {
@@ -644,8 +630,8 @@ impl Simulation {
             },
         };
 
-        let buf: DemiBuffer = Self::prepare_dummy_buffer(buf_len, None);
-        match self.engine.udp_pushto(remote_qd, buf, remote_addr) {
+        let buffer = Self::prepare_dummy_buffer(buffer_length, None);
+        match self.engine.udp_pushto(remote_qd, buffer, remote_addr) {
             Ok(push_qt) => {
                 self.inflight.push_back(push_qt);
                 Ok(())
@@ -658,7 +644,7 @@ impl Simulation {
     }
 
     fn run_close_syscall(&mut self, args: &CloseArgs, ret: i32) -> Result<()> {
-        let qd: QDesc = match args.qd {
+        let qd = match args.qd {
             500 => match self.local_qd {
                 Some((_, qd)) => qd,
                 None => {
@@ -689,31 +675,30 @@ impl Simulation {
     }
 
     fn build_tcp_options(&self, options: &Vec<TcpOption>) -> ([TcpOptions2; MAX_TCP_OPTIONS], usize) {
-        let mut option_list: Vec<TcpOptions2> = Vec::new();
+        let mut new_options = Vec::new();
 
-        // Convert options.
-        for option in options {
-            match option {
-                TcpOption::Noop => option_list.push(TcpOptions2::NoOperation),
-                TcpOption::Mss(mss) => option_list.push(TcpOptions2::MaximumSegmentSize(*mss)),
-                TcpOption::WindowScale(wscale) => option_list.push(TcpOptions2::WindowScale(*wscale)),
-                TcpOption::SackOk => option_list.push(TcpOptions2::SelectiveAcknowlegementPermitted),
-                TcpOption::Timestamp(sender, echo) => option_list.push(TcpOptions2::Timestamp {
+        for o in options {
+            match o {
+                TcpOption::Noop => new_options.push(TcpOptions2::NoOperation),
+                TcpOption::Mss(mss) => new_options.push(TcpOptions2::MaximumSegmentSize(*mss)),
+                TcpOption::WindowScale(wscale) => new_options.push(TcpOptions2::WindowScale(*wscale)),
+                TcpOption::SackOk => new_options.push(TcpOptions2::SelectiveAcknowlegementPermitted),
+                TcpOption::Timestamp(sender, echo) => new_options.push(TcpOptions2::Timestamp {
                     sender_timestamp: *sender,
                     echo_timestamp: *echo,
                 }),
-                TcpOption::EndOfOptions => option_list.push(TcpOptions2::EndOfOptionsList),
+                TcpOption::EndOfOptions => new_options.push(TcpOptions2::EndOfOptionsList),
             }
         }
 
-        let num_options: usize = option_list.len();
+        let num_options = new_options.len();
 
         // Pad options list.
-        while option_list.len() < MAX_TCP_OPTIONS {
-            option_list.push(TcpOptions2::NoOperation);
+        while new_options.len() < MAX_TCP_OPTIONS {
+            new_options.push(TcpOptions2::NoOperation);
         }
 
-        (option_list.try_into().unwrap(), num_options)
+        (new_options.try_into().unwrap(), num_options)
     }
 
     fn build_ethernet2_header(&self) -> Ethernet2Header {
@@ -732,101 +717,95 @@ impl Simulation {
         Ipv4Header::new(src_addr, dst_addr, protocol)
     }
 
-    fn build_tcp_header(&self, tcp_packet: &TcpPacket) -> TcpHeader {
-        let (option_list, num_options): ([TcpOptions2; MAX_TCP_OPTIONS], usize) =
-            self.build_tcp_options(&tcp_packet.options);
-
+    fn build_tcp_header(&self, packet: &TcpPacket) -> TcpHeader {
+        let (tcp_options, num_options) = self.build_tcp_options(&packet.options);
         let (src_port, dst_port) = { (self.remote_port, self.local_sockaddr.port()) };
-
-        let ack_num = match tcp_packet.ack {
-            Some(ack_num) => ack_num,
-            None => 0,
-        };
+        let ack_num = packet.ack.unwrap_or(0);
 
         TcpHeader {
             src_port,
             dst_port,
-            seq_num: tcp_packet.seqnum.seq.into(),
+            seq_num: packet.seqnum.seq.into(),
             ack_num: ack_num.into(),
             ns: false,
-            cwr: tcp_packet.flags.cwr,
-            ece: tcp_packet.flags.ece,
-            urg: tcp_packet.flags.urg,
-            ack: tcp_packet.flags.ack,
-            psh: tcp_packet.flags.psh,
-            rst: tcp_packet.flags.rst,
-            syn: tcp_packet.flags.syn,
-            fin: tcp_packet.flags.fin,
-            window_size: tcp_packet.win.unwrap() as u16,
+            cwr: packet.flags.cwr,
+            ece: packet.flags.ece,
+            urg: packet.flags.urg,
+            ack: packet.flags.ack,
+            psh: packet.flags.psh,
+            rst: packet.flags.rst,
+            syn: packet.flags.syn,
+            fin: packet.flags.fin,
+            window_size: packet.win.unwrap() as u16,
             urgent_pointer: 0,
             num_options,
-            option_list,
+            option_list: tcp_options,
         }
     }
 
-    /// Builds a UDP header.
     fn build_udp_header(&self, _udp_packet: &UdpPacket) -> UdpHeader {
-        let (src_port, dest_port): (u16, u16) = { (self.remote_port, self.local_sockaddr.port()) };
-
+        let (src_port, dest_port) = { (self.remote_port, self.local_sockaddr.port()) };
         UdpHeader::new(src_port, dest_port)
     }
 
     fn build_tcp_segment(&self, tcp_packet: &TcpPacket) -> DemiBuffer {
-        let tcp_hdr: TcpHeader = self.build_tcp_header(tcp_packet);
-        let mut pkt: DemiBuffer = if tcp_packet.seqnum.win > 0 {
+        let header = self.build_tcp_header(tcp_packet);
+        let mut buffer = if tcp_packet.seqnum.win > 0 {
             Self::prepare_dummy_buffer(tcp_packet.seqnum.win as usize, None)
         } else {
             DemiBuffer::new_with_headroom(0, MAX_HEADER_SIZE as u16)
         };
-        tcp_hdr.serialize_and_attach(&mut pkt, self.remote_sockaddr.ip(), self.local_sockaddr.ip(), false);
-        self.prepend_ipv4_header(IpProtocol::TCP, &mut pkt);
-        self.prepend_ethernet_header(&mut pkt);
-        pkt
+
+        header.serialize_and_attach(&mut buffer, self.remote_sockaddr.ip(), self.local_sockaddr.ip(), false);
+        self.prepend_ipv4_header(IpProtocol::TCP, &mut buffer);
+        self.prepend_ethernet_header(&mut buffer);
+        buffer
     }
 
     fn build_udp_datagram(&self, udp_packet: &UdpPacket) -> DemiBuffer {
-        let udp_hdr: UdpHeader = self.build_udp_header(udp_packet);
-        let mut pkt: DemiBuffer = Self::prepare_dummy_buffer(udp_packet.len as usize, None);
+        let header = self.build_udp_header(udp_packet);
+        let mut buffer = Self::prepare_dummy_buffer(udp_packet.len as usize, None);
+
         // This is an incoming packet, so the source is the remote address and the destination is the local address.
-        udp_hdr.serialize_and_attach(&mut pkt, self.remote_sockaddr.ip(), self.local_sockaddr.ip(), false);
-        self.prepend_ipv4_header(IpProtocol::UDP, &mut pkt);
-        self.prepend_ethernet_header(&mut pkt);
-        pkt
+        header.serialize_and_attach(&mut buffer, self.remote_sockaddr.ip(), self.local_sockaddr.ip(), false);
+        self.prepend_ipv4_header(IpProtocol::UDP, &mut buffer);
+        self.prepend_ethernet_header(&mut buffer);
+        buffer
     }
 
-    fn prepend_ethernet_header(&self, pkt: &mut DemiBuffer) {
-        let ethernet2_hdr: Ethernet2Header = self.build_ethernet2_header();
-        ethernet2_hdr.serialize_and_attach(pkt);
+    fn prepend_ethernet_header(&self, buffer: &mut DemiBuffer) {
+        let header = self.build_ethernet2_header();
+        header.serialize_and_attach(buffer);
     }
 
     fn prepend_ipv4_header(&self, ip_protocol: IpProtocol, pkt: &mut DemiBuffer) {
-        let ipv4_hdr: Ipv4Header = self.build_ipv4_header(ip_protocol);
-        ipv4_hdr.serialize_and_attach(pkt);
+        let header = self.build_ipv4_header(ip_protocol);
+        header.serialize_and_attach(pkt);
     }
 
     fn run_incoming_packet(&mut self, tcp_packet: &TcpPacket) -> Result<()> {
-        let buf: DemiBuffer = self.build_tcp_segment(tcp_packet);
-        self.engine.push_frame(buf);
+        let buffer = self.build_tcp_segment(tcp_packet);
+        self.engine.push_frame(buffer);
         Ok(())
     }
 
     fn run_incoming_udp_packet(&mut self, udp_packet: &UdpPacket) -> Result<()> {
-        let buf: DemiBuffer = self.build_udp_datagram(udp_packet);
-        self.engine.push_frame(buf);
+        let buffer = self.build_udp_datagram(udp_packet);
+        self.engine.push_frame(buffer);
         Ok(())
     }
 
-    fn check_ethernet2_header(&self, eth2_header: &Ethernet2Header) -> Result<()> {
-        ensure_eq!(eth2_header.src_addr(), self.local_mac);
-        ensure_eq!(eth2_header.dst_addr(), self.remote_mac);
-        ensure_eq!(eth2_header.ether_type(), EtherType2::Ipv4);
+    fn check_ethernet2_header(&self, header: &Ethernet2Header) -> Result<()> {
+        ensure_eq!(header.src_addr(), self.local_mac);
+        ensure_eq!(header.dst_addr(), self.remote_mac);
+        ensure_eq!(header.ether_type(), EtherType2::Ipv4);
         Ok(())
     }
 
-    fn check_ipv4_header(&self, ipv4_header: &Ipv4Header, protocol: IpProtocol) -> Result<()> {
-        ensure_eq!(ipv4_header.get_src_addr(), self.local_sockaddr.ip().to_owned());
-        ensure_eq!(ipv4_header.get_dest_addr(), self.remote_sockaddr.ip().to_owned());
-        ensure_eq!(ipv4_header.get_protocol(), protocol);
+    fn check_ipv4_header(&self, header: &Ipv4Header, protocol: IpProtocol) -> Result<()> {
+        ensure_eq!(header.get_src_addr(), self.local_sockaddr.ip().to_owned());
+        ensure_eq!(header.get_dest_addr(), self.remote_sockaddr.ip().to_owned());
+        ensure_eq!(header.get_protocol(), protocol);
         Ok(())
     }
 
@@ -887,9 +866,9 @@ impl Simulation {
         Ok(())
     }
 
-    fn check_udp_header(&self, udp_header: &UdpHeader, _udp_packet: &UdpPacket) -> Result<()> {
-        ensure_eq!(udp_header.src_port(), self.local_sockaddr.port());
-        ensure_eq!(udp_header.dest_port(), self.remote_port);
+    fn check_udp_header(&self, header: &UdpHeader, _packet: &UdpPacket) -> Result<()> {
+        ensure_eq!(header.src_port(), self.local_sockaddr.port());
+        ensure_eq!(header.dest_port(), self.remote_port);
         Ok(())
     }
 
@@ -901,50 +880,52 @@ impl Simulation {
     }
 
     fn run_outgoing_packet(&mut self, tcp_packet: &TcpPacket) -> Result<()> {
-        let mut frames: VecDeque<DemiBuffer> = self.engine.pop_expected_frames(1);
+        let mut frames = self.engine.pop_expected_frames(1);
         ensure_eq!(frames.len(), 1);
 
-        let pkt: &mut DemiBuffer = &mut frames[0];
-        let eth2_header: Ethernet2Header = Ethernet2Header::parse_and_strip(pkt)?;
-        self.check_ethernet2_header(&eth2_header)?;
+        let buffer = &mut frames[0];
 
-        let ipv4_header: Ipv4Header = Ipv4Header::parse_and_strip(pkt)?;
-        self.check_ipv4_header(&ipv4_header, IpProtocol::TCP)?;
+        let header = Ethernet2Header::parse_and_strip(buffer)?;
+        self.check_ethernet2_header(&header)?;
 
-        let src_ipv4_addr: Ipv4Addr = ipv4_header.get_src_addr();
-        let dest_ipv4_addr: Ipv4Addr = ipv4_header.get_dest_addr();
-        let tcp_header: TcpHeader = TcpHeader::parse_and_strip(&src_ipv4_addr, &dest_ipv4_addr, pkt, true)?;
-        ensure_eq!(tcp_packet.seqnum.win as usize, pkt.len());
-        self.check_tcp_header(&tcp_header, tcp_packet)?;
+        let header = Ipv4Header::parse_and_strip(buffer)?;
+        self.check_ipv4_header(&header, IpProtocol::TCP)?;
+
+        let header = TcpHeader::parse_and_strip(&header.get_src_addr(), &header.get_dest_addr(), buffer, true)?;
+        ensure_eq!(tcp_packet.seqnum.win as usize, buffer.len());
+        self.check_tcp_header(&header, tcp_packet)?;
 
         Ok(())
     }
 
-    fn run_outgoing_udp_packet(&mut self, udp_packet: &UdpPacket) -> Result<()> {
-        let mut frames: VecDeque<DemiBuffer> = self.engine.pop_expected_frames(1);
+    fn run_outgoing_udp_packet(&mut self, packet: &UdpPacket) -> Result<()> {
+        let mut frames = self.engine.pop_expected_frames(1);
+
         // FIXME: We currently do not support multi-frame segments.
         ensure_eq!(frames.len(), 1);
-        let pkt: &mut DemiBuffer = &mut frames[0];
-        let eth2_header: Ethernet2Header = Ethernet2Header::parse_and_strip(pkt)?;
-        self.check_ethernet2_header(&eth2_header)?;
 
-        let ipv4_header: Ipv4Header = Ipv4Header::parse_and_strip(pkt)?;
-        self.check_ipv4_header(&ipv4_header, IpProtocol::UDP)?;
+        let buffer = &mut frames[0];
+        let header = Ethernet2Header::parse_and_strip(buffer)?;
+        self.check_ethernet2_header(&header)?;
 
-        let udp_header: UdpHeader =
-            UdpHeader::parse_and_strip(self.local_sockaddr.ip(), self.remote_sockaddr.ip(), pkt, true)?;
-        ensure_eq!(udp_packet.len as usize, pkt.len());
-        self.check_udp_header(&udp_header, udp_packet)?;
+        let header = Ipv4Header::parse_and_strip(buffer)?;
+        self.check_ipv4_header(&header, IpProtocol::UDP)?;
+
+        let udp_header = UdpHeader::parse_and_strip(self.local_sockaddr.ip(), self.remote_sockaddr.ip(), buffer, true)?;
+        ensure_eq!(packet.len as usize, buffer.len());
+        self.check_udp_header(&udp_header, packet)?;
 
         Ok(())
     }
 
     fn prepare_dummy_buffer(size: usize, stamp: Option<u8>) -> DemiBuffer {
         assert!(size < u16::MAX as usize);
-        let mut buf: DemiBuffer = DemiBuffer::new_with_headroom(size as u16, MAX_HEADER_SIZE as u16);
+        let mut buffer = DemiBuffer::new_with_headroom(size as u16, MAX_HEADER_SIZE as u16);
+
         for i in 0..size {
-            buf[i] = stamp.unwrap_or(i as u8);
+            buffer[i] = stamp.unwrap_or(i as u8);
         }
-        buf
+
+        buffer
     }
 }
