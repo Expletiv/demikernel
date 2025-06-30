@@ -856,9 +856,21 @@ fn sockaddr_to_socketaddr(saddr: *const sockaddr, size: Socklen) -> Result<Socke
     // Validate the socket name length is the size of the expected data structure.
     check_name_len(expected_len, true)?;
 
-    // Note Socket2 uses winapi crate versus windows crate used to deduce SockAddrStorage used above. These types have
-    // the same size/layout, hence the use of transmute. This is a no-op on platforms with proper libc support.
-    let saddr: SockAddr = unsafe { SockAddr::new(mem::transmute(storage), size) };
+    let saddr: SockAddr = {
+        #[cfg(target_os = "windows")]
+        {
+            // On Windows, transmute is needed due to mismatched crates
+            unsafe {
+                let s = std::mem::transmute(storage);
+                SockAddr::new(s, size)
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            // On Linux, direct use is fine
+            unsafe { SockAddr::new(storage, size) }
+        }
+    };
 
     match saddr.as_socket() {
         Some(saddr) => Ok(saddr),
@@ -945,7 +957,16 @@ mod test {
                 saddr.len() as usize,
             );
         }
-        storage.ss_family = unsafe { mem::transmute(AF_APPLETALK) };
+
+        #[cfg(target_os = "windows")]
+        {
+            storage.ss_family = unsafe { mem::transmute(AF_APPLETALK) };
+        }
+        #[cfg(target_os = "linux")]
+        {
+            storage.ss_family = AF_APPLETALK;
+        }
+
         match sockaddr_to_socketaddr(ptr::addr_of!(storage).cast(), saddr.len()) {
             Err(e) if e.errno == libc::ENOTSUP => (),
             _ => panic!("expected sockaddr_to_socketaddr to fail with ENOTSUP"),
@@ -954,8 +975,6 @@ mod test {
 
     #[test]
     fn test_set_and_get_linger() -> anyhow::Result<()> {
-        // Initialize Demikernel
-
         use crate::runtime::types::demi_args_t;
         let args: demi_args_t = demi_args_t::default();
         let result: c_int = demi_init(&args);
@@ -988,6 +1007,7 @@ mod test {
 
         // Successfully turned linger on.
         ensure_eq!(result, 0);
+
         // Check linger value.
         let mut linger_check: Linger = Linger {
             l_onoff: 0,
