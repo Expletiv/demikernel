@@ -856,7 +856,7 @@ fn sockaddr_to_socketaddr(saddr: *const sockaddr, size: Socklen) -> Result<Socke
     // Validate the socket name length is the size of the expected data structure.
     check_name_len(expected_len, true)?;
 
-    let saddr: SockAddr = {
+    let saddr = {
         #[cfg(target_os = "windows")]
         {
             // On Windows, transmute is needed due to mismatched crates
