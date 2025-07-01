@@ -1,42 +1,38 @@
-
 # Copyright (c) Microsoft Corporation.
 # Licensed under the MIT license.
 
-from ci.job.utils import wait_and_report
 import ci.job.windows as windows
 import ci.job.linux as linux
-from ci.job.generic import BaseJob
 
 class JobFactory:
-
-    def __init__(self, config: dict):
+    def __init__(self, config):
         self.config = config
 
-    def checkout(self) -> BaseJob:
+    def checkout(self):
         if self.config["platform"] == "windows":
             return windows.CheckoutJobOnWindows(self.config)
         else:
             return linux.CheckoutJobOnLinux(self.config)
 
-    def compile(self) -> BaseJob:
+    def compile(self):
         if self.config["platform"] == "windows":
             return windows.CompileJobOnWindows(self.config)
         else:
             return linux.CompileJobOnLinux(self.config)
 
-    def install(self) -> BaseJob:
+    def install(self):
         if self.config["platform"] == "windows":
             raise Exception("Install is not supported on Windows")
         else:
             return linux.InstallJobOnLinux(self.config)
 
-    def cleanup(self) -> BaseJob:
+    def cleanup(self):
         if self.config["platform"] == "windows":
             return windows.CleanupJobOnWindows(self.config)
         else:
             return linux.CleanupJobOnLinux(self.config)
 
-    def unit_test(self, test_name: str) -> BaseJob:
+    def unit_test(self, test_name):
         if self.config["platform"] == "windows":
             if test_name == "test-unit-rust":
                 return windows.UnitTestRustJobOnWindows(self.config)
@@ -52,13 +48,14 @@ class JobFactory:
             else:
                 raise Exception("Invalid test name")
 
-    def integration_test(self, run_mode="", test_name="") -> BaseJob:
+    def integration_test(self, test_name=""):
         if self.config["platform"] == "windows":
             return windows.IntegrationTestJobOnWindows(self.config, test_name)
         else:
             return linux.IntegrationTestJobOnLinux(self.config, test_name)
 
-    def system_test(self, test_name: str, niterations: int = 0, run_mode: str = "", nclients: int = 0, bufsize: int = 0, nrequests: int = 0, nthreads: int = 1, who_closes: str = "", scenario: str = "") -> BaseJob:
+    def system_test(self, test_name, run_mode="", nclients=0, bufsize=0, nrequests=0, nthreads=1, who_closes="",
+                    scenario=""):
         if self.config["platform"] == "windows":
             if test_name == "tcp_echo":
                 return windows.TcpEchoTest(self.config, run_mode, nclients, bufsize, nrequests, nthreads)
