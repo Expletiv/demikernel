@@ -474,23 +474,25 @@ fn udp_push_bad_file_descriptor() -> Result<()> {
     let mut now = Instant::now();
 
     // Setup Bob.
-    let mut bob: SharedEngine = test_helpers::new_bob(now);
-    let bob_port: u16 = 80;
-    let bob_addr: SocketAddrV4 = SocketAddrV4::new(test_helpers::BOB_IPV4, bob_port);
-    let bob_fd: QDesc = bob.udp_socket()?;
+    let mut bob = test_helpers::new_bob(now);
+    let bob_port = 80;
+    let bob_addr = SocketAddrV4::new(test_helpers::BOB_IPV4, bob_port);
+    let bob_fd = bob.udp_socket()?;
+
     bob.udp_bind(bob_fd, bob_addr)?;
 
     // Setup Carrie.
-    let mut carrie: SharedEngine = test_helpers::new_carrie(now);
-    let carrie_port: u16 = 80;
-    let carrie_addr: SocketAddrV4 = SocketAddrV4::new(test_helpers::CARRIE_IPV4, carrie_port);
-    let carrie_fd: QDesc = carrie.udp_socket()?;
+    let mut carrie = test_helpers::new_carrie(now);
+    let carrie_port = 80;
+    let carrie_addr = SocketAddrV4::new(test_helpers::CARRIE_IPV4, carrie_port);
+    let carrie_fd = carrie.udp_socket()?;
+
     carrie.udp_bind(carrie_fd, carrie_addr)?;
 
     // Send data to Carrie.
-    let buf: DemiBuffer = DemiBuffer::from_slice_with_headroom(&vec![0x5a; 32][..], MAX_HEADER_SIZE)
+    let buffer = DemiBuffer::from_slice_with_headroom(&vec![0x5a; 32][..], MAX_HEADER_SIZE)
         .expect("slice should fit in DemiBuffer");
-    match bob.udp_pushto(QDesc::try_from(u32::MAX)?, buf.clone(), carrie_addr) {
+    match bob.udp_pushto(QDesc::from(u32::MAX), buffer.clone(), carrie_addr) {
         Err(e) if e.errno == EBADF => {},
         _ => anyhow::bail!("pushto should have failed"),
     };
