@@ -58,7 +58,7 @@ const MAX_WINDOW_SIZE_WITH_SCALING: u32 = 1073741824;
 
 pub struct EstablishedSocket {
     // All shared state for this established TCP connection.
-    cb: ControlBlock,
+    control_block: ControlBlock,
     runtime: SharedDemiRuntime,
     layer3_endpoint: SharedLayer3Endpoint,
 }
@@ -158,7 +158,7 @@ impl SharedEstablishedSocket {
             congestion_control_algorithm,
         );
         let mut me: Self = Self(SharedObject::new(EstablishedSocket {
-            cb,
+            control_block: cb,
             runtime: runtime.clone(),
             layer3_endpoint,
         }));
@@ -178,20 +178,20 @@ impl SharedEstablishedSocket {
     pub fn receive(&mut self, tcp_hdr: TcpHeader, buf: DemiBuffer) {
         debug!(
             "{:?} Connection Receiving {} bytes + {:?}",
-            self.cb.state,
+            self.control_block.state,
             buf.len(),
             tcp_hdr,
         );
 
         let now: Instant = self.runtime.get_now();
         let mut layer3_endpoint: SharedLayer3Endpoint = self.layer3_endpoint.clone();
-        Receiver::receive(&mut self.cb, &mut layer3_endpoint, tcp_hdr, buf, now);
+        Receiver::receive(&mut self.control_block, &mut layer3_endpoint, tcp_hdr, buf, now);
     }
 
     // This coroutine runs the close protocol.
     pub async fn close(&mut self) -> Result<(), Fail> {
         // Assert we are in a valid state and move to new state.
-        match self.cb.state {
+        match self.control_block.state {
             State::Established => self.local_close().await,
             State::CloseWait => self.remote_already_closed().await,
             _ => {
@@ -204,37 +204,37 @@ impl SharedEstablishedSocket {
 
     async fn local_close(&mut self) -> Result<(), Fail> {
         // 1. Start close protocol by setting state and sending FIN.
-        self.cb.state = State::FinWait1;
+        self.control_block.state = State::FinWait1;
 
         // 2. Wait for FIN and FIN ack.
         let mut me2: SharedEstablishedSocket = self.clone();
         let mut me3: SharedEstablishedSocket = self.clone();
-        let wait_for_fin = pin!(me3.cb.receiver.wait_for_fin().fuse());
+        let wait_for_fin = pin!(me3.control_block.receiver.wait_for_fin().fuse());
         let mut runtime: SharedDemiRuntime = self.runtime.clone();
         let mut layer3_endpoint: SharedLayer3Endpoint = self.layer3_endpoint.clone();
         let push_fin_and_wait_for_ack =
-            pin!(Sender::push(&mut me2.cb, &mut layer3_endpoint, &mut runtime, None).fuse());
+            pin!(Sender::push(&mut me2.control_block, &mut layer3_endpoint, &mut runtime, None).fuse());
         let (result1, result2) = join!(wait_for_fin, push_fin_and_wait_for_ack);
         result1?;
         result2?;
 
         // 3. TIMED_WAIT
-        debug_assert_eq!(self.cb.state, State::TimeWait);
-        trace!("socket options: {:?}", self.cb.socket_options.get_linger());
-        let timeout: Duration = self.cb.socket_options.get_linger().unwrap_or(MSL * 2);
+        debug_assert_eq!(self.control_block.state, State::TimeWait);
+        trace!("socket options: {:?}", self.control_block.socket_options.get_linger());
+        let timeout: Duration = self.control_block.socket_options.get_linger().unwrap_or(MSL * 2);
         yield_with_timeout(timeout).await;
-        self.cb.state = State::Closed;
+        self.control_block.state = State::Closed;
         Ok(())
     }
 
     async fn remote_already_closed(&mut self) -> Result<(), Fail> {
         // 0. Move state forward
-        self.cb.state = State::LastAck;
+        self.control_block.state = State::LastAck;
         // 1. Send FIN and wait for ack before closing.
         let mut runtime: SharedDemiRuntime = self.runtime.clone();
         let mut layer3_endpoint: SharedLayer3Endpoint = self.layer3_endpoint.clone();
-        Sender::push(&mut self.cb, &mut layer3_endpoint, &mut runtime, None).await?;
-        debug_assert_eq!(self.cb.state, State::Closed);
+        Sender::push(&mut self.control_block, &mut layer3_endpoint, &mut runtime, None).await?;
+        debug_assert_eq!(self.control_block.state, State::Closed);
 
         Ok(())
     }
@@ -242,22 +242,22 @@ impl SharedEstablishedSocket {
     pub async fn push(&mut self, buf: DemiBuffer) -> Result<(), Fail> {
         let mut runtime: SharedDemiRuntime = self.runtime.clone();
         let mut layer3_endpoint: SharedLayer3Endpoint = self.layer3_endpoint.clone();
-        Sender::push(&mut self.cb, &mut layer3_endpoint, &mut runtime, Some(buf)).await
+        Sender::push(&mut self.control_block, &mut layer3_endpoint, &mut runtime, Some(buf)).await
     }
 
     pub async fn pop(&mut self, size: Option<usize>) -> Result<DemiBuffer, Fail> {
-        self.cb.receiver.pop(size).await
+        self.control_block.receiver.pop(size).await
     }
 
     pub fn endpoints(&self) -> (SocketAddrV4, SocketAddrV4) {
-        (self.cb.local, self.cb.remote)
+        (self.control_block.local, self.control_block.remote)
     }
 
     async fn background(self) {
         let mut me: Self = self.clone();
         let acknowledger = async_timer!("tcp::established::background::acknowledger", async {
             let mut layer3_endpoint: SharedLayer3Endpoint = me.layer3_endpoint.clone();
-            Receiver::acknowledger(&mut me.cb, &mut layer3_endpoint).await
+            Receiver::acknowledger(&mut me.control_block, &mut layer3_endpoint).await
         })
         .fuse();
         pin_mut!(acknowledger);
@@ -266,7 +266,7 @@ impl SharedEstablishedSocket {
         let retransmitter = async_timer!("tcp::established::background::retransmitter", async {
             let mut layer3_endpoint: SharedLayer3Endpoint = me2.layer3_endpoint.clone();
             let mut runtime: SharedDemiRuntime = me2.runtime.clone();
-            Sender::background_retransmitter(&mut me2.cb, &mut layer3_endpoint, &mut runtime).await
+            Sender::background_retransmitter(&mut me2.control_block, &mut layer3_endpoint, &mut runtime).await
         })
         .fuse();
         pin_mut!(retransmitter);
@@ -275,7 +275,7 @@ impl SharedEstablishedSocket {
         let sender = async_timer!("tcp::established::background::sender", async {
             let mut layer3_endpoint: SharedLayer3Endpoint = me3.layer3_endpoint.clone();
             let mut runtime: SharedDemiRuntime = me3.runtime.clone();
-            Sender::background_sender(&mut me3.cb, &mut layer3_endpoint, &mut runtime).await
+            Sender::background_sender(&mut me3.control_block, &mut layer3_endpoint, &mut runtime).await
         })
         .fuse();
         pin_mut!(sender);
