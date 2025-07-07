@@ -23,7 +23,6 @@ use crate::{
 use ::futures::{never::Never, pin_mut, select_biased, FutureExt};
 use ::std::{
     cmp, fmt,
-    net::Ipv4Addr,
     time::{Duration, Instant},
 };
 
@@ -173,7 +172,7 @@ impl Sender {
             self.rto_calculator.add_sample(now - initial_tx);
         }
 
-        let mut data: DemiBuffer = segment
+        let mut data = segment
             .bytes
             .take()
             .expect("there should be data because this is not a FIN.");
@@ -269,8 +268,8 @@ impl Sender {
         }
 
         // Wait until the sequnce number of the pushed buffer is acknowledged.
-        let mut send_unacked_watched: SharedAsyncValue<SeqNumber> = cb.sender.send_unacked.clone();
-        let ack_seq_no: SeqNumber = cb.sender.unsent_next_seq_no;
+        let mut send_unacked_watched = cb.sender.send_unacked.clone();
+        let ack_seq_no = cb.sender.unsent_next_seq_no;
         debug_assert!(send_unacked_watched.get() < ack_seq_no);
         while send_unacked_watched.get() < ack_seq_no {
             send_unacked_watched.wait_for_change(None).await?;
@@ -285,15 +284,15 @@ impl Sender {
     ) -> Result<Never, Fail> {
         loop {
             // Get next bit of unsent data.
-            let buf: DemiBuffer = cb.sender.unsent_queue.pop(None).await?;
-            Self::send_buffer(cb, layer3_endpoint, runtime.get_now(), buf).await?;
+            let buffer = cb.sender.unsent_queue.pop(None).await?;
+            Self::send_buffer(cb, layer3_endpoint, runtime.get_now(), buffer).await?;
         }
     }
 
     fn send_fin(cb: &mut ControlBlock, layer3_endpoint: &mut SharedLayer3Endpoint, now: Instant) -> Result<(), Fail> {
         debug_assert!(cb.sender.fin_seq_no.is_some());
 
-        let mut header: TcpHeader = Self::tcp_header(cb, cb.sender.fin_seq_no);
+        let mut header = Self::tcp_header(cb, cb.sender.fin_seq_no);
         header.fin = true;
         Self::emit(cb, layer3_endpoint, header, None);
         // Update SND.NXT.
@@ -307,7 +306,7 @@ impl Sender {
         cb.sender.unacked_queue.push(unacked_segment);
         // Set the retransmit timer.
         if cb.sender.retransmit_deadline_time_secs.get().is_none() {
-            let rto: Duration = cb.sender.rto_calculator.rto();
+            let rto = cb.sender.rto_calculator.rto();
             cb.sender.retransmit_deadline_time_secs.set(Some(now + rto));
         }
         Ok(())
@@ -319,13 +318,12 @@ impl Sender {
         now: Instant,
         mut buffer: DemiBuffer,
     ) -> Result<(), Fail> {
-        let mut send_unacked_watched: SharedAsyncValue<SeqNumber> = cb.sender.send_unacked.clone();
-        let mut cwnd_watched: SharedAsyncValue<u32> = cb.congestion_control_algorithm.get_cwnd();
+        let mut send_unacked_watched = cb.sender.send_unacked.clone();
+        let mut cwnd_watched = cb.congestion_control_algorithm.get_cwnd();
 
         // The limited transmit algorithm may increase the effective size of cwnd by up to 2 * mss.
-        let mut ltci_watched: SharedAsyncValue<u32> =
-            cb.congestion_control_algorithm.get_limited_transmit_cwnd_increase();
-        let mut win_sz_watched: SharedAsyncValue<u32> = cb.sender.send_window.clone();
+        let mut ltci_watched = cb.congestion_control_algorithm.get_limited_transmit_cwnd_increase();
+        let mut win_sz_watched = cb.sender.send_window.clone();
 
         // Try in a loop until we send this segment.
         loop {
@@ -339,7 +337,7 @@ impl Sender {
                 // TODO: Silly window syndrome - See RFC 1122's discussion of the SWS avoidance algorithm.
 
                 // We have some window, try to send some or all of the segment.
-                let _: usize = Self::send_segment(cb, layer3_endpoint, now, &mut buffer);
+                let _ = Self::send_segment(cb, layer3_endpoint, now, &mut buffer);
                 // If the buffer is now empty, then we sent all of it.
                 if buffer.is_empty() {
                     return Ok(());
@@ -375,11 +373,11 @@ impl Sender {
 
         // Note that we loop here *forever*, exponentially backing off.
         // TODO: Use the correct PERSIST mode timer here.
-        let mut timeout: Duration = Duration::from_secs(1);
-        let mut win_sz_watched: SharedAsyncValue<u32> = cb.sender.send_window.clone();
+        let mut timeout = Duration::from_secs(1);
+        let mut win_sz_watched = cb.sender.send_window.clone();
         loop {
             // Create packet.
-            let header: TcpHeader = Self::tcp_header(cb, None);
+            let header = Self::tcp_header(cb, None);
             Self::emit(cb, layer3_endpoint, header, Some(probe.clone()));
 
             match win_sz_watched.wait_for_change(Some(timeout)).await {
@@ -402,39 +400,39 @@ impl Sender {
         now: Instant,
         segment: &mut DemiBuffer,
     ) -> usize {
-        let buf_len: usize = segment.len();
-        debug_assert_ne!(buf_len, 0);
+        let buffer_length = segment.len();
+        debug_assert_ne!(buffer_length, 0);
 
-        let max_frame_size_bytes: usize = Self::get_open_window_size_bytes(cb);
+        let max_frame_size_bytes = Self::get_open_window_size_bytes(cb);
         if max_frame_size_bytes == 0 {
             return 0;
         }
 
         // Split the packet if necessary.
         // TODO: Use a scatter/gather array to coalesce multiple buffers into a single segment.
-        let (frame_size_bytes, do_push): (usize, bool) = {
-            if buf_len > max_frame_size_bytes {
+        let (frame_size_bytes, do_push) = {
+            if buffer_length > max_frame_size_bytes {
                 // Suppress PSH flag for partial buffers.
                 (max_frame_size_bytes, false)
             } else {
                 // We can just send the whole packet. Clone it so we can attach headers/retransmit it later.
-                (buf_len, true)
+                (buffer_length, true)
             }
         };
-        let segment_data: DemiBuffer = segment
+        let segment_data = segment
             .split_front(frame_size_bytes)
             .expect("Should be able to split within the length of the buffer");
 
-        let segment_data_len: u32 = segment_data.len() as u32;
+        let segment_data_len = segment_data.len() as u32;
 
-        let rto: Duration = cb.sender.rto_calculator.rto();
+        let rto = cb.sender.rto_calculator.rto();
         cb.congestion_control_algorithm.on_send(
             rto,
             (cb.sender.send_next_seq_no.get() - cb.sender.send_unacked.get()).into(),
         );
 
         // Prepare the segment and send it.
-        let mut header: TcpHeader = Self::tcp_header(cb, None);
+        let mut header = Self::tcp_header(cb, None);
         if do_push {
             header.psh = true;
         }
@@ -462,7 +460,7 @@ impl Sender {
 
         // Set the retransmit timer.
         if cb.sender.retransmit_deadline_time_secs.get().is_none() {
-            let rto: Duration = cb.sender.rto_calculator.rto();
+            let rto = cb.sender.rto_calculator.rto();
             cb.sender.retransmit_deadline_time_secs.set(Some(now + rto));
         }
         segment_data_len as usize
@@ -472,7 +470,7 @@ impl Sender {
     /// If a sequence number is provided, use it otherwise, use the current unsent sequence number.
     /// The only time that the unsent sequence number is not used is when we are retransmitting.
     pub fn tcp_header(cb: &mut ControlBlock, seq_num: Option<SeqNumber>) -> TcpHeader {
-        let mut header: TcpHeader = TcpHeader::new(cb.local.port(), cb.remote.port());
+        let mut header = TcpHeader::new(cb.local.port(), cb.remote.port());
         header.window_size = cb.receiver.hdr_window_size();
 
         // Note that once we reach a synchronized state we always include a valid acknowledgement number.
@@ -480,27 +478,26 @@ impl Sender {
         header.ack_num = cb.receiver.receive_next_seq_no;
         header.seq_num = seq_num.unwrap_or(cb.sender.send_next_seq_no.get());
 
-        // Return this header.
         header
     }
 
     fn get_open_window_size_bytes(cb: &mut ControlBlock) -> usize {
         // Calculate amount of data in flight (SND.NXT - SND.UNA).
-        let send_unacknowledged: SeqNumber = cb.sender.send_unacked.get();
-        let send_next: SeqNumber = cb.sender.send_next_seq_no.get();
-        let sent_data: u32 = (send_next - send_unacknowledged).into();
+        let send_unacknowledged = cb.sender.send_unacked.get();
+        let send_next = cb.sender.send_next_seq_no.get();
+        let sent_data = (send_next - send_unacknowledged).into();
 
         // Before we get cwnd for the check, we prompt it to shrink it if the connection has been idle.
         cb.congestion_control_algorithm.on_cwnd_check_before_send();
-        let cwnd: SharedAsyncValue<u32> = cb.congestion_control_algorithm.get_cwnd();
+        let cwnd = cb.congestion_control_algorithm.get_cwnd();
 
         // The limited transmit algorithm can increase the effective size of cwnd by up to 2MSS.
-        let effective_cwnd: u32 = cwnd.get()
+        let effective_cwnd = cwnd.get()
             + cb.congestion_control_algorithm
                 .get_limited_transmit_cwnd_increase()
                 .get();
 
-        let win_sz: u32 = cb.sender.send_window.get();
+        let win_sz = cb.sender.send_window.get();
 
         if Self::has_open_window(win_sz, sent_data, effective_cwnd) {
             Self::calculate_open_window_bytes(win_sz, sent_data, cb.sender.mss, effective_cwnd)
@@ -526,14 +523,12 @@ impl Sender {
         runtime: &mut SharedDemiRuntime,
     ) -> Result<Never, Fail> {
         // Watch the retransmission deadline.
-        let mut rtx_deadline_watched: SharedAsyncValue<Option<Instant>> =
-            cb.sender.retransmit_deadline_time_secs.clone();
+        let mut rtx_deadline_watched = cb.sender.retransmit_deadline_time_secs.clone();
         // Watch the fast retransmit flag.
-        let mut rtx_fast_retransmit_watched: SharedAsyncValue<bool> =
-            cb.congestion_control_algorithm.get_retransmit_now_flag();
+        let mut rtx_fast_retransmit_watched = cb.congestion_control_algorithm.get_retransmit_now_flag();
         loop {
-            let rtx_deadline: Option<Instant> = rtx_deadline_watched.get();
-            let rtx_fast_retransmit: bool = rtx_fast_retransmit_watched.get();
+            let rtx_deadline = rtx_deadline_watched.get();
+            let rtx_fast_retransmit = rtx_fast_retransmit_watched.get();
             if rtx_fast_retransmit {
                 // Notify congestion control about fast retransmit.
                 cb.congestion_control_algorithm.on_fast_retransmit();
@@ -570,7 +565,7 @@ impl Sender {
                     cb.sender.rto_calculator.back_off();
 
                     // RFC 6298 Section 5.6: Restart the retransmission timer with the new RTO.
-                    let deadline: Instant = runtime.get_now() + cb.sender.rto_calculator.rto();
+                    let deadline = runtime.get_now() + cb.sender.rto_calculator.rto();
                     cb.sender.retransmit_deadline_time_secs.set(Some(deadline));
                 },
                 Err(_) => {
@@ -590,11 +585,11 @@ impl Sender {
             segment.initial_tx.take();
 
             // Clone the segment data here for retransmission.
-            let data: Option<DemiBuffer> = segment.bytes.clone();
+            let data = segment.bytes.clone();
 
             // TODO: Issue #198 Repacketization - we should send a full MSS (and set the FIN flag if applicable).
 
-            let mut header: TcpHeader = Self::tcp_header(cb, Some(cb.sender.send_unacked.get()));
+            let mut header = Self::tcp_header(cb, Some(cb.sender.send_unacked.get()));
 
             if data.is_some() {
                 // Regular packet, so set the PSH flag.
@@ -610,7 +605,7 @@ impl Sender {
 
     pub fn process_ack(cb: &mut ControlBlock, header: &TcpHeader, now: Instant) {
         // Start by checking that the ACK acknowledges something new.
-        let send_unacknowledged: SeqNumber = cb.sender.send_unacked.get();
+        let send_unacknowledged = cb.sender.send_unacked.get();
         // Check and update send window if necessary.
         cb.sender.update_send_window(header);
 
@@ -621,7 +616,7 @@ impl Sender {
             // Convert the difference in sequence numbers into a u32.
             let bytes_acknowledged: u32 = (header.ack_num - cb.sender.send_unacked.get()).into();
             // Convert that into a usize for counting bytes to remove from the unacked queue.
-            let mut bytes_remaining: usize = bytes_acknowledged as usize;
+            let mut bytes_remaining = bytes_acknowledged as usize;
             // Remove bytes from the unacked queue.
             while bytes_remaining != 0 {
                 bytes_remaining = match cb.sender.unacked_queue.try_pop() {
@@ -640,7 +635,7 @@ impl Sender {
 
             // Reset the retransmit timer if necessary. If there is more data that hasn't been acked, then set to the
             // next segment deadline, otherwise, do not set.
-            let retransmit_deadline_time_secs: Option<Instant> = cb.sender.update_retransmit_deadline(now);
+            let retransmit_deadline_time_secs = cb.sender.update_retransmit_deadline(now);
             #[cfg(debug_assertions)]
             if retransmit_deadline_time_secs.is_none() {
                 debug_assert_eq!(cb.sender.send_next_seq_no.get(), header.ack_num);
@@ -661,7 +656,7 @@ impl Sender {
 
     /// Send an ACK to our peer, reflecting our current state.
     pub fn send_ack(cb: &mut ControlBlock, layer3_endpoint: &mut SharedLayer3Endpoint) {
-        let header: TcpHeader = Self::tcp_header(cb, None);
+        let header = Self::tcp_header(cb, None);
         Self::emit(cb, layer3_endpoint, header, None);
     }
 
@@ -692,7 +687,7 @@ impl Sender {
         // This routine should only ever be called to send TCP segments that contain a valid ACK value.
         debug_assert!(header.ack);
 
-        let remote_ipv4_addr: Ipv4Addr = *cb.remote.ip();
+        let remote_ipv4_addr = *cb.remote.ip();
         header.serialize_and_attach(
             &mut pkt,
             cb.local.ip(),

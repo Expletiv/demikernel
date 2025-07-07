@@ -114,21 +114,21 @@ impl Receiver {
     // Block until some data is received, up to an optional size.
     pub async fn pop(&mut self, size: Option<usize>) -> Result<DemiBuffer, Fail> {
         debug!("waiting on pop {:?}", size);
-        let buf: DemiBuffer = if let Some(size) = size {
-            let mut buf: DemiBuffer = self.pop_queue.pop(None).await?;
+        let buffer = if let Some(size) = size {
+            let mut buffer = self.pop_queue.pop(None).await?;
             // Split the buffer if it's too big.
-            if buf.len() > size {
-                buf.split_front(size)?
+            if buffer.len() > size {
+                buffer.split_front(size)?
             } else {
-                buf
+                buffer
             }
         } else {
             self.pop_queue.pop(None).await?
         };
 
-        match buf.len() {
+        match buffer.len() {
             len if len > 0 => {
-                self.reader_next_seq_no = self.reader_next_seq_no + SeqNumber::from(buf.len() as u32);
+                self.reader_next_seq_no = self.reader_next_seq_no + SeqNumber::from(buffer.len() as u32);
             },
             _ => {
                 debug!("found FIN");
@@ -136,18 +136,18 @@ impl Receiver {
             },
         }
 
-        Ok(buf)
+        Ok(buffer)
     }
 
     // Receive a single incoming packet from layer3.
     pub fn receive(
-        cb: &mut ControlBlock,
+        control_block: &mut ControlBlock,
         layer3_endpoint: &mut SharedLayer3Endpoint,
         tcp_hdr: TcpHeader,
         buf: DemiBuffer,
         now: Instant,
     ) {
-        match Self::process_packet(cb, layer3_endpoint, tcp_hdr, buf, now) {
+        match Self::process_packet(control_block, layer3_endpoint, tcp_hdr, buf, now) {
             Ok(()) => (),
             Err(e) => debug!("Dropped packet: {:?}", e),
         }
@@ -157,19 +157,19 @@ impl Receiver {
     /// active. Each step in this function return Ok if there is further processing to be done and EBADMSG if the
     /// packet should be dropped after the step.
     fn process_packet(
-        cb: &mut ControlBlock,
+        control_block: &mut ControlBlock,
         layer3_endpoint: &mut SharedLayer3Endpoint,
         mut header: TcpHeader,
         mut data: DemiBuffer,
         now: Instant,
     ) -> Result<(), Fail> {
-        let mut seg_start: SeqNumber = header.seq_num;
-        let mut seg_end: SeqNumber = seg_start;
-        let mut seg_len: u32 = data.len() as u32;
+        let mut seg_start = header.seq_num;
+        let mut seg_end = seg_start;
+        let mut seg_len = data.len() as u32;
 
         // Check if the segment is in the receive window and trim off everything else.
         Self::check_segment_in_window(
-            cb,
+            control_block,
             layer3_endpoint,
             &mut header,
             &mut data,
@@ -177,9 +177,9 @@ impl Receiver {
             &mut seg_end,
             &mut seg_len,
         )?;
-        Self::check_and_process_rst(cb, &header)?;
+        Self::check_and_process_rst(control_block, &header)?;
         Self::check_syn(&header)?;
-        Self::check_and_process_ack(cb, &header, now)?;
+        Self::check_and_process_ack(control_block, &header, now)?;
 
         // TODO: Check the URG bit.  If we decide to support this, how should we do it?
         if header.urg {
@@ -187,24 +187,24 @@ impl Receiver {
         }
 
         // Store whether the packet has data here because processing it will consume the DemiBuffer.
-        let has_data: bool = !data.is_empty();
+        let has_data = !data.is_empty();
         if has_data {
-            Self::process_data(cb, layer3_endpoint, data, seg_start, seg_end, seg_len)?;
+            Self::process_data(control_block, layer3_endpoint, data, seg_start, seg_end, seg_len)?;
         }
         // Deal with FIN flag, saving the FIN for later if it is out of order.
-        Self::check_and_process_fin(cb, &header, seg_end, layer3_endpoint)?;
+        Self::check_and_process_fin(control_block, &header, seg_end, layer3_endpoint)?;
 
         // We should ACK this segment, preferably via piggybacking on a response.
-        if cb.receiver.ack_deadline_time_secs.get().is_none() {
+        if control_block.receiver.ack_deadline_time_secs.get().is_none() {
             // Start the delayed ACK timer to ensure an ACK gets sent soon even if no piggyback opportunity occurs.
-            let timeout: Duration = cb.receiver.ack_delay_timeout_secs;
+            let timeout = control_block.receiver.ack_delay_timeout_secs;
             // Getting the current time is extremely cheap as it is just a variable lookup.
-            cb.receiver.ack_deadline_time_secs.set(Some(now + timeout));
+            control_block.receiver.ack_deadline_time_secs.set(Some(now + timeout));
         } else if has_data {
             // We already owe our peer an ACK (the timer was already running), so cancel the timer and ACK now.
-            cb.receiver.ack_deadline_time_secs.set(None);
+            control_block.receiver.ack_deadline_time_secs.set(None);
             trace!("process_packet(): sending ack before deadline because another packet arrived");
-            Sender::send_ack(cb, layer3_endpoint);
+            Sender::send_ack(control_block, layer3_endpoint);
         }
 
         Ok(())
@@ -280,8 +280,8 @@ impl Receiver {
     }
 
     pub fn hdr_window_size(&self) -> u16 {
-        let window_size: u32 = self.get_receive_window_size();
-        let hdr_window_size: u16 = expect_ok!(
+        let window_size = self.get_receive_window_size();
+        let hdr_window_size = expect_ok!(
             (window_size >> self.window_scale_shift_bits).try_into(),
             "Window size overflow"
         );
@@ -328,7 +328,7 @@ impl Receiver {
 
     // Block until the remote sends a FIN (plus all previous data has arrived).
     pub async fn wait_for_fin(&mut self) -> Result<(), Fail> {
-        let mut fin_seq_no: Option<SeqNumber> = self.fin_seq_no.get();
+        let mut fin_seq_no = self.fin_seq_no.get();
         loop {
             match fin_seq_no {
                 Some(fin_seq_no) if self.receive_next_seq_no >= fin_seq_no => return Ok(()),
@@ -381,9 +381,9 @@ impl Receiver {
             *seg_end = *seg_start + SeqNumber::from(*seg_len - 1);
         }
 
-        let receive_next: SeqNumber = cb.receiver.receive_next_seq_no;
+        let receive_next = cb.receiver.receive_next_seq_no;
 
-        let after_receive_window: SeqNumber = receive_next + SeqNumber::from(cb.receiver.get_receive_window_size());
+        let after_receive_window = receive_next + SeqNumber::from(cb.receiver.get_receive_window_size());
 
         // Check if this segment fits in our receive window.
         // In the optimal case it starts at RCV.NXT, so we check for that first.
@@ -398,13 +398,13 @@ impl Receiver {
                         trace!("check_segment_in_window(): send ack on duplicate segment");
                         Sender::send_ack(cb, layer3_endpoint);
                     }
-                    let cause: &'static str = "duplicate packet";
+                    let cause = "duplicate packet";
                     error!("check_segment_in_window(): {}", cause);
                     return Err(Fail::new(libc::EBADMSG, cause));
                 } else {
                     // Some of this segment's data is new.  Cut the duplicate data off of the front.
                     // If there is a SYN at the start of this segment, remove it too.
-                    let mut duplicate: u32 = u32::from(receive_next - *seg_start);
+                    let mut duplicate = u32::from(receive_next - *seg_start);
                     *seg_start = *seg_start + SeqNumber::from(duplicate);
                     *seg_len -= duplicate;
                     if header.syn {
@@ -425,7 +425,7 @@ impl Receiver {
                         trace!("check_segment_in_window(): send ack on out-of-window segment");
                         Sender::send_ack(cb, layer3_endpoint);
                     }
-                    let cause: &'static str = "packet outside of receive window";
+                    let cause = "packet outside of receive window";
                     error!("check_segment_in_window(): {}", cause);
                     return Err(Fail::new(libc::EBADMSG, cause));
                 }
@@ -437,7 +437,7 @@ impl Receiver {
         // The start of the segment is in the window.
         // Check that the end of the segment is in the window, and trim it down if it is not.
         if *seg_len > 0 && *seg_end >= after_receive_window {
-            let mut excess: u32 = u32::from(*seg_end - after_receive_window);
+            let mut excess = u32::from(*seg_end - after_receive_window);
             excess += 1;
             // TODO: If we end up (after receive handling rewrite is complete) not needing seg_end and seg_len after
             // this, remove these two lines adjusting them as they're being computed needlessly.
@@ -496,7 +496,7 @@ impl Receiver {
             // TODO: RFC 5961 "Blind Reset Attack Using the SYN Bit" prevention would have us always ACK and drop here.
 
             // Receiving a SYN here is an error.
-            let cause: &'static str = "Received in-window SYN on established connection.";
+            let cause = "Received in-window SYN on established connection.";
             error!("{}", cause);
             // TODO: Send Reset.
             // TODO: Return all outstanding Receive and Send requests with "reset" responses.
@@ -512,7 +512,7 @@ impl Receiver {
     fn check_and_process_ack(cb: &mut ControlBlock, header: &TcpHeader, now: Instant) -> Result<(), Fail> {
         if !header.ack {
             // All segments on established connections should be ACKs.  Drop this segment.
-            let cause: &'static str = "Received non-ACK segment on established connection";
+            let cause = "Received non-ACK segment on established connection";
             error!("{}", cause);
             return Err(Fail::new(libc::EBADMSG, cause));
         }
@@ -570,8 +570,8 @@ impl Receiver {
     // Note: Since this is not the "fast path", this is written for clarity over efficiency.
     //
     fn store_out_of_order_segment(&mut self, mut new_start: SeqNumber, mut new_end: SeqNumber, mut buf: DemiBuffer) {
-        let mut action_index: usize = self.out_of_order_frames.len();
-        let mut another_pass_neeeded: bool = true;
+        let mut action_index = self.out_of_order_frames.len();
+        let mut another_pass_neeeded = true;
 
         while another_pass_neeeded {
             another_pass_neeeded = false;
@@ -580,13 +580,13 @@ impl Receiver {
             // The out-of-order store is sorted by starting sequence number, and contains no duplicate data.
             action_index = self.out_of_order_frames.len();
             for index in 0..self.out_of_order_frames.len() {
-                let stored_segment: &(SeqNumber, DemiBuffer) = &self.out_of_order_frames[index];
+                let stored_segment = &self.out_of_order_frames[index];
 
                 // Properties of the segment stored at this index.
-                let stored_start: SeqNumber = stored_segment.0;
-                let stored_len: u32 = stored_segment.1.len() as u32;
+                let stored_start = stored_segment.0;
+                let stored_len = stored_segment.1.len() as u32;
                 debug_assert_ne!(stored_len, 0);
-                let stored_end: SeqNumber = stored_start + SeqNumber::from(stored_len - 1);
+                let stored_end = stored_start + SeqNumber::from(stored_len - 1);
 
                 //
                 // The new data segment has six possibilites when compared to an existing out-of-order segment:
@@ -618,7 +618,7 @@ impl Receiver {
                     }
                     // We have some data overlap between the new segment and the front of the out-of-order segment.
                     // Trim the end of the new segment and stop checking for out-of-order overlap.
-                    let excess: u32 = u32::from(new_end - stored_start) + 1;
+                    let excess = u32::from(new_end - stored_start) + 1;
                     new_end = new_end - SeqNumber::from(excess);
                     expect_ok!(
                         buf.trim(excess as usize),
@@ -641,7 +641,7 @@ impl Receiver {
                     }
                     // We have some data overlap between the new segment and the end of the out-of-order segment.
                     // Adjust the beginning of the new segment and continue on to check the next out-of-order segment.
-                    let duplicate: u32 = u32::from(stored_end - new_start);
+                    let duplicate = u32::from(stored_end - new_start);
                     new_start = new_start + SeqNumber::from(duplicate);
                     expect_ok!(
                         buf.adjust(duplicate as usize),
@@ -672,8 +672,8 @@ impl Receiver {
         cb: &mut ControlBlock,
         layer3_endpoint: &mut SharedLayer3Endpoint,
     ) -> Result<Never, Fail> {
-        let mut ack_deadline: SharedAsyncValue<Option<Instant>> = cb.receiver.ack_deadline_time_secs.clone();
-        let mut deadline: Option<Instant> = ack_deadline.get();
+        let mut ack_deadline = cb.receiver.ack_deadline_time_secs.clone();
+        let mut deadline = ack_deadline.get();
 
         loop {
             // TODO: Implement TCP delayed ACKs, subject to restrictions from RFC 1122
