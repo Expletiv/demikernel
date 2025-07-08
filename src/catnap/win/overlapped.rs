@@ -81,7 +81,7 @@ impl OverlappedResult {
 
     /// Convert the OverlappedResult into a Result<...> indicating success or failure of the referent operation.
     pub fn ok(&self) -> Result<(), Fail> {
-        let win32_error: WIN32_ERROR = translate_ntstatus(self.result);
+        let win32_error = translate_ntstatus(self.result);
         if win32_error.is_ok() {
             Ok(())
         } else {
@@ -93,7 +93,7 @@ impl OverlappedResult {
 impl<S: Unpin> IoCompletionPort<S> {
     /// Create a new I/O completion port.
     pub fn new() -> Result<IoCompletionPort<S>, Fail> {
-        let iocp: HANDLE = match unsafe { CreateIoCompletionPort(INVALID_HANDLE_VALUE, None, 0, 1) } {
+        let iocp = match unsafe { CreateIoCompletionPort(INVALID_HANDLE_VALUE, None, 0, 1) } {
             Ok(handle) => handle,
             Err(err) => return Err(err.into()),
         };
@@ -150,7 +150,7 @@ impl<S: Unpin> IoCompletionPort<S> {
         for<'a> F2: FnOnce(Pin<&'a mut S>, OverlappedResult) -> Result<R, Fail>,
     {
         // Allocate a new Overlapped completion in the pin slab.
-        let pinslab_index: usize = match self.ops.insert(OverlappedCompletion::new(state)) {
+        let pinslab_index = match self.ops.insert(OverlappedCompletion::new(state)) {
             Some(index) => index,
             None => {
                 return Err(Fail::new(
@@ -160,21 +160,20 @@ impl<S: Unpin> IoCompletionPort<S> {
             },
         };
         // Grab a reference to the new completion in the pin slab.
-        let mut pinned_completion: Pin<&mut OverlappedCompletion<S>> =
-            expect_some!(self.ops.get_pin_mut(pinslab_index), "Just inserted this");
+        let mut pinned_completion = expect_some!(self.ops.get_pin_mut(pinslab_index), "Just inserted this");
 
         // Set the pinslab index so the I/O processor can remove it later if necessary.
         pinned_completion.as_mut().set_pinslab_index(pinslab_index);
 
-        let overlapped: *mut OVERLAPPED = pinned_completion.as_mut().marshal();
-        let result: Result<R, Fail> = match start(pinned_completion.as_mut().get_state(), overlapped) {
+        let overlapped = pinned_completion.as_mut().marshal();
+        let result = match start(pinned_completion.as_mut().get_state(), overlapped) {
             // Operation in progress, pending overlapped completion.
             Ok(()) => {
                 while let Some(mut cv) = pinned_completion.as_ref().get_cv() {
                     cv.wait().await;
                 }
 
-                let overlapped_result: OverlappedResult = OverlappedResult::new(
+                let overlapped_result = OverlappedResult::new(
                     pinned_completion.as_mut().overlapped,
                     pinned_completion.as_mut().completion_key,
                 );
@@ -219,10 +218,10 @@ impl<S: Unpin> IoCompletionPort<S> {
     pub fn process_events(&mut self) -> Result<(), Fail> {
         // Arbitrarily chosen batch size; should be updated after tuning.
         const BATCH_SIZE: usize = 4;
-        let mut entries: [OVERLAPPED_ENTRY; BATCH_SIZE] = [OVERLAPPED_ENTRY::default(); BATCH_SIZE];
+        let mut entries = [OVERLAPPED_ENTRY::default(); BATCH_SIZE];
 
         loop {
-            let mut dequeued: u32 = 0;
+            let mut dequeued = 0;
             match unsafe { GetQueuedCompletionStatusEx(self.iocp, entries.as_mut_slice(), &mut dequeued, 0, FALSE) } {
                 Ok(()) => {
                     for i in 0..dequeued {
@@ -247,7 +246,7 @@ impl<S: Unpin> IoCompletionPort<S> {
 
 impl<S: Unpin> OverlappedCompletion<S> {
     pub fn new(state: S) -> Self {
-        let cv: SharedConditionVariable = SharedConditionVariable::default();
+        let cv = SharedConditionVariable::default();
 
         Self {
             overlapped: OVERLAPPED::default(),
@@ -313,7 +312,7 @@ mod tests {
     use crate::{
         ensure_eq,
         runtime::{conditional_yield_with_timeout, SharedDemiRuntime},
-        OperationResult, QDesc, QToken,
+        OperationResult, QDesc,
     };
     use futures::pin_mut;
     use std::{
@@ -425,7 +424,7 @@ mod tests {
 
     #[test]
     fn test_marshal_unmarshal() -> Result<()> {
-        let mut completion: Pin<Box<OverlappedCompletion<()>>> = Box::pin(OverlappedCompletion::new(()));
+        let mut completion = Box::pin(OverlappedCompletion::new(()));
 
         // Ensure that the marshal returns the address of the overlapped member.
         ensure_eq!(
@@ -445,8 +444,8 @@ mod tests {
             (completion.as_ref().get_ref() as *const OverlappedCompletion<()>) as usize
         );
 
-        let overlapped_ptr: NonNull<OVERLAPPED> = NonNull::new(completion.as_mut().marshal()).unwrap();
-        let unmarshalled: Pin<&mut OverlappedCompletion<()>> = OverlappedCompletion::unmarshal(overlapped_ptr);
+        let overlapped_ptr = NonNull::new(completion.as_mut().marshal()).unwrap();
+        let unmarshalled = OverlappedCompletion::unmarshal(overlapped_ptr);
 
         // Test that unmarshal returns an address which is the same as the OVERLAPPED, which is the same as the original
         // OverlappedCompletionWithState. This implies that OVERLAPPED is at member offset 0 in all structs.
@@ -463,19 +462,19 @@ mod tests {
     fn test_event_processor() -> Result<()> {
         const COMPLETION_KEY: usize = 123;
         let mut iocp: IoCompletionPort<()> = make_iocp()?;
-        let overlapped: OverlappedCompletion<()> = OverlappedCompletion::new(());
-        let mut cv: SharedConditionVariable = overlapped.condition_variable.clone().unwrap();
+        let overlapped = OverlappedCompletion::new(());
+        let mut cv = overlapped.condition_variable.clone().unwrap();
         pin_mut!(overlapped);
 
         // Insert coroutine
-        let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
+        let mut runtime = SharedDemiRuntime::default();
         let server = run_as_io_op(async move {
             cv.wait().await;
             Ok(OperationResult::Close)
         })
         .fuse();
 
-        let server_task: QToken = runtime
+        let server_task = runtime
             .insert_nonpolling_coroutine("ioc_server", Box::pin(server))
             .unwrap();
         post_completion(&iocp, overlapped.as_mut().marshal(), COMPLETION_KEY)?;
@@ -503,7 +502,7 @@ mod tests {
         const PIPE_NAME: PCSTR = s!(r"\\.\pipe\demikernel-test-pipe");
         const BUFFER_SIZE: u32 = 128;
         const COMPLETION_KEY: usize = 0xFEEDF00D;
-        let server_pipe: SafeHandle = SafeHandle(unsafe {
+        let server_pipe = SafeHandle(unsafe {
             CreateNamedPipeA(
                 PIPE_NAME,
                 PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,
@@ -515,11 +514,11 @@ mod tests {
                 None,
             )
         }?);
-        let server_state: Rc<AtomicU32> = Rc::new(AtomicU32::new(0));
-        let server_state_view: Rc<AtomicU32> = server_state.clone();
-        let mut iocp: UnsafeCell<IoCompletionPort<Rc<Vec<u8>>>> = UnsafeCell::new(make_iocp().map_err(anyhow_fail)?);
+        let server_state = Rc::new(AtomicU32::new(0));
+        let server_state_view = server_state.clone();
+        let mut iocp = UnsafeCell::new(make_iocp().map_err(anyhow_fail)?);
         iocp.get_mut().associate_handle(server_pipe.0, COMPLETION_KEY)?;
-        let iocp_ref: &mut IoCompletionPort<Rc<Vec<u8>>> = unsafe { &mut *iocp.get() };
+        let iocp_ref = unsafe { &mut *iocp.get() };
 
         let server = Box::pin(
             run_as_io_op(async move {
@@ -537,13 +536,12 @@ mod tests {
 
                 server_state.fetch_add(1, Ordering::Relaxed);
 
-                let mut buffer: Rc<Vec<u8>> =
-                    Rc::new(iter::repeat(0u8).take(BUFFER_SIZE as usize).collect::<Vec<u8>>());
+                let mut buffer = Rc::new(iter::repeat(0u8).take(BUFFER_SIZE as usize).collect::<Vec<u8>>());
                 buffer = unsafe {
                     iocp_ref.do_io(
                         buffer,
                         |state: Pin<&mut Rc<Vec<u8>>>, overlapped: *mut OVERLAPPED| -> Result<(), Fail> {
-                            let vec: &mut Vec<u8> = Rc::get_mut(state.get_mut()).unwrap();
+                            let vec = Rc::get_mut(state.get_mut()).unwrap();
                             vec.resize(BUFFER_SIZE as usize, 0u8);
                             is_overlapped_ok(ReadFile(
                                 server_pipe.0,
@@ -572,10 +570,10 @@ mod tests {
                 }
                 .await?;
 
-                let message: &str = std::str::from_utf8(buffer.as_slice())
+                let message = std::str::from_utf8(buffer.as_slice())
                     .map_err(|_| Fail::new(libc::EINVAL, "utf8 conversion failed"))?;
                 if message != MESSAGE {
-                    let err_msg: String = format!("expected \"{}\", got \"{}\"", MESSAGE, message);
+                    let err_msg = format!("expected \"{}\", got \"{}\"", MESSAGE, message);
                     Err(Fail::new(libc::EINVAL, err_msg.as_str()))
                 } else {
                     // Dummy result
@@ -585,8 +583,8 @@ mod tests {
             .fuse(),
         );
 
-        let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
-        let server_task: QToken = runtime.insert_nonpolling_coroutine("ioc_server", server).unwrap();
+        let mut runtime = SharedDemiRuntime::default();
+        let server_task = runtime.insert_nonpolling_coroutine("ioc_server", server).unwrap();
 
         let mut wait_for_state = |state| -> Result<(), Fail> {
             while server_state_view.load(Ordering::Relaxed) < state {
@@ -604,7 +602,7 @@ mod tests {
 
         wait_for_state(1)?;
 
-        let client_handle: SafeHandle = SafeHandle(unsafe {
+        let client_handle = SafeHandle(unsafe {
             CreateFileA(
                 PIPE_NAME,
                 GENERIC_WRITE.0,
@@ -618,7 +616,7 @@ mod tests {
 
         wait_for_state(2)?;
 
-        let mut bytes_written: u32 = 0;
+        let mut bytes_written = 0;
         unsafe {
             WriteFile(
                 client_handle.0,
@@ -630,7 +628,7 @@ mod tests {
 
         std::mem::drop(client_handle);
 
-        let result: OperationResult = loop {
+        let result = loop {
             iocp.get_mut().process_events()?;
             if let Ok((_, result)) = runtime.wait(server_task, Duration::ZERO) {
                 break result;
@@ -650,7 +648,7 @@ mod tests {
         const PIPE_NAME: PCSTR = s!(r"\\.\pipe\demikernel-test-cancel-pipe");
         const BUFFER_SIZE: u32 = 128;
         const COMPLETION_KEY: usize = 0xFEEDF00D;
-        let server_pipe: SafeHandle = SafeHandle(unsafe {
+        let server_pipe = SafeHandle(unsafe {
             CreateNamedPipeA(
                 PIPE_NAME,
                 PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE | FILE_FLAG_OVERLAPPED,
@@ -662,11 +660,11 @@ mod tests {
                 None,
             )
         }?);
-        let server_state: Rc<AtomicU32> = Rc::new(AtomicU32::new(0));
-        let server_state_view: Rc<AtomicU32> = server_state.clone();
-        let mut iocp: UnsafeCell<IoCompletionPort<()>> = UnsafeCell::new(make_iocp().map_err(anyhow_fail)?);
+        let server_state = Rc::new(AtomicU32::new(0));
+        let server_state_view = server_state.clone();
+        let mut iocp = UnsafeCell::new(make_iocp().map_err(anyhow_fail)?);
         iocp.get_mut().associate_handle(server_pipe.0, COMPLETION_KEY)?;
-        let iocp_ref: &mut IoCompletionPort<()> = unsafe { &mut *iocp.get() };
+        let iocp_ref = unsafe { &mut *iocp.get() };
 
         let server = run_as_io_op(async move {
             match conditional_yield_with_timeout(
@@ -690,8 +688,8 @@ mod tests {
         })
         .fuse();
 
-        let mut runtime: SharedDemiRuntime = SharedDemiRuntime::default();
-        let server_task: QToken = runtime
+        let mut runtime = SharedDemiRuntime::default();
+        let server_task = runtime
             .insert_nonpolling_coroutine("ioc_server", Box::pin(server))
             .unwrap();
 
@@ -701,11 +699,11 @@ mod tests {
             "server execution should have started"
         );
 
-        let iocp_ref: &mut IoCompletionPort<()> = unsafe { &mut *iocp.get() };
+        let iocp_ref = unsafe { &mut *iocp.get() };
         iocp_ref.process_events()?;
 
         // Poll the runtime again, which
-        let result: OperationResult = loop {
+        let result = loop {
             // Move time forward, which should time out the operation.
             runtime.advance_clock(Instant::now());
             iocp.get_mut().process_events()?;

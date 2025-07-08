@@ -24,13 +24,13 @@ use std::{
 use windows::{
     core::PSTR,
     Win32::{
-        Foundation::{BOOL, ERROR_NOT_FOUND, FALSE, HANDLE, TRUE},
+        Foundation::{ERROR_NOT_FOUND, FALSE, HANDLE, TRUE},
         Networking::WinSock::{
             bind, closesocket, listen, shutdown, tcp_keepalive, WSAGetLastError, WSARecvFrom, WSASendTo,
             FROM_PROTOCOL_INFO, INVALID_SOCKET, IPPROTO_TCP, LINGER, SD_BOTH, SIO_KEEPALIVE_VALS, SOCKADDR,
             SOCKADDR_IN, SOCKADDR_IN6, SOCKADDR_INET, SOCKADDR_STORAGE, SOCKET, SOCKET_ERROR, SOL_SOCKET, SO_KEEPALIVE,
             SO_LINGER, SO_PROTOCOL_INFOW, SO_UPDATE_ACCEPT_CONTEXT, SO_UPDATE_CONNECT_CONTEXT, TCP_NODELAY, WSABUF,
-            WSAEINVAL, WSAPROTOCOL_INFOW, WSA_FLAG_OVERLAPPED,
+            WSAEINVAL, WSA_FLAG_OVERLAPPED,
         },
         System::IO::{CancelIoEx, OVERLAPPED},
     },
@@ -113,7 +113,7 @@ impl Socket {
         extensions: Rc<SocketExtensions>,
         iocp: &IoCompletionPort<SocketOpState>,
     ) -> Result<Socket, Fail> {
-        let s: Socket = Socket { s, extensions };
+        let s = Socket { s, extensions };
         s.setup_socket(protocol, options)?;
         iocp.associate_socket(s.s, 0)?;
         Ok(s)
@@ -141,7 +141,7 @@ impl Socket {
 
     /// Set linger socket options.
     pub fn set_linger(&self, linger_time: Option<Duration>) -> Result<(), Fail> {
-        let l: LINGER = LINGER {
+        let l = LINGER {
             l_onoff: if linger_time.is_some() { 1 } else { 0 },
             l_linger: linger_time.unwrap_or(Duration::ZERO).as_secs() as u16,
         };
@@ -161,7 +161,7 @@ impl Socket {
 
     /// Get address of peer connected to socket
     pub fn getpeername(&self) -> Result<SocketAddrV4, Fail> {
-        let addr: Result<SocketAddrV4, Fail> = WinsockRuntime::getpeername(self.s);
+        let addr = WinsockRuntime::getpeername(self.s);
         addr
     }
 
@@ -187,7 +187,7 @@ impl Socket {
     /// Enable or disable the use of Nagle's algorithm for TCP.
     pub fn set_nagle(&self, enabled: bool) -> Result<(), Fail> {
         // Note the inverted condition here: TCP_NODELAY is a disabler for Nagle's algorithm.
-        let value: BOOL = if enabled { FALSE } else { TRUE };
+        let value = if enabled { FALSE } else { TRUE };
         unsafe { WinsockRuntime::do_setsockopt(self.s, IPPROTO_TCP.0, TCP_NODELAY, Some(&value)) }?;
         Ok(())
     }
@@ -203,13 +203,11 @@ impl Socket {
     /// Make a new socket like some template socket.
     pub fn new_like(template: &Socket) -> Result<Socket, Fail> {
         // Safety: SO_PROTOCOL_INFOW fills out a WSAPROTOCOL_INFOW structure.
-        let protocol: WSAPROTOCOL_INFOW =
-            unsafe { WinsockRuntime::do_getsockopt(template.s, SOL_SOCKET, SO_PROTOCOL_INFOW) }?;
-
-        let extensions: Rc<SocketExtensions> = template.extensions.clone();
+        let protocol = unsafe { WinsockRuntime::do_getsockopt(template.s, SOL_SOCKET, SO_PROTOCOL_INFOW) }?;
+        let extensions = template.extensions.clone();
 
         // Safety: SOCKET handle is transferred to a Socket instance, which will safely close the handle on drop.
-        let s: SOCKET = unsafe {
+        let s = unsafe {
             WinsockRuntime::raw_socket(
                 FROM_PROTOCOL_INFO,
                 FROM_PROTOCOL_INFO,
@@ -225,8 +223,7 @@ impl Socket {
     /// Begin disconnecting a connection-oriented socket. If called on a non-stream-based socket or an unconnected
     /// stream-based socket, this method will return an `ENOTCONN` failure.
     pub fn start_disconnect(&self, overlapped: *mut OVERLAPPED) -> Result<(), Fail> {
-        let result: bool = unsafe { self.extensions.disconnectex.unwrap()(self.s, overlapped, 0, 0).as_bool() };
-
+        let result = unsafe { self.extensions.disconnectex.unwrap()(self.s, overlapped, 0, 0).as_bool() };
         get_overlapped_api_result(result)
     }
 
@@ -250,7 +247,7 @@ impl Socket {
     /// Call `bind` winsock API on self.
     pub fn bind(&self, local: SocketAddr) -> Result<(), Fail> {
         let sockaddr: socket2::SockAddr = local.into();
-        let result: i32 = unsafe { bind(self.s, sockaddr.as_ptr().cast(), sockaddr.len()) };
+        let result = unsafe { bind(self.s, sockaddr.as_ptr().cast(), sockaddr.len()) };
 
         if result == 0 {
             Ok(())
@@ -261,7 +258,7 @@ impl Socket {
 
     /// Call `listen` winsock API on self.
     pub fn listen(&self, backlog: usize) -> Result<(), Fail> {
-        let backlog: i32 = i32::try_from(backlog).unwrap_or(i32::MAX);
+        let backlog = i32::try_from(backlog).unwrap_or(i32::MAX);
         if unsafe { listen(self.s, backlog) } == 0 {
             Ok(())
         } else {
@@ -286,19 +283,19 @@ impl Socket {
     /// Start an overlapped accept operation; this must be called from inside IoCompletionPort::do_io/do_socket_io.
     /// Once the operation completes, the AcceptState can be given to `finish_accept` to finish the operation.
     pub fn start_accept(&self, state: Pin<&mut SocketOpState>, overlapped: *mut OVERLAPPED) -> Result<(), Fail> {
-        let accept_result: &mut AcceptState = match state.get_mut() {
+        let accept_result = match state.get_mut() {
             SocketOpState::Accept(ref mut accept_result) => accept_result,
             _ => unreachable!("must be an accept operation"),
         };
-        let new_socket: Socket = Socket::new_like(self)?;
+        let new_socket = Socket::new_like(self)?;
 
         // Safety: getting the buffer pointer does not violate pinning invariants.
-        let buf_ptr: *mut u8 = accept_result.buffer.as_mut_ptr();
-        let mut bytes_out: u32 = 0;
+        let buf_ptr = accept_result.buffer.as_mut_ptr();
+        let mut bytes_out = 0;
 
         // Safety: buffer pointers refer to valid, live locations for the duration of the call iff accept_result stays
         // alive until the completion.
-        let success: bool = unsafe {
+        let success = unsafe {
             self.extensions.acceptex.unwrap()(
                 self.s,
                 new_socket.s,
@@ -330,7 +327,7 @@ impl Socket {
     ) -> Result<(Socket, SocketAddr, SocketAddr), Fail> {
         result.ok()?;
 
-        let accept_result: &mut AcceptState = match state.get_mut() {
+        let accept_result = match state.get_mut() {
             SocketOpState::Accept(ref mut accept_result) => accept_result,
             _ => unreachable!("must be an accept operation"),
         };
@@ -356,10 +353,10 @@ impl Socket {
             // crate.
             let mut localsockaddr: MaybeUninit<*mut windows_sys::Win32::Networking::WinSock::SOCKADDR_STORAGE> =
                 MaybeUninit::zeroed();
-            let mut localsockaddrlength: i32 = 0;
+            let mut localsockaddrlength = 0;
             let mut remotesockaddr: MaybeUninit<*mut windows_sys::Win32::Networking::WinSock::SOCKADDR_STORAGE> =
                 MaybeUninit::zeroed();
-            let mut remotesockaddrlength: i32 = 0;
+            let mut remotesockaddrlength = 0;
 
             self.extensions.get_acceptex_sockaddrs.unwrap()(
                 accept_result.buffer.as_ptr().cast(),
@@ -382,11 +379,11 @@ impl Socket {
             )
         };
 
-        let local_addr: SocketAddr = local_addr
+        let local_addr = local_addr
             .as_socket()
             .ok_or_else(|| Fail::new(libc::EAFNOSUPPORT, "bad local socket address from accept"))?;
 
-        let remote_addr: SocketAddr = remote_addr
+        let remote_addr = remote_addr
             .as_socket()
             .ok_or_else(|| Fail::new(libc::EAFNOSUPPORT, "bad remote socket address from accept"))?;
 
@@ -399,10 +396,10 @@ impl Socket {
         const IN6ADDR_ANY: SocketAddrV6 = SocketAddrV6::new(Ipv6Addr::UNSPECIFIED, 0, 0, 0);
         const INADDR_ANY: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0);
 
-        let (remote_addr, remote_len): (SOCKADDR_INET, i32) = Self::translate_address(remote);
-        let success: bool = unsafe {
+        let (remote_addr, remote_len) = Self::translate_address(remote);
+        let success = unsafe {
             // NB ConnectEx requires the socket to be explicitly bound.
-            let (localaddr, locallen): (SOCKADDR_INET, i32) = match remote {
+            let (localaddr, locallen) = match remote {
                 SocketAddr::V4(_) => Self::translate_address(INADDR_ANY.into()),
                 SocketAddr::V6(_) => Self::translate_address(IN6ADDR_ANY.into()),
             };
@@ -440,15 +437,15 @@ impl Socket {
     /// immediately, in which case an overlapped completion is not scheduled. To indicate this case, this method will
     /// return EAGAIN and update `buffer` according to the number of bytes received.
     pub fn start_pop(&self, state: Pin<&mut SocketOpState>, overlapped: *mut OVERLAPPED) -> Result<(), Fail> {
-        let pop_state: &mut PopState = match state.get_mut() {
+        let pop_state = match state.get_mut() {
             SocketOpState::Pop(ref mut pop_state) => pop_state,
             _ => unreachable!("must be an accept operation"),
         };
 
-        let mut bytes_transferred: u32 = 0;
-        let mut flags: u32 = 0;
-        let success: bool = unsafe {
-            let wsa_buffer: WSABUF = WSABUF {
+        let mut bytes_transferred = 0;
+        let mut flags = 0;
+        let success = unsafe {
+            let wsa_buffer = WSABUF {
                 len: pop_state.buffer.len() as u32,
                 // Safety: loading the buffer pointer won't violate pinning invariants.
                 buf: PSTR::from_raw(pop_state.buffer.as_mut_ptr()),
@@ -456,7 +453,7 @@ impl Socket {
 
             // NB winsock service providers are required to capture the entire WSABUF array inline with the call, so
             // wsa_buffer and the derivative slice can safely drop after the call.
-            let result: i32 = WSARecvFrom(
+            let result = WSARecvFrom(
                 self.s,
                 std::slice::from_ref(&wsa_buffer),
                 Some(&mut bytes_transferred),
@@ -486,12 +483,12 @@ impl Socket {
         // not useful for this implementation.
         result.ok()?;
 
-        let pop_state: &mut PopState = match state.get_mut() {
+        let pop_state = match state.get_mut() {
             SocketOpState::Pop(ref mut pop_state) => pop_state,
             _ => unreachable!("must be an accept operation"),
         };
 
-        let addr: Option<SocketAddr> = if pop_state.addr_len > 0 {
+        let addr = if pop_state.addr_len > 0 {
             // Safety: since we are done with the overlapped API, pinning is no longer required for pop_state. The
             // returned address and addr_len values come from the OS, so they will be valid to pass to socket2.
             unsafe {
@@ -515,26 +512,26 @@ impl Socket {
         addr: Option<SocketAddr>,
         overlapped: *mut OVERLAPPED,
     ) -> Result<(), Fail> {
-        let buffer: &mut DemiBuffer = match state.get_mut() {
+        let buffer = match state.get_mut() {
             SocketOpState::Push(ref mut buffer) => buffer,
             _ => unreachable!("must be an accept operation"),
         };
 
-        let mut bytes_transferred: u32 = 0;
-        let success: bool = unsafe {
-            let wsa_buffer: WSABUF = WSABUF {
+        let mut bytes_transferred = 0;
+        let success = unsafe {
+            let wsa_buffer = WSABUF {
                 len: buffer.len() as u32,
                 // Safety: loading the buffer pointer won't violate pinning invariants.
                 buf: PSTR::from_raw(buffer.as_mut_ptr()),
             };
 
-            let addr: Option<socket2::SockAddr> = addr.map(socket2::SockAddr::from);
+            let addr = addr.map(socket2::SockAddr::from);
 
             // NB winsock service providers are required to capture the entire WSABUF array inline with the call, so
             // wsa_buffer and the derivative slice can safely drop after the call.
             // Per Windows documentation, WSASendTo ignores the destination address for connection oriented sockets and
             // functions equivalently to WSASend.
-            let result: i32 = WSASendTo(
+            let result = WSASendTo(
                 self.s,
                 std::slice::from_ref(&wsa_buffer),
                 Some(&mut bytes_transferred),

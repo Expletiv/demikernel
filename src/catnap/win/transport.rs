@@ -34,7 +34,7 @@ use std::{
     pin::Pin,
 };
 use windows::Win32::{
-    Networking::WinSock::{WSAGetLastError, IPPROTO, IPPROTO_TCP, IPPROTO_UDP},
+    Networking::WinSock::{WSAGetLastError, IPPROTO_TCP, IPPROTO_UDP},
     System::IO::OVERLAPPED,
 };
 
@@ -68,7 +68,7 @@ pub struct SharedCatnapTransport(SharedObject<CatnapTransport>);
 impl SharedCatnapTransport {
     /// Create a new transport instance.
     pub fn new(config: &Config, runtime: &mut SharedDemiRuntime) -> Result<Self, Fail> {
-        let me: Self = Self(SharedObject::new(CatnapTransport {
+        let me = Self(SharedObject::new(CatnapTransport {
             winsock: expect_ok!(WinsockRuntime::new(), "failed to initialize WinSock"),
             iocp: expect_ok!(IoCompletionPort::new(), "failed to setup I/O completion port"),
             options: TcpSocketOptions::new(config)?,
@@ -78,7 +78,7 @@ impl SharedCatnapTransport {
         runtime.insert_io_polling_coroutine(
             "bgc::catnap::transport::epoll",
             Box::pin({
-                let mut me: Self = me.clone();
+                let mut me = me.clone();
                 async move { me.run_event_processor().await }.fuse()
             }),
         )?;
@@ -108,11 +108,11 @@ impl NetworkTransport for SharedCatnapTransport {
     /// Create a new socket for the specified domain and type.
     fn socket(&mut self, domain: socket2::Domain, typ: socket2::Type) -> Result<Socket, Fail> {
         // Select protocol.
-        let protocol: IPPROTO = match typ {
+        let protocol = match typ {
             socket2::Type::STREAM => IPPROTO_TCP,
             socket2::Type::DGRAM => IPPROTO_UDP,
             _ => {
-                let cause: String = format!("socket type not supported: {}", libc::c_int::from(typ));
+                let cause = format!("socket type not supported: {}", libc::c_int::from(typ));
                 error!("transport::socket(): {}", &cause);
                 return Err(Fail::new(libc::ENOTSUP, &cause));
             },
@@ -121,7 +121,7 @@ impl NetworkTransport for SharedCatnapTransport {
         let me: &mut CatnapTransport = &mut self.0;
 
         // Create socket.
-        let s: Socket = me
+        let s = me
             .winsock
             .socket(domain.into(), typ.into(), protocol.0, &me.options, &me.iocp)?;
         Ok(s)
@@ -154,11 +154,11 @@ impl NetworkTransport for SharedCatnapTransport {
 
     // Gets address of peer connected to socket
     fn getpeername(&mut self, socket: &mut Self::SocketDescriptor) -> Result<SocketAddrV4, Fail> {
-        let addr: Result<SocketAddrV4, Fail> = socket.getpeername();
+        let addr = socket.getpeername();
         match addr {
             Ok(addr) => Ok(addr),
             Err(_) => {
-                let cause: String = format!("failed to get peer address (errno={:?})", unsafe { WSAGetLastError() });
+                let cause = format!("failed to get peer address (errno={:?})", unsafe { WSAGetLastError() });
                 error!("getpeername(): {:?}", cause);
                 Err(Fail::new(libc::EINVAL, &cause))
             },
@@ -206,7 +206,7 @@ impl NetworkTransport for SharedCatnapTransport {
         let start = |accept_result: Pin<&mut SocketOpState>, overlapped: *mut OVERLAPPED| -> Result<(), Fail> {
             socket.start_accept(accept_result, overlapped)
         };
-        let me_finish: Self = self.clone();
+        let me_finish = self.clone();
         let finish = |accept_result: Pin<&mut SocketOpState>,
                       result: OverlappedResult|
          -> Result<(Socket, SocketAddr, SocketAddr), Fail> {
@@ -245,10 +245,10 @@ impl NetworkTransport for SharedCatnapTransport {
         socket: &mut Self::SocketDescriptor,
         size: usize,
     ) -> Result<(Option<SocketAddr>, DemiBuffer), Fail> {
-        let mut buf: DemiBuffer = DemiBuffer::new(size as u16);
+        let mut buffer = DemiBuffer::new(size as u16);
         unsafe {
             self.0.iocp.do_io(
-                SocketOpState::Pop(PopState::new(buf.clone())),
+                SocketOpState::Pop(PopState::new(buffer.clone())),
                 |state: Pin<&mut SocketOpState>, overlapped: *mut OVERLAPPED| -> Result<(), Fail> {
                     socket.start_pop(state, overlapped)
                 },
@@ -259,13 +259,13 @@ impl NetworkTransport for SharedCatnapTransport {
         }
         .await
         .and_then(|(nbytes, sockaddr)| {
-            buf.trim(buf.len() - nbytes)?;
+            buffer.trim(buffer.len() - nbytes)?;
             if nbytes > 0 {
                 trace!("data received ({:?}/{:?} bytes)", nbytes, size);
             } else {
                 trace!("not data received");
             }
-            Ok((sockaddr, buf))
+            Ok((sockaddr, buffer))
         })
     }
 
@@ -279,7 +279,7 @@ impl NetworkTransport for SharedCatnapTransport {
         addr: Option<SocketAddr>,
     ) -> Result<(), Fail> {
         loop {
-            let result: Result<usize, Fail> = unsafe {
+            let result = unsafe {
                 self.0.iocp.do_io(
                     SocketOpState::Push(buf.clone()),
                     |state: Pin<&mut SocketOpState>, overlapped: *mut OVERLAPPED| -> Result<(), Fail> {
@@ -303,8 +303,8 @@ impl NetworkTransport for SharedCatnapTransport {
 
                 Err(fail) => {
                     if !DemiRuntime::should_retry(fail.errno) {
-                        let message: String = format!("push failed: {}", fail.cause);
-                        return Err(Fail::new(fail.errno, message.as_str()));
+                        let msg = format!("push failed: {}", fail.cause);
+                        return Err(Fail::new(fail.errno, msg.as_str()));
                     }
                 },
             }

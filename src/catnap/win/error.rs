@@ -6,17 +6,14 @@
 //======================================================================================================================
 
 use crate::runtime::fail::Fail;
-use windows::{
-    core::HRESULT,
-    Win32::{
-        Foundation::{
-            RtlNtStatusToDosError, ERROR_ABANDONED_WAIT_0, ERROR_ACCESS_DENIED, ERROR_ALREADY_EXISTS,
-            ERROR_INSUFFICIENT_BUFFER, ERROR_INVALID_HANDLE, ERROR_INVALID_PARAMETER, ERROR_IO_INCOMPLETE,
-            ERROR_IO_PENDING, ERROR_MORE_DATA, ERROR_NOT_ENOUGH_MEMORY, ERROR_OPERATION_ABORTED, ERROR_SUCCESS,
-            NTSTATUS, STATUS_ABANDONED, STATUS_SUCCESS, STATUS_TIMEOUT, WAIT_IO_COMPLETION, WAIT_TIMEOUT, WIN32_ERROR,
-        },
-        Networking::WinSock::{self, WSAGetLastError, WSABASEERR, WSA_ERROR, WSA_IO_PENDING},
+use windows::Win32::{
+    Foundation::{
+        RtlNtStatusToDosError, ERROR_ABANDONED_WAIT_0, ERROR_ACCESS_DENIED, ERROR_ALREADY_EXISTS,
+        ERROR_INSUFFICIENT_BUFFER, ERROR_INVALID_HANDLE, ERROR_INVALID_PARAMETER, ERROR_IO_INCOMPLETE,
+        ERROR_IO_PENDING, ERROR_MORE_DATA, ERROR_NOT_ENOUGH_MEMORY, ERROR_OPERATION_ABORTED, ERROR_SUCCESS, NTSTATUS,
+        STATUS_ABANDONED, STATUS_SUCCESS, STATUS_TIMEOUT, WAIT_IO_COMPLETION, WAIT_TIMEOUT, WIN32_ERROR,
     },
+    Networking::WinSock::{self, WSAGetLastError, WSABASEERR, WSA_ERROR, WSA_IO_PENDING},
 };
 
 //======================================================================================================================
@@ -25,8 +22,8 @@ use windows::{
 
 impl Fail {
     pub fn from_win32_error(error: &windows::core::Error, is_wait_error: bool) -> Fail {
-        let cause: String = format!("{}", error);
-        let errno: libc::errno_t = match WIN32_ERROR::from_error(error) {
+        let cause = format!("{}", error);
+        let errno = match WIN32_ERROR::from_error(error) {
             Some(error) => translate_win32_error(error, is_wait_error),
             None => libc::EFAULT,
         };
@@ -45,7 +42,7 @@ pub fn try_translate_win32_error(err: WIN32_ERROR, is_wait_api: bool) -> Option<
     const ERROR_WAIT_TIMEOUT: WIN32_ERROR = WIN32_ERROR(WAIT_TIMEOUT.0);
     const ERROR_WAIT_IO_COMPLETION: WIN32_ERROR = WIN32_ERROR(WAIT_IO_COMPLETION.0);
 
-    let errno: libc::errno_t = match err {
+    let errno = match err {
         ERROR_ACCESS_DENIED => libc::EACCES,
         ERROR_NOT_ENOUGH_MEMORY => libc::ENOMEM,
         ERROR_ALREADY_EXISTS => libc::EEXIST,
@@ -83,7 +80,7 @@ pub fn try_translate_wsa_error(err: WSA_ERROR) -> Option<libc::errno_t> {
         return None;
     }
 
-    let value: libc::errno_t = match err {
+    let value = match err {
         // Winsock errors with errno equivalents
         WinSock::WSAEINTR => libc::EINTR,
         WinSock::WSAEBADF => libc::EBADF,
@@ -195,18 +192,18 @@ pub fn translate_win32_error(error: WIN32_ERROR, is_wait_api: bool) -> libc::err
 
 /// Translate a win32 error stored as a WSA_ERROR into a windows crate Error type.
 fn wsa_error_to_win_error(err: WSA_ERROR) -> windows::core::Error {
-    let code: HRESULT = WIN32_ERROR(err.0 as u32).into();
+    let code = WIN32_ERROR(err.0 as u32).into();
     windows::core::Error::from_hresult(code)
 }
 
 /// Get the result of the most recent winsock overlapped operation, interpreting WSAGetLastError and handling
 /// IO_PENDING non-errors.
 pub fn last_overlapped_wsa_error() -> Result<(), Fail> {
-    let wsa_error: WSA_ERROR = unsafe { WSAGetLastError() };
+    let wsa_error = unsafe { WSAGetLastError() };
     if wsa_error == WSA_IO_PENDING {
         Ok(())
     } else {
-        let error: windows::core::Error = wsa_error_to_win_error(wsa_error);
+        let error = wsa_error_to_win_error(wsa_error);
         if error.code().is_ok() {
             Ok(())
         } else {
@@ -238,8 +235,8 @@ pub fn expect_last_wsa_error() -> Fail {
 /// Convert from WIN32_ERROR to Fail.
 impl From<WIN32_ERROR> for Fail {
     fn from(value: WIN32_ERROR) -> Self {
-        let code: HRESULT = value.into();
-        let error: windows::core::Error = windows::core::Error::from_hresult(code);
+        let code = value.into();
+        let error = windows::core::Error::from_hresult(code);
         error.into()
     }
 }
