@@ -33,7 +33,7 @@ use ::std::ops::{Deref, DerefMut};
 
 pub struct Layer2Endpoint {
     layer1_endpoint: Box<dyn PhysicalLayer>,
-    local_link_addr: MacAddress,
+    local_mac: MacAddress,
 }
 
 #[derive(Clone)]
@@ -47,63 +47,66 @@ impl SharedLayer2Endpoint {
     pub fn new<P: PhysicalLayer>(config: &Config, layer1_endpoint: P) -> Result<Self, Fail> {
         Ok(Self(SharedObject::new(Layer2Endpoint {
             layer1_endpoint: Box::new(layer1_endpoint),
-            local_link_addr: config.local_link_addr()?,
+            local_mac: config.local_link_addr()?,
         })))
     }
 
     pub fn receive(&mut self) -> Result<ArrayVec<(EtherType2, DemiBuffer), MAX_BATCH_SIZE_NUM_PACKETS>, Fail> {
-        let mut batch: ArrayVec<(EtherType2, DemiBuffer), MAX_BATCH_SIZE_NUM_PACKETS> = ArrayVec::new();
-        for mut pkt in self.layer1_endpoint.receive()? {
-            let header: Ethernet2Header = match Ethernet2Header::parse_and_strip(&mut pkt) {
+        let mut batch = ArrayVec::new();
+        for mut packet in self.layer1_endpoint.receive()? {
+            let header = match Ethernet2Header::parse_and_strip(&mut packet) {
                 Ok(result) => result,
                 Err(e) => {
                     // TODO: Collect dropped packet statistics.
-                    let cause: &str = "Invalid Ethernet header";
-                    warn!("{}: {:?}", cause, e);
+                    warn!("Invalid Ethernet header: {:?}", e);
                     continue;
                 },
             };
             debug!("L2 INCOMING {:?}", header);
-            if self.local_link_addr != header.dst_addr()
-                && !header.dst_addr().is_broadcast()
-                && !header.dst_addr().is_multicast()
-            {
-                let cause: &str = "invalid link address";
-                warn!("dropping packet: {}", cause);
+            if self.bad_dst(&header) {
+                warn!("dropping packet: invalid link address");
             }
-            batch.push((header.ether_type(), pkt))
+            batch.push((header.ether_type(), packet))
         }
         Ok(batch)
     }
 
-    pub fn transmit_arp_packet(&mut self, remote_link_addr: MacAddress, pkt: DemiBuffer) -> Result<(), Fail> {
-        let mut pkts: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS> = ArrayVec::new();
-        pkts.push(pkt);
-        self.transmit(remote_link_addr, EtherType2::Arp, pkts)
+    pub fn transmit_arp_packet(&mut self, remote_mac: MacAddress, packet: DemiBuffer) -> Result<(), Fail> {
+        let mut packets = ArrayVec::new();
+        packets.push(packet);
+        self.transmit(remote_mac, EtherType2::Arp, packets)
     }
 
-    pub fn transmit_ipv4_packet(&mut self, remote_link_addr: MacAddress, pkt: DemiBuffer) -> Result<(), Fail> {
-        let mut pkts: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS> = ArrayVec::new();
-        pkts.push(pkt);
-        self.transmit(remote_link_addr, EtherType2::Ipv4, pkts)
+    pub fn transmit_ipv4_packet(&mut self, remote_mac: MacAddress, packet: DemiBuffer) -> Result<(), Fail> {
+        let mut packets = ArrayVec::new();
+        packets.push(packet);
+        self.transmit(remote_mac, EtherType2::Ipv4, packets)
+    }
+
+    fn bad_dst(&self, header: &Ethernet2Header) -> bool {
+        let dst_mac = header.dst_addr();
+        self.local_mac != dst_mac && !dst_mac.is_broadcast() && !dst_mac.is_multicast()
     }
 
     fn transmit(
         &mut self,
-        remote_link_addr: MacAddress,
-        eth2_type: EtherType2,
-        mut pkts: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>,
+        remote_mac: MacAddress,
+        ether_type: EtherType2,
+        mut packets: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>,
     ) -> Result<(), Fail> {
-        let eth2_header: Ethernet2Header = Ethernet2Header::new(remote_link_addr, self.local_link_addr, eth2_type);
-        debug!("L2 OUTGOING {:?}", eth2_header);
-        for pkt in pkts.iter_mut() {
-            eth2_header.serialize_and_attach(pkt);
+        let header = Ethernet2Header::new(remote_mac, self.local_mac, ether_type);
+
+        debug!("L2 OUTGOING {:?}", header);
+
+        for packet in packets.iter_mut() {
+            header.serialize_and_attach(packet);
         }
-        self.layer1_endpoint.transmit(pkts)
+
+        self.layer1_endpoint.transmit(packets)
     }
 
     pub fn get_local_link_addr(&self) -> MacAddress {
-        self.local_link_addr
+        self.local_mac
     }
 }
 
