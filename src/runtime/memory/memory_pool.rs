@@ -355,8 +355,10 @@ mod tests {
 
     fn alloc_page_buf(page_size: usize, alloc_size: usize, store: &mut Vec<MaybeUninit<u8>>) -> &mut [MaybeUninit<u8>] {
         store.clear();
-        store.reserve(alloc_size + page_size);
-        store.extend(std::iter::repeat(MaybeUninit::<u8>::zeroed()).take(alloc_size + page_size));
+
+        let total_size = alloc_size + page_size;
+        store.reserve(total_size);
+        store.extend(std::iter::repeat_n(MaybeUninit::<u8>::zeroed(), total_size));
 
         let align_bytes: usize = store.as_ptr().align_offset(page_size);
         assert!(align_bytes + alloc_size <= store.len());
@@ -404,7 +406,7 @@ mod tests {
             a.as_ref().unwrap().as_ptr().cmp(&b.as_ref().unwrap().as_ptr())
         });
 
-        let expected: Vec<u8> = Vec::from_iter(std::iter::repeat(0xAAu8).take(buf_size_ea.get()));
+        let expected = Vec::from_iter(std::iter::repeat_n(0xAAu8, buf_size_ea.get()));
 
         // NB if the buffer size is a factor or multiple of the page size, no bytes will be wasted at the end of the
         // page.
