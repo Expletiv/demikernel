@@ -15,7 +15,7 @@ def main():
     __build_report(args)
 
 
-def __read_args() -> argparse.Namespace:
+def __read_args():
     description: str = 'CI Utility for reporting performance statistics of Demikernel.'
     parser = argparse.ArgumentParser(prog='plot.py', description=description)
     parser.add_argument('--branch', required=True, help='Current branch name.')
@@ -25,7 +25,7 @@ def __read_args() -> argparse.Namespace:
 
 
 def __build_report(args):
-    commit_id = git.get_head_commit(args.branch)
+    commit_id = git.head_commit(args.branch)
 
     print('libos = ' + args.libos)
     print('commit id = ' + commit_id)
@@ -48,11 +48,7 @@ def __get_perf_data(log_dir):
 
     perf_df = pd.read_csv(
         StringIO('\n'.join(collapsed_stacks)),
-        names=['collapsed_stack',
-               'num_calls',
-               'cycles_per_call',
-               'nanoseconds_per_call',
-               'total_duration',
+        names=['collapsed_stack', 'num_calls', 'cycles_per_call', 'nanoseconds_per_call', 'total_duration',
                'total_duration_exclusive'])
 
     # There will be multiple entries for each function in the perf data coming from different files. So, we need to
@@ -98,15 +94,8 @@ def __get_file_df(file):
     file_df = pd.read_csv(
         StringIO('\n'.join(lines)),
         delimiter=',',
-        names=['call_depth',
-               'thread_id',
-               'function_name',
-               'num_calls',
-               'cycles_per_call',
-               'nanoseconds_per_call',
-               'total_duration',
-               'total_duration_exclusive',
-               ])
+        names=['call_depth', 'thread_id', 'function_name', 'num_calls', 'cycles_per_call', 'nanoseconds_per_call',
+               'total_duration', 'total_duration_exclusive'])
     # Number of '+' characters in the call_depth column denotes the depth of the function call.
     file_df['call_depth'] = file_df['call_depth'].apply(lambda x: x.count('+')).astype(int)
     return file_df
@@ -123,32 +112,19 @@ def __extract_perf_lines(file):
 
 
 def __print_perf_data(perf_df):
-    sort_by_columns = [
-        'total_duration_exclusive',
-        'num_calls',
-        'cycles_per_call',
-        'nanoseconds_per_call',
-        'total_duration',
-    ]
-    columns_to_display = [
-        'collapsed_stack',
-        'num_calls',
-        'cycles_per_call',
-        'nanoseconds_per_call',
-        'total_duration',
-        'percent_total_duration',
-        'total_duration_exclusive',
-        'percent_total_duration_exclusive',
-    ]
+    sort_by_columns = ['total_duration_exclusive', 'num_calls', 'cycles_per_call', 'nanoseconds_per_call',
+                       'total_duration']
+    columns_to_display = ['collapsed_stack', 'num_calls', 'cycles_per_call', 'nanoseconds_per_call', 'total_duration',
+                          'percent_total_duration', 'total_duration_exclusive', 'percent_total_duration_exclusive']
 
     out_df = perf_df.sort_values(by=sort_by_columns, ascending=False)[columns_to_display]
     print(out_df.to_markdown(floatfmt='.2f', index=False))
 
 
-def __create_flame_graph(libos, commit_id, perf_df) -> None:
+def __create_flame_graph(libos, commit_id, perf_df):
     # Save folded stacks to file for consumption by flamegraph.pl
-    perf_df[['collapsed_stack', 'total_duration_exclusive']].to_csv(
-        'flamegraph_input.txt', index=False, sep=' ', header=False)
+    perf_df[['collapsed_stack', 'total_duration_exclusive']].to_csv('flamegraph_input.txt', index=False, sep=' ',
+                                                                    header=False)
     # Render flame graph
     subprocess.run(['/tmp/FlameGraph/flamegraph.pl', 'flamegraph_input.txt',
                     '--countname', 'total_duration_exclusive',
