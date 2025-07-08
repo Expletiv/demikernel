@@ -592,7 +592,7 @@ impl Config {
     /// Similar to `require_typed_option` using `Yaml::as_i64` as the receiver, but additionally verifies that the
     /// destination type may hold the i64 value.
     fn get_int_option<T: TryFrom<i64>>(yaml: &Yaml, index: &str) -> Result<T, Fail> {
-        let val: i64 = Self::get_typed_option(yaml, index, &Yaml::as_i64)?;
+        let val = Self::get_typed_option(yaml, index, Yaml::as_i64)?;
         match T::try_from(val) {
             Ok(val) => Ok(val),
             _ => {
@@ -615,7 +615,7 @@ impl Config {
 
     /// Same as `Self::require_typed_option` using `Yaml::as_bool` as the receiver.
     fn get_bool_option(yaml: &Yaml, index: &str) -> Result<bool, Fail> {
-        Self::get_typed_option(yaml, index, &Yaml::as_bool)
+        Self::get_typed_option(yaml, index, Yaml::as_bool)
     }
 
     /// Parse a comma-separated array of elements into a Vec.
