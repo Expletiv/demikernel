@@ -4,20 +4,17 @@
 use crate::{
     collections::async_queue::AsyncQueue,
     demikernel::config::Config,
-    inetstack::{
-        protocols::{
-            layer2::{SharedLayer2Endpoint, ETHERNET2_HEADER_SIZE},
-            layer3::{
-                arp::SharedArpPeer,
-                icmpv4::{
-                    header::{Icmpv4Header, ICMPV4_HEADER_SIZE},
-                    protocol::{Icmpv4Type2, ICMPV4_ECHO_REQUEST_MESSAGE_SIZE},
-                },
-                ip::IpProtocol,
-                ipv4::{Ipv4Header, IPV4_HEADER_MIN_SIZE},
+    inetstack::protocols::{
+        layer2::{SharedLayer2Endpoint, ETHERNET2_HEADER_SIZE},
+        layer3::{
+            arp::SharedArpPeer,
+            icmpv4::{
+                header::{Icmpv4Header, ICMPV4_HEADER_SIZE},
+                protocol::{Icmpv4Type2, ICMPV4_ECHO_REQUEST_MESSAGE_SIZE},
             },
+            ip::IpProtocol,
+            ipv4::{Ipv4Header, IPV4_HEADER_MIN_SIZE},
         },
-        types::MacAddress,
     },
     runtime::{
         conditional_yield_with_timeout, fail::Fail, memory::DemiBuffer, SharedConditionVariable, SharedDemiRuntime,
@@ -32,7 +29,7 @@ use ::std::{
     num::Wrapping,
     ops::{Deref, DerefMut},
     process,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 /// Arbitrary time out for waiting for pings.
@@ -91,8 +88,8 @@ impl SharedIcmpv4Peer {
         arp: SharedArpPeer,
         rng_seed: [u8; 32],
     ) -> Result<Self, Fail> {
-        let rng: SmallRng = SmallRng::from_seed(rng_seed);
-        let peer: SharedIcmpv4Peer = Self(SharedObject::new(Icmpv4Peer {
+        let rng = SmallRng::from_seed(rng_seed);
+        let peer = Self(SharedObject::new(Icmpv4Peer {
             runtime: runtime.clone(),
             layer2_endpoint: layer2_endpoint.clone(),
             local_ipv4_addr: config.local_ipv4_addr()?,
@@ -111,11 +108,11 @@ impl SharedIcmpv4Peer {
     async fn poll(mut self) {
         loop {
             // Look at incoming request.
-            let (ipv4_hdr, mut buf): (Ipv4Header, DemiBuffer) = match self.recv_queue.pop(Some(PING_TIMEOUT)).await {
+            let (header, mut buffer) = match self.recv_queue.pop(Some(PING_TIMEOUT)).await {
                 Ok(result) => result,
                 Err(_) => break,
             };
-            let icmpv4_hdr: Icmpv4Header = match Icmpv4Header::parse_and_strip(&mut buf) {
+            let icmpv4_hdr = match Icmpv4Header::parse_and_strip(&mut buffer) {
                 Ok(header) => header,
                 Err(e) => {
                     let cause = "Cannot parse ICMP header";
@@ -129,7 +126,7 @@ impl SharedIcmpv4Peer {
             match icmpv4_hdr.get_protocol() {
                 Icmpv4Type2::EchoRequest { id, seq_num } => {
                     if let Err(e) = self
-                        .send_packet(Icmpv4Type2::EchoReply { id, seq_num }, ipv4_hdr.get_src_addr(), buf)
+                        .send_packet(Icmpv4Type2::EchoReply { id, seq_num }, header.get_src_addr(), buffer)
                         .await
                     {
                         warn!("Could not send packet: {:?}", e);
@@ -150,19 +147,18 @@ impl SharedIcmpv4Peer {
         }
     }
 
-    /// Parses and handles a ICMP message.
-    pub fn receive(&mut self, ipv4_hdr: Ipv4Header, buf: DemiBuffer) {
-        self.recv_queue.push((ipv4_hdr, buf));
+    pub fn receive(&mut self, header: Ipv4Header, buffer: DemiBuffer) {
+        self.recv_queue.push((header, buffer));
     }
 
     /// Computes the identifier for an ICMP message.
     fn make_id(&mut self) -> u16 {
-        let mut state: u32 = 0xFFFF;
-        let addr_octets: [u8; 4] = self.local_ipv4_addr.octets();
+        let mut state = 0xFFFF;
+        let addr_octets = self.local_ipv4_addr.octets();
         state += u16::from_be_bytes([addr_octets[0], addr_octets[1]]) as u32;
         state += u16::from_be_bytes([addr_octets[2], addr_octets[3]]) as u32;
 
-        let mut pid_buf: [u8; 4] = [0u8; 4];
+        let mut pid_buf = [0u8; 4];
         pid_buf[0..4].copy_from_slice(&process::id().to_be_bytes());
         state += u16::from_be_bytes([pid_buf[0], pid_buf[1]]) as u32;
         state += u16::from_be_bytes([pid_buf[2], pid_buf[3]]) as u32;
@@ -185,12 +181,12 @@ impl SharedIcmpv4Peer {
 
     /// Sends a ping to a remote peer.
     pub async fn ping(&mut self, dst_ipv4_addr: Ipv4Addr, timeout: Option<Duration>) -> Result<Duration, Fail> {
-        let id: u16 = self.make_id();
-        let seq_num: u16 = self.make_seq_num();
-        let echo_request: Icmpv4Type2 = Icmpv4Type2::EchoRequest { id, seq_num };
+        let id = self.make_id();
+        let seq_num = self.make_seq_num();
+        let echo_request = Icmpv4Type2::EchoRequest { id, seq_num };
 
-        let t0: Instant = self.runtime.get_now();
-        let pkt: DemiBuffer = DemiBuffer::new_with_headroom(
+        let t0 = self.runtime.get_now();
+        let pkt = DemiBuffer::new_with_headroom(
             ICMPV4_ECHO_REQUEST_MESSAGE_SIZE,
             (ICMPV4_HEADER_SIZE + IPV4_HEADER_MIN_SIZE as usize + ETHERNET2_HEADER_SIZE) as u16,
         );
@@ -204,7 +200,7 @@ impl SharedIcmpv4Peer {
             return Err(Fail::new(libc::EAGAIN, &cause));
         }
 
-        let condition_variable: SharedConditionVariable = SharedConditionVariable::default();
+        let condition_variable = SharedConditionVariable::default();
         self.inflight
             .insert((id, seq_num), InflightRequest::Inflight(condition_variable));
         match conditional_yield_with_timeout(
@@ -226,7 +222,7 @@ impl SharedIcmpv4Peer {
                 Ok(self.runtime.get_now() - t0)
             },
             Err(_) => {
-                let message: &'static str = "timer expired";
+                let message = "timer expired";
                 self.inflight.remove(&(id, seq_num));
                 error!("ping(): {}", message);
                 Err(Fail::new(libc::ETIMEDOUT, message))
@@ -237,19 +233,22 @@ impl SharedIcmpv4Peer {
     async fn send_packet(
         &mut self,
         request: Icmpv4Type2,
-        dst_ipv4_addr: Ipv4Addr,
-        mut buf: DemiBuffer,
+        dst_ip: Ipv4Addr,
+        mut buffer: DemiBuffer,
     ) -> Result<(), Fail> {
         debug!("initiating ARP query");
-        let dst_link_addr: MacAddress = self.arp.query(dst_ipv4_addr).await?;
-        debug!("ARP query complete ({} -> {})", dst_ipv4_addr, dst_link_addr);
-        debug!("ping ({}, {:?})", dst_ipv4_addr, request);
-        let icmp_hdr: Icmpv4Header = Icmpv4Header::new(request, 0);
-        icmp_hdr.serialize_and_attach(&mut buf);
-        let ipv4_hdr: Ipv4Header = Ipv4Header::new(self.local_ipv4_addr, dst_ipv4_addr, IpProtocol::ICMPv4);
-        ipv4_hdr.serialize_and_attach(&mut buf);
 
-        self.layer2_endpoint.transmit_ipv4_packet(dst_link_addr, buf)
+        let dst_mac = self.arp.query(dst_ip).await?;
+        debug!("ARP query complete ({} -> {})", dst_ip, dst_mac);
+        debug!("ping ({}, {:?})", dst_ip, request);
+
+        let icmp_header = Icmpv4Header::new(request, 0);
+        icmp_header.serialize_and_attach(&mut buffer);
+
+        let ip_header = Ipv4Header::new(self.local_ipv4_addr, dst_ip, IpProtocol::ICMPv4);
+        ip_header.serialize_and_attach(&mut buffer);
+
+        self.layer2_endpoint.transmit_ipv4_packet(dst_mac, buffer)
     }
 }
 

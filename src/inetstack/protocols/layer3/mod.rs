@@ -9,11 +9,7 @@ pub mod arp;
 pub mod icmpv4;
 pub mod ip;
 pub mod ipv4;
-
-use arrayvec::ArrayVec;
-
 pub use self::{arp::SharedArpPeer, icmpv4::SharedIcmpv4Peer, ip::IpProtocol, ipv4::Ipv4Header};
-
 use crate::{
     demikernel::config::Config,
     inetstack::{
@@ -27,6 +23,7 @@ use crate::{
     },
     MacAddress,
 };
+use ::arrayvec::ArrayVec;
 #[cfg(test)]
 use ::std::{collections::HashMap, hash::RandomState, time::Duration};
 use ::std::{
@@ -42,7 +39,7 @@ pub struct Layer3Endpoint {
     layer2_endpoint: SharedLayer2Endpoint,
     arp: SharedArpPeer,
     icmpv4: SharedIcmpv4Peer,
-    local_ipv4_addr: Ipv4Addr,
+    local_ip: Ipv4Addr,
 }
 
 #[derive(Clone)]
@@ -59,18 +56,18 @@ impl SharedLayer3Endpoint {
         layer2_endpoint: SharedLayer2Endpoint,
         rng_seed: [u8; 32],
     ) -> Result<Self, Fail> {
-        let arp: SharedArpPeer = SharedArpPeer::new(config, runtime.clone(), layer2_endpoint.clone())?;
+        let arp = SharedArpPeer::new(config, runtime.clone(), layer2_endpoint.clone())?;
 
         Ok(SharedLayer3Endpoint(SharedObject::new(Layer3Endpoint {
             arp: arp.clone(),
             icmpv4: SharedIcmpv4Peer::new(config, runtime, layer2_endpoint.clone(), arp, rng_seed)?,
-            local_ipv4_addr: config.local_ipv4_addr()?,
+            local_ip: config.local_ipv4_addr()?,
             layer2_endpoint,
         })))
     }
 
     pub fn receive(&mut self) -> Result<ArrayVec<(Ipv4Addr, IpProtocol, DemiBuffer), RECEIVE_BATCH_SIZE>, Fail> {
-        let mut batch: ArrayVec<(Ipv4Addr, IpProtocol, DemiBuffer), RECEIVE_BATCH_SIZE> = ArrayVec::new();
+        let mut batch = ArrayVec::new();
         for (eth2_type, mut packet) in self.layer2_endpoint.receive()? {
             match eth2_type {
                 EtherType2::Arp => {
@@ -87,25 +84,17 @@ impl SharedLayer3Endpoint {
                     };
                     debug!("L3 INCOMING {:?}", header);
 
-                    // Check that the destination matches our IP address; otherwise, discard.
-                    if header.get_dest_addr() != self.local_ipv4_addr && !header.get_dest_addr().is_broadcast() {
+                    if !self.is_for_us(header) {
                         warn!("dropping packet: Invalid destination address");
                         continue;
                     }
 
-                    // Check the the source is a valid IP address; otherwise, discard.
-                    if header.get_src_addr().is_broadcast()
-                        || header.get_src_addr().is_multicast()
-                        || header.get_src_addr().is_unspecified()
-                    {
-                        warn!(
-                            "dropping packet: Invalid remote address (remote={})",
-                            header.get_src_addr()
-                        );
+                    if bad_src(header) {
+                        warn!("dropping packet: Invalid source addr ({})", header.get_src_addr());
                         continue;
                     }
 
-                    let protocol: IpProtocol = header.get_protocol();
+                    let protocol = header.get_protocol();
                     match protocol {
                         IpProtocol::ICMPv4 => {
                             self.icmpv4.receive(header, packet);
@@ -120,50 +109,45 @@ impl SharedLayer3Endpoint {
         Ok(batch)
     }
 
-    pub fn transmit_tcp_packet_nonblocking(&mut self, remote_ipv4_addr: Ipv4Addr, pkt: DemiBuffer) -> Result<(), Fail> {
-        let remote_link_addr: MacAddress = match self.arp.try_query(remote_ipv4_addr) {
-            Some(addr) => addr,
+    fn is_for_us(&mut self, header: Ipv4Header) -> bool {
+        let dst = header.get_dest_addr();
+        dst == self.local_ip || dst.is_broadcast()
+    }
+
+    pub fn transmit_tcp_packet_nonblocking(&mut self, remote_ip: Ipv4Addr, pkt: DemiBuffer) -> Result<(), Fail> {
+        let remote_mac = match self.arp.try_query(remote_ip) {
+            Some(mac) => mac,
             _ => return Err(Fail::new(libc::EAGAIN, "destination not in ARP cache")),
         };
 
-        self.transmit_packet(remote_ipv4_addr, remote_link_addr, IpProtocol::TCP, pkt)
+        self.transmit_packet(remote_ip, remote_mac, IpProtocol::TCP, pkt)
     }
 
-    pub async fn transmit_tcp_packet_blocking(
-        &mut self,
-        remote_ipv4_addr: Ipv4Addr,
-        pkt: DemiBuffer,
-    ) -> Result<(), Fail> {
-        let remote_link_addr: MacAddress = self.arp.query(remote_ipv4_addr).await?;
-
-        self.transmit_packet(remote_ipv4_addr, remote_link_addr, IpProtocol::TCP, pkt)
+    pub async fn transmit_tcp_packet_blocking(&mut self, remote_ip: Ipv4Addr, pkt: DemiBuffer) -> Result<(), Fail> {
+        let remote_mac = self.arp.query(remote_ip).await?;
+        self.transmit_packet(remote_ip, remote_mac, IpProtocol::TCP, pkt)
     }
 
-    pub async fn transmit_udp_packet_blocking(
-        &mut self,
-        remote_ipv4_addr: Ipv4Addr,
-        pkt: DemiBuffer,
-    ) -> Result<(), Fail> {
-        let remote_link_addr: MacAddress = self.arp.query(remote_ipv4_addr).await?;
-
-        self.transmit_packet(remote_ipv4_addr, remote_link_addr, IpProtocol::UDP, pkt)
+    pub async fn transmit_udp_packet_blocking(&mut self, remote_ip: Ipv4Addr, pkt: DemiBuffer) -> Result<(), Fail> {
+        let remote_mac = self.arp.query(remote_ip).await?;
+        self.transmit_packet(remote_ip, remote_mac, IpProtocol::UDP, pkt)
     }
 
     pub fn transmit_packet(
         &mut self,
-        remote_ipv4_addr: Ipv4Addr,
-        remote_link_addr: MacAddress,
+        remote_ip: Ipv4Addr,
+        remote_mac: MacAddress,
         ip_protocol: IpProtocol,
         mut pkt: DemiBuffer,
     ) -> Result<(), Fail> {
-        let ipv4_header: Ipv4Header = Ipv4Header::new(self.local_ipv4_addr, remote_ipv4_addr, ip_protocol);
-        debug!("L3 OUTGOING {:?}", ipv4_header);
-        ipv4_header.serialize_and_attach(&mut pkt);
-        self.layer2_endpoint.transmit_ipv4_packet(remote_link_addr, pkt)
+        let header = Ipv4Header::new(self.local_ip, remote_ip, ip_protocol);
+        debug!("L3 OUTGOING {:?}", header);
+        header.serialize_and_attach(&mut pkt);
+        self.layer2_endpoint.transmit_ipv4_packet(remote_mac, pkt)
     }
 
     pub fn get_local_addr(&self) -> Ipv4Addr {
-        self.local_ipv4_addr
+        self.local_ip
     }
 
     #[cfg(test)]
@@ -180,6 +164,11 @@ impl SharedLayer3Endpoint {
     pub fn export_arp_cache(&self) -> HashMap<Ipv4Addr, MacAddress, RandomState> {
         self.arp.export_cache()
     }
+}
+
+fn bad_src(hdr: Ipv4Header) -> bool {
+    let src = hdr.get_src_addr();
+    src.is_broadcast() || src.is_multicast() || src.is_unspecified()
 }
 
 //======================================================================================================================

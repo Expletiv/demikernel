@@ -19,7 +19,7 @@ use crate::{
     runtime::{conditional_yield_with_timeout, fail::Fail, memory::DemiBuffer, SharedDemiRuntime, SharedObject},
 };
 use ::futures::{
-    channel::oneshot::{channel, Receiver, Sender},
+    channel::oneshot::{channel, Sender},
     FutureExt,
 };
 use ::libc::ETIMEDOUT;
@@ -58,7 +58,6 @@ pub struct SharedArpPeer(SharedObject<ArpPeer>);
 //======================================================================================================================
 
 impl SharedArpPeer {
-    /// ARP Cleanup timeout.
     const ARP_CLEANUP_TIMEOUT: Duration = Duration::from_secs(1);
 
     pub fn new(
@@ -66,15 +65,15 @@ impl SharedArpPeer {
         mut runtime: SharedDemiRuntime,
         layer2_endpoint: SharedLayer2Endpoint,
     ) -> Result<Self, Fail> {
-        let arp_config: ArpConfig = ArpConfig::new(config)?;
-        let cache: ArpCache = ArpCache::new(
+        let arp_config = ArpConfig::new(config)?;
+        let cache = ArpCache::new(
             runtime.get_now(),
             Some(arp_config.get_cache_ttl()),
             Some(arp_config.get_initial_values()),
             arp_config.is_enabled(),
         );
 
-        let peer: SharedArpPeer = Self(SharedObject::new(ArpPeer {
+        let peer = Self(SharedObject::new(ArpPeer {
             layer2_endpoint,
             local_ipv4_addr: config.local_ipv4_addr()?,
             cache,
@@ -107,7 +106,7 @@ impl SharedArpPeer {
     }
 
     async fn do_wait_link_addr(&mut self, ipv4_addr: Ipv4Addr) -> MacAddress {
-        let (tx, rx): (Sender<MacAddress>, Receiver<MacAddress>) = channel();
+        let (tx, rx) = channel();
 
         if let Some(&link_addr) = self.cache.get(ipv4_addr) {
             let _ = tx.send(link_addr);
@@ -115,7 +114,7 @@ impl SharedArpPeer {
             warn!("Duplicate waiter for IP address: {}", ipv4_addr);
             wait_queue.push_back(tx);
         } else {
-            let mut wait_queue: LinkedList<Sender<MacAddress>> = LinkedList::new();
+            let mut wait_queue = LinkedList::new();
             wait_queue.push_back(tx);
             self.waiters.insert(ipv4_addr, wait_queue);
         }
@@ -125,7 +124,7 @@ impl SharedArpPeer {
 
     async fn poll(mut self) {
         loop {
-            let buf: DemiBuffer = match self.recv_queue.pop(Some(Self::ARP_CLEANUP_TIMEOUT)).await {
+            let buffer = match self.recv_queue.pop(Some(Self::ARP_CLEANUP_TIMEOUT)).await {
                 Ok(buf) => buf,
                 Err(Fail { errno, cause: _ }) if errno == libc::ETIMEDOUT || errno == libc::EAGAIN => continue,
                 Err(_) => break,
@@ -135,7 +134,7 @@ impl SharedArpPeer {
             // > [optionally check the hardware length ar$hln]
             // > ?Do I speak the protocol in ar$pro?
             // > [optionally check the protocol length ar$pln]
-            let header: ArpHeader = match ArpHeader::parse_and_consume(buf) {
+            let header = match ArpHeader::parse_and_consume(buffer) {
                 Ok(header) => header,
                 Err(e) => {
                     warn!("arp_cache::poll(): could not parse ARP header: {:?}", e);
@@ -150,7 +149,7 @@ impl SharedArpPeer {
             // > already in my translation table, update the sender
             // > hardware address field of the entry with the new
             // > information in the packet and set Merge_flag to true.
-            let merge_flag: bool = {
+            let merge_flag = {
                 if self.cache.get(header.get_sender_protocol_addr()).is_some() {
                     trace!(
                         "poll(): updating the arp cache (link_addr={:?}, ipv4_addr={:?})",
@@ -198,7 +197,7 @@ impl SharedArpPeer {
                     // from RFC 826:
                     // > Swap hardware and protocol fields, putting the local
                     // > hardware and protocol addresses in the sender fields.
-                    let reply_hdr: ArpHeader = ArpHeader::new(
+                    let reply_hdr = ArpHeader::new(
                         ArpOperation::Reply,
                         self.layer2_endpoint.get_local_link_addr(),
                         self.local_ipv4_addr,
@@ -238,14 +237,14 @@ impl SharedArpPeer {
         if let Some(&link_addr) = self.cache.get(ipv4_addr) {
             return Ok(link_addr);
         }
-        let header: ArpHeader = ArpHeader::new(
+        let header = ArpHeader::new(
             ArpOperation::Request,
             self.layer2_endpoint.get_local_link_addr(),
             self.local_ipv4_addr,
             MacAddress::broadcast(),
             ipv4_addr,
         );
-        let mut peer: SharedArpPeer = self.clone();
+        let mut peer = self.clone();
         // from TCP/IP illustrated, chapter 4:
         // > The frequency of the ARP request is very close to one per
         // > second, the maximum suggested by [RFC1122].
@@ -270,7 +269,7 @@ impl SharedArpPeer {
                     },
                 }
             }
-            let cause: String = format!("query(): query timeout (ipv4_addr={:?})", ipv4_addr);
+            let cause = format!("query(): query timeout (ipv4_addr={:?})", ipv4_addr);
             error!("{}", &cause);
             Err(Fail::new(ETIMEDOUT, &cause))
         };
