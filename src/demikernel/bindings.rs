@@ -37,9 +37,12 @@ thread_local! {
     static THREAD_LOCAL_LIBOS: RefCell<Option<LibOS>> = RefCell::new(None);
 }
 
+/// # Safety
+///
+/// The `args` argument to this function must be valid and point to a `demi_args_t` structure.
 #[allow(unused)]
 #[no_mangle]
-pub extern "C" fn demi_init(args: *const demi_args_t) -> c_int {
+pub unsafe extern "C" fn demi_init(args: *const demi_args_t) -> c_int {
     // Initialize logging before anything else.
     let log_callback: Option<demi_log_callback_t> = if args.is_null() {
         None
@@ -97,15 +100,17 @@ pub extern "C" fn demi_init(args: *const demi_args_t) -> c_int {
     0
 }
 
+/// # Safety
+///
+/// The `qd_out` argument to this function must be valid pointer and must be writable because it will be used to store
+/// the queue descriptor of the created socket.
 #[no_mangle]
-pub extern "C" fn demi_socket(qd_out: *mut c_int, domain: c_int, socket_type: c_int, protocol: c_int) -> c_int {
+pub unsafe extern "C" fn demi_socket(qd_out: *mut c_int, domain: c_int, socket_type: c_int, protocol: c_int) -> c_int {
     trace!("demi_socket()");
-
     if qd_out.is_null() {
         warn!("demi_socket() qd_out is a null pointer");
         return libc::EINVAL;
     }
-
     let ret: Result<i32, Fail> = do_syscall(|libos| match libos.socket(domain, socket_type, protocol) {
         Ok(qd) => {
             unsafe { *qd_out = qd.into() };
@@ -177,8 +182,12 @@ pub extern "C" fn demi_listen(sockqd: c_int, backlog: c_int) -> c_int {
     }
 }
 
+/// # Safety
+///
+/// The `qtok_out` argument to this function must be a valid pointer and must be writable because it will be used to
+/// store the queue token of the accept operation.
 #[no_mangle]
-pub extern "C" fn demi_accept(qtok_out: *mut demi_qtoken_t, sockqd: c_int) -> c_int {
+pub unsafe extern "C" fn demi_accept(qtok_out: *mut demi_qtoken_t, sockqd: c_int) -> c_int {
     trace!("demi_accept()");
 
     // Check for invalid storage location.
@@ -207,8 +216,12 @@ pub extern "C" fn demi_accept(qtok_out: *mut demi_qtoken_t, sockqd: c_int) -> c_
     }
 }
 
+/// # Safety
+///
+/// The `qtok_out` argument to this function must be a valid pointer and must be writable because it will be used to
+/// store the queue token of the connect operation.
 #[no_mangle]
-pub extern "C" fn demi_connect(
+pub unsafe extern "C" fn demi_connect(
     qtok_out: *mut demi_qtoken_t,
     sockqd: c_int,
     saddr: *const sockaddr,
@@ -273,8 +286,13 @@ pub extern "C" fn demi_close(qd: c_int) -> c_int {
     }
 }
 
+/// # Safety
+///
+/// The `qtok_out` argument to this function must be a valid pointer and must be writable because it will be used to
+/// store the queue token of the pushto operation.
+/// The `sga` argument to this function must be a valid pointer and must point to a valid scatter-gather array.
 #[no_mangle]
-pub extern "C" fn demi_pushto(
+pub unsafe extern "C" fn demi_pushto(
     qtok_out: *mut demi_qtoken_t,
     sockqd: c_int,
     sga: *const demi_sgarray_t,
@@ -327,8 +345,13 @@ pub extern "C" fn demi_pushto(
     }
 }
 
+/// # Safety
+///
+/// The `qtok_out` argument to this function must be a valid pointer and must be writable because it will be used to
+/// store the queue token of the push operation.
+/// The `sga` argument to this function must be a valid pointer and must point to a valid scatter-gather array.
 #[no_mangle]
-pub extern "C" fn demi_push(qtok_out: *mut demi_qtoken_t, qd: c_int, sga: *const demi_sgarray_t) -> c_int {
+pub unsafe extern "C" fn demi_push(qtok_out: *mut demi_qtoken_t, qd: c_int, sga: *const demi_sgarray_t) -> c_int {
     trace!("demi_push()");
 
     // Check for invalid storage location.
@@ -362,8 +385,12 @@ pub extern "C" fn demi_push(qtok_out: *mut demi_qtoken_t, qd: c_int, sga: *const
     }
 }
 
+/// # Safety
+///
+/// The `qtok_out` argument to this function must be a valid pointer and must be writable because it will be used to
+/// store the queue token of the pop operation.
 #[no_mangle]
-pub extern "C" fn demi_pop(qtok_out: *mut demi_qtoken_t, qd: c_int) -> c_int {
+pub unsafe extern "C" fn demi_pop(qtok_out: *mut demi_qtoken_t, qd: c_int) -> c_int {
     trace!("demi_pop()");
 
     // Check for invalid storage location.
@@ -390,8 +417,18 @@ pub extern "C" fn demi_pop(qtok_out: *mut demi_qtoken_t, qd: c_int) -> c_int {
     }
 }
 
+/// # Safety
+///
+/// The `qr_out` argument to this function must be a valid pointer and must be writable because it will be used to
+/// store the queue result of the wait operation.
+/// The `timeout` argument to this function must be a valid pointer if it is not null, and it must point to a valid
+/// `libc::timespec` structure that specifies the timeout for the wait operation.
 #[no_mangle]
-pub extern "C" fn demi_wait(qr_out: *mut demi_qresult_t, qt: demi_qtoken_t, timeout: *const libc::timespec) -> c_int {
+pub unsafe extern "C" fn demi_wait(
+    qr_out: *mut demi_qresult_t,
+    qt: demi_qtoken_t,
+    timeout: *const libc::timespec,
+) -> c_int {
     trace!("demi_wait() {:?} {:?} {:?}", qr_out, qt, timeout);
 
     // Check for invalid storage location for queue result.
@@ -429,8 +466,15 @@ pub extern "C" fn demi_wait(qr_out: *mut demi_qresult_t, qt: demi_qtoken_t, time
     }
 }
 
+/// # Safety
+///
+/// The `qr_out` argument to this function must be a valid pointer and must be writable because it will be used to
+/// store the queue result of the wait operation.
+/// The `ready_offset` argument to this function must be a valid pointer and must be writable because it will be used
+/// to store the index of the first ready queue token in the `qts` array.
+/// The `qts` argument to this function must be a valid pointer and must point to an array of queue tokens.
 #[no_mangle]
-pub extern "C" fn demi_wait_any(
+pub unsafe extern "C" fn demi_wait_any(
     qr_out: *mut demi_qresult_t,
     ready_offset: *mut c_int,
     qts: *mut demi_qtoken_t,
@@ -489,8 +533,16 @@ pub extern "C" fn demi_wait_any(
     }
 }
 
+/// # Safety
+///
+/// The `qr_out` argument to this function must be a valid pointer and must point to an array of `demi_qresult_t`
+/// structures that will be filled with the results of the wait operation.
+/// The `timeout` argument to this function must be a valid pointer if it is not null, and it must point to a valid
+/// `libc::timespec` structure that specifies the timeout for the wait operation.
+/// The `qr_written` argument to this function must be a valid pointer and must be writable because it will be used to
+/// store the number of queue results written to the `qr_out` array.
 #[no_mangle]
-pub extern "C" fn demi_wait_next_n(
+pub unsafe extern "C" fn demi_wait_next_n(
     qr_out: *mut demi_qresult_t,
     qr_out_size: c_int,
     qr_written: *mut c_int,
@@ -549,8 +601,13 @@ pub extern "C" fn demi_wait_next_n(
     }
 }
 
+/// # Safety
+///
+/// This function is unsafe because it allocates memory for a scatter-gather array and returns a pointer to it. The
+/// caller is responsible for ensuring that the memory is properly managed and freed when no longer needed using
+/// `demi_sgafree`.
 #[no_mangle]
-pub extern "C" fn demi_sgaalloc(size: libc::size_t) -> demi_sgarray_t {
+pub unsafe extern "C" fn demi_sgaalloc(size: libc::size_t) -> demi_sgarray_t {
     trace!("demi_sgaalloc()");
 
     let null_sga: demi_sgarray_t = {
@@ -565,7 +622,6 @@ pub extern "C" fn demi_sgaalloc(size: libc::size_t) -> demi_sgarray_t {
         }
     };
 
-    // Issue sgaalloc operation.
     let ret: Result<demi_sgarray_t, Fail> = do_syscall(|libos| -> demi_sgarray_t {
         match libos.sgaalloc(size) {
             Ok(sga) => sga,
@@ -585,8 +641,12 @@ pub extern "C" fn demi_sgaalloc(size: libc::size_t) -> demi_sgarray_t {
     }
 }
 
+/// # Safety
+///
+/// The `sga` argument to this function must be a valid pointer and must point to a valid scatter-gather array that was
+/// previously allocated using `demi_sgaalloc`.
 #[no_mangle]
-pub extern "C" fn demi_sgafree(sga: *mut demi_sgarray_t) -> c_int {
+pub unsafe extern "C" fn demi_sgafree(sga: *mut demi_sgarray_t) -> c_int {
     trace!("demi_sgfree()");
 
     // Check if scatter-gather array is invalid.
@@ -616,9 +676,13 @@ pub extern "C" fn demi_getsockname(qd: c_int, saddr: *mut sockaddr, size: *mut S
     libc::ENOSYS
 }
 
+/// # Safety
+///
+/// The `optval` argument must be a valid pointer to the option value, and `optlen` must be a valid pointer to the size
+/// of the option value.
 #[allow(unused)]
 #[no_mangle]
-pub extern "C" fn demi_setsockopt(
+pub unsafe extern "C" fn demi_setsockopt(
     qd: c_int,
     level: c_int,
     optname: c_int,
@@ -676,8 +740,12 @@ pub extern "C" fn demi_setsockopt(
     }
 }
 
+/// # Safety
+///
+/// The `optval` argument must be a valid pointer to the option value, and `optlen` must be a valid pointer to the size
+/// of the option value.
 #[no_mangle]
-pub extern "C" fn demi_getsockopt(
+pub unsafe extern "C" fn demi_getsockopt(
     qd: c_int,
     level: c_int,
     optname: c_int,
@@ -760,8 +828,12 @@ pub extern "C" fn demi_getsockopt(
     }
 }
 
+/// # Safety
+///
+/// The `addr` argument must be a valid pointer to a `sockaddr` structure, and `addrlen` must be a valid pointer to a
+/// `Socklen` value that specifies the size of the `sockaddr` structure.
 #[no_mangle]
-pub extern "C" fn demi_getpeername(qd: c_int, addr: *mut SockAddr, addrlen: *mut Socklen) -> c_int {
+pub unsafe extern "C" fn demi_getpeername(qd: c_int, addr: *mut SockAddr, addrlen: *mut Socklen) -> c_int {
     trace!("demi_getpeername()");
 
     if addr.is_null() {
@@ -977,16 +1049,18 @@ mod test {
     fn test_set_and_get_linger() -> anyhow::Result<()> {
         use crate::runtime::types::demi_args_t;
         let args: demi_args_t = demi_args_t::default();
-        let result: c_int = demi_init(&args);
+        let result: c_int = unsafe { demi_init(&args) };
         ensure_eq!(result, 0);
 
         let mut qd: c_int = 0;
-        let result: c_int = demi_socket(
-            &mut qd as *mut c_int,
-            Domain::IPV4.into(),
-            Type::STREAM.into(),
-            Protocol::TCP.into(),
-        );
+        let result: c_int = unsafe {
+            demi_socket(
+                &mut qd as *mut c_int,
+                Domain::IPV4.into(),
+                Type::STREAM.into(),
+                Protocol::TCP.into(),
+            )
+        };
 
         ensure_eq!(result, 0);
         ensure_neq!(qd, 0);
@@ -997,13 +1071,15 @@ mod test {
             l_linger: 1,
         };
         let linger_len: usize = mem::size_of::<Linger>();
-        let result: c_int = demi_setsockopt(
-            qd,
-            SOL_SOCKET,
-            SO_LINGER,
-            &linger_on as *const Linger as *const c_void,
-            linger_len as Socklen,
-        );
+        let result: c_int = unsafe {
+            demi_setsockopt(
+                qd,
+                SOL_SOCKET,
+                SO_LINGER,
+                &linger_on as *const Linger as *const c_void,
+                linger_len as Socklen,
+            )
+        };
 
         // Successfully turned linger on.
         ensure_eq!(result, 0);
@@ -1015,13 +1091,15 @@ mod test {
         };
         let mut linger_check_len: usize = 0;
 
-        let result: c_int = demi_getsockopt(
-            qd,
-            SOL_SOCKET,
-            SO_LINGER,
-            &mut linger_check as *mut Linger as *mut c_void,
-            &mut linger_check_len as *mut usize as *mut Socklen,
-        );
+        let result: c_int = unsafe {
+            demi_getsockopt(
+                qd,
+                SOL_SOCKET,
+                SO_LINGER,
+                &mut linger_check as *mut Linger as *mut c_void,
+                &mut linger_check_len as *mut usize as *mut Socklen,
+            )
+        };
 
         ensure_eq!(result, 0);
         ensure_eq!(linger_check_len, mem::size_of::<Linger>());
@@ -1034,13 +1112,15 @@ mod test {
             l_linger: 1,
         };
         let linger_len: usize = mem::size_of::<Linger>();
-        let result: c_int = demi_setsockopt(
-            qd,
-            SOL_SOCKET,
-            SO_LINGER,
-            &linger_on as *const Linger as *const c_void,
-            linger_len as Socklen,
-        );
+        let result: c_int = unsafe {
+            demi_setsockopt(
+                qd,
+                SOL_SOCKET,
+                SO_LINGER,
+                &linger_on as *const Linger as *const c_void,
+                linger_len as Socklen,
+            )
+        };
 
         // Successfully turned linger on.
         ensure_eq!(result, 0);
@@ -1052,13 +1132,15 @@ mod test {
         };
         let mut linger_check_len: usize = 0;
 
-        let result: c_int = demi_getsockopt(
-            qd,
-            SOL_SOCKET,
-            SO_LINGER,
-            &mut linger_check as *mut Linger as *mut c_void,
-            &mut linger_check_len as *mut usize as *mut Socklen,
-        );
+        let result: c_int = unsafe {
+            demi_getsockopt(
+                qd,
+                SOL_SOCKET,
+                SO_LINGER,
+                &mut linger_check as *mut Linger as *mut c_void,
+                &mut linger_check_len as *mut usize as *mut Socklen,
+            )
+        };
 
         ensure_eq!(result, 0);
         ensure_eq!(linger_check_len, mem::size_of::<Linger>());
