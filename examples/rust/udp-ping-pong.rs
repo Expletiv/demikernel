@@ -38,9 +38,9 @@ fn mksga(libos: &mut LibOS, size: usize, value: u8) -> Result<demi_sgarray_t> {
     };
 
     // Ensure that allocated array has the requested size.
-    if sga.sga_segs[0].sgaseg_len as usize != size {
+    if sga.segments[0].data_len_bytes as usize != size {
         freesga(libos, sga);
-        let seglen: usize = sga.sga_segs[0].sgaseg_len as usize;
+        let seglen: usize = sga.segments[0].data_len_bytes as usize;
         anyhow::bail!(
             "failed to allocate scatter-gather array: expected size={:?} allocated size={:?}",
             size,
@@ -48,8 +48,8 @@ fn mksga(libos: &mut LibOS, size: usize, value: u8) -> Result<demi_sgarray_t> {
         );
     }
     // Fill in the array.
-    let ptr: *mut u8 = sga.sga_segs[0].sgaseg_buf as *mut u8;
-    let len: usize = sga.sga_segs[0].sgaseg_len as usize;
+    let ptr: *mut u8 = sga.segments[0].data_buf_ptr as *mut u8;
+    let len: usize = sga.segments[0].data_len_bytes as usize;
     let slice: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, len) };
     slice.fill(value);
 
@@ -119,8 +119,8 @@ impl UdpServer {
             };
 
             // Sanity check received data.
-            let ptr: *mut u8 = sga.sga_segs[0].sgaseg_buf as *mut u8;
-            let len: usize = sga.sga_segs[0].sgaseg_len as usize;
+            let ptr: *mut u8 = sga.segments[0].data_buf_ptr as *mut u8;
+            let len: usize = sga.segments[0].data_len_bytes as usize;
             let slice: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, len) };
             for x in slice {
                 if *x != fill_char {
@@ -197,8 +197,8 @@ impl UdpClient {
             // Free the sent sga.
             self.libos.sgafree(sga)?;
             // Sanity check received data.
-            let ptr: *mut u8 = returned_sga.sga_segs[0].sgaseg_buf as *mut u8;
-            let len: usize = returned_sga.sga_segs[0].sgaseg_len as usize;
+            let ptr: *mut u8 = returned_sga.segments[0].data_buf_ptr as *mut u8;
+            let len: usize = returned_sga.segments[0].data_len_bytes as usize;
             let slice: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, len) };
             for x in slice {
                 if *x != fill_char {

@@ -235,8 +235,8 @@ impl TcpEchoClient {
     fn mksga(&mut self, size: usize) -> Result<demi_sgarray_t> {
         debug_assert!(size > std::mem::size_of::<u64>());
         let sga: demi_sgarray_t = self.libos.sgaalloc(size)?;
-        let ptr: *mut u8 = sga.sga_segs[0].sgaseg_buf as *mut u8;
-        let len: usize = sga.sga_segs[0].sgaseg_len as usize;
+        let ptr: *mut u8 = sga.segments[0].data_buf_ptr as *mut u8;
+        let len: usize = sga.segments[0].data_len_bytes as usize;
         let slice: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, len) };
         let now: u64 = Instant::now().duration_since(self.start).as_nanos() as u64;
         slice[0..8].copy_from_slice(&now.to_le_bytes());
@@ -258,56 +258,64 @@ impl TcpEchoClient {
     fn handle_pop(&mut self, qr: &demi_qresult_t) -> Result<()> {
         let qd: QDesc = qr.qr_qd.into();
         let sga: demi_sgarray_t = unsafe { qr.qr_value.sga };
-        if sga.sga_segs[0].sgaseg_len == 0 {
-            println!("INFO: server closed connection");
-            self.handle_close(qd)?;
-        } else {
-            // Retrieve client buffer.
-            let (recvbuf, index): &mut (Vec<u8>, usize) = self
-                .clients
-                .get_mut(&qd)
-                .ok_or(anyhow::anyhow!("unregistered socket"))?;
 
-            // Copy data.
-            let ptr: *mut u8 = sga.sga_segs[0].sgaseg_buf as *mut u8;
-            let len: usize = sga.sga_segs[0].sgaseg_len as usize;
-            let slice: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, len) };
-            recvbuf[*index..(*index + len)].copy_from_slice(slice);
+        // Retrieve current index into client buffer.
+        let mut index = self.clients.get(&qd).ok_or(anyhow::anyhow!("unregistered socket"))?.1;
 
-            *index += len;
+        for i in 0..sga.num_segments as usize {
+            let seg = sga.segments[i];
+            if seg.data_len_bytes == 0 {
+                println!("INFO: server closed connection");
+                return self.handle_close(qd);
+            } else {
+                // Copy data.
+                let ptr: *mut u8 = seg.data_buf_ptr as *mut u8;
+                let len: usize = seg.data_len_bytes as usize;
+                let slice: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, len) };
+                let recvbuf = &mut self
+                    .clients
+                    .get_mut(&qd)
+                    .ok_or(anyhow::anyhow!("unregistered socket"))?
+                    .0;
+                recvbuf[index..(index + len)].copy_from_slice(slice);
 
-            // TODO: Sanity check packet.
-
-            // Check if there are more bytes to read from this packet.
-            if *index < recvbuf.capacity() {
-                // Free scatter-gather-array.
-                self.libos.sgafree(sga)?;
+                index += len;
                 self.nbytes += len;
 
-                // There are, thus issue a partial pop.
-                let size: usize = recvbuf.capacity() - *index;
-                self.issue_pop(qd, Some(size))?;
-            }
-            // Push another packet.
-            else {
-                // Read timestamp from recvbuf.
-                let timestamp: u64 = u64::from_le_bytes([
-                    recvbuf[0], recvbuf[1], recvbuf[2], recvbuf[3], recvbuf[4], recvbuf[5], recvbuf[6], recvbuf[7],
-                ]);
-                let now: u64 = Instant::now().duration_since(self.start).as_nanos() as u64;
-                let elapsed: u64 = now - timestamp;
-                self.stats.increment(elapsed)?;
+                // TODO: Sanity check packet.
 
-                // Free scatter-gather-array.
-                self.libos.sgafree(sga)?;
-                self.nbytes += len;
+                // If received a whole message.
+                if index == self.bufsize {
+                    // Read timestamp from recvbuf.
+                    let timestamp: u64 = u64::from_le_bytes([
+                        recvbuf[0], recvbuf[1], recvbuf[2], recvbuf[3], recvbuf[4], recvbuf[5], recvbuf[6], recvbuf[7],
+                    ]);
+                    let now: u64 = Instant::now().duration_since(self.start).as_nanos() as u64;
+                    let elapsed: u64 = now - timestamp;
+                    self.stats.increment(elapsed)?;
 
-                // There aren't, so push another packet.
-                *index = 0;
-                self.nechoed += 1;
-                self.issue_push(qd)?;
+                    index = 0;
+                    self.nechoed += 1;
+                    self.issue_push(qd)?;
+                }
             }
         }
+
+        self.libos.sgafree(sga)?;
+
+        // Check if there are more bytes to read from this packet.
+        if index != 0 {
+            // There are, thus issue a partial pop.
+            let size: usize = self.bufsize - index;
+            let client_index = &mut self
+                .clients
+                .get_mut(&qd)
+                .ok_or(anyhow::anyhow!("unregistered socket"))?
+                .1;
+            *client_index = index;
+            self.issue_pop(qd, Some(size))?;
+        }
+
         Ok(())
     }
 
@@ -317,7 +325,7 @@ impl TcpEchoClient {
         self.npushed += 1;
 
         // Pop another packet.
-        self.issue_pop(qd, None)?;
+        self.issue_pop(qd, Some(self.bufsize))?;
         Ok(())
     }
 

@@ -17,7 +17,7 @@ pub use self::ethernet2::{
 
 use crate::{
     demikernel::config::Config,
-    inetstack::{consts::RECEIVE_BATCH_SIZE, protocols::layer1::PhysicalLayer, types::MacAddress},
+    inetstack::{consts::MAX_BATCH_SIZE_NUM_PACKETS, protocols::layer1::PhysicalLayer, types::MacAddress},
     runtime::{
         fail::Fail,
         memory::{DemiBuffer, DemiMemoryAllocator},
@@ -51,8 +51,8 @@ impl SharedLayer2Endpoint {
         })))
     }
 
-    pub fn receive(&mut self) -> Result<ArrayVec<(EtherType2, DemiBuffer), RECEIVE_BATCH_SIZE>, Fail> {
-        let mut batch: ArrayVec<(EtherType2, DemiBuffer), RECEIVE_BATCH_SIZE> = ArrayVec::new();
+    pub fn receive(&mut self) -> Result<ArrayVec<(EtherType2, DemiBuffer), MAX_BATCH_SIZE_NUM_PACKETS>, Fail> {
+        let mut batch: ArrayVec<(EtherType2, DemiBuffer), MAX_BATCH_SIZE_NUM_PACKETS> = ArrayVec::new();
         for mut pkt in self.layer1_endpoint.receive()? {
             let header: Ethernet2Header = match Ethernet2Header::parse_and_strip(&mut pkt) {
                 Ok(result) => result,
@@ -77,23 +77,29 @@ impl SharedLayer2Endpoint {
     }
 
     pub fn transmit_arp_packet(&mut self, remote_link_addr: MacAddress, pkt: DemiBuffer) -> Result<(), Fail> {
-        self.transmit(remote_link_addr, EtherType2::Arp, pkt)
+        let mut pkts: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS> = ArrayVec::new();
+        pkts.push(pkt);
+        self.transmit(remote_link_addr, EtherType2::Arp, pkts)
     }
 
     pub fn transmit_ipv4_packet(&mut self, remote_link_addr: MacAddress, pkt: DemiBuffer) -> Result<(), Fail> {
-        self.transmit(remote_link_addr, EtherType2::Ipv4, pkt)
+        let mut pkts: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS> = ArrayVec::new();
+        pkts.push(pkt);
+        self.transmit(remote_link_addr, EtherType2::Ipv4, pkts)
     }
 
     fn transmit(
         &mut self,
         remote_link_addr: MacAddress,
         eth2_type: EtherType2,
-        mut pkt: DemiBuffer,
+        mut pkts: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>,
     ) -> Result<(), Fail> {
         let eth2_header: Ethernet2Header = Ethernet2Header::new(remote_link_addr, self.local_link_addr, eth2_type);
         debug!("L2 OUTGOING {:?}", eth2_header);
-        eth2_header.serialize_and_attach(&mut pkt);
-        self.layer1_endpoint.transmit(pkt)
+        for pkt in pkts.iter_mut() {
+            eth2_header.serialize_and_attach(pkt);
+        }
+        self.layer1_endpoint.transmit(pkts)
     }
 
     pub fn get_local_link_addr(&self) -> MacAddress {

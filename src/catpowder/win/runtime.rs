@@ -16,7 +16,7 @@ use crate::{
     },
     demikernel::config::Config,
     inetstack::{
-        consts::{MAX_HEADER_SIZE, RECEIVE_BATCH_SIZE},
+        consts::{MAX_BATCH_SIZE_NUM_PACKETS, MAX_HEADER_SIZE},
         protocols::{layer1::PhysicalLayer, layer4::ephemeral::EphemeralPorts},
     },
     runtime::{
@@ -56,6 +56,9 @@ struct CatpowderRuntime {
 
     /// Statistics for the runtime.
     stats: CatpowderStats,
+
+    /// Max body size, usually the MTU.
+    max_body_size: usize,
 }
 
 //======================================================================================================================
@@ -85,6 +88,8 @@ impl SharedCatpowderRuntime {
         let stats: CatpowderStats = CatpowderStats::new(&interface, vf_interface.as_ref())?;
         let always_send_on_vf: bool = config.xdp_always_send_on_vf()? && vf_interface.is_some();
 
+        let max_body_size: usize = config.mss()? as usize - MAX_HEADER_SIZE;
+
         Ok(Self(SharedObject::new(CatpowderRuntime {
             api,
             interface,
@@ -92,6 +97,7 @@ impl SharedCatpowderRuntime {
             always_send_on_vf,
             cohosting_mode,
             stats,
+            max_body_size,
         })))
     }
 
@@ -114,38 +120,40 @@ impl SharedCatpowderRuntime {
 
 impl PhysicalLayer for SharedCatpowderRuntime {
     /// Transmits a packet.
-    fn transmit(&mut self, pkt: DemiBuffer) -> Result<(), Fail> {
+    fn transmit(&mut self, pkts: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) -> Result<(), Fail> {
         timer!("catpowder::win::runtime::transmit");
-        let pkt_size: usize = pkt.len();
-        if pkt_size >= u16::MAX as usize {
-            let cause = format!("packet is too large: {:?}", pkt_size);
-            warn!("{}", cause);
-            return Err(Fail::new(libc::ENOTSUP, &cause));
-        }
-
-        let me: &mut CatpowderRuntime = &mut self.0.borrow_mut();
-        me.interface.return_tx_buffers();
-
-        if let Some(vf_interface) = me.vf_interface.as_mut() {
-            vf_interface.return_tx_buffers();
-
-            if me.always_send_on_vf {
-                vf_interface.tx_ring.transmit_buffer(&mut me.api, pkt)?;
-                return Ok(());
+        for pkt in pkts {
+            let pkt_size: usize = pkt.len();
+            if pkt_size >= u16::MAX as usize {
+                let cause = format!("packet is too large: {:?}", pkt_size);
+                warn!("{}", cause);
+                return Err(Fail::new(libc::ENOTSUP, &cause));
             }
-        }
 
-        me.interface.tx_ring.transmit_buffer(&mut me.api, pkt)?;
+            let me: &mut CatpowderRuntime = &mut self.0.borrow_mut();
+            me.interface.return_tx_buffers();
+
+            if let Some(vf_interface) = me.vf_interface.as_mut() {
+                vf_interface.return_tx_buffers();
+
+                if me.always_send_on_vf {
+                    vf_interface.tx_ring.transmit_buffer(&mut me.api, pkt)?;
+                    return Ok(());
+                }
+            }
+
+            me.interface.tx_ring.transmit_buffer(&mut me.api, pkt)?;
+        }
 
         Ok(())
     }
 
     /// Polls for received packets.
-    fn receive(&mut self) -> Result<ArrayVec<DemiBuffer, RECEIVE_BATCH_SIZE>, Fail> {
+    fn receive(&mut self) -> Result<ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>, Fail> {
         timer!("catpowder::win::runtime::receive");
         self.0.stats.update_poll_time();
 
-        let mut ret: ArrayVec<DemiBuffer, RECEIVE_BATCH_SIZE> = ArrayVec::new();
+        let mut ret: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS> = ArrayVec::new();
 
         let me: &mut CatpowderRuntime = &mut self.0.borrow_mut();
         me.interface.provide_rx_buffers();
@@ -187,6 +195,10 @@ impl PhysicalLayer for SharedCatpowderRuntime {
 
 /// Memory runtime trait implementation for XDP Runtime.
 impl DemiMemoryAllocator for SharedCatpowderRuntime {
+    fn get_max_buffer_size_bytes(&self) -> usize {
+        self.0.max_body_size
+    }
+
     /// Allocates a scatter-gather array.
     fn allocate_demi_buffer(&self, size: usize) -> Result<DemiBuffer, Fail> {
         timer!("catpowder::win::runtime::sgaalloc");

@@ -6,6 +6,7 @@
 //======================================================================================================================
 
 use crate::common::runtime::SharedDummyRuntime;
+use ::arrayvec::ArrayVec;
 use ::crossbeam_channel::{Receiver, Sender};
 use ::demikernel::{
     demi_sgarray_t,
@@ -15,6 +16,7 @@ use ::demikernel::{
         fail::Fail,
         logging,
         memory::{into_sgarray, DemiBuffer},
+        types::DEMI_SGARRAY_MAXLEN,
         QDesc, QToken, SharedDemiRuntime,
     },
     OperationResult,
@@ -52,7 +54,9 @@ impl DummyLibOS {
         for a in &mut buf[..] {
             *a = fill_char;
         }
-        let data: demi_sgarray_t = into_sgarray(buf)?;
+        let mut bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN> = ArrayVec::new();
+        bufs.push(buf);
+        let data: demi_sgarray_t = into_sgarray(bufs)?;
         Ok(data)
     }
 

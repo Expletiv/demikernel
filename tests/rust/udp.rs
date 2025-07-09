@@ -14,6 +14,7 @@ mod test {
     use ::crossbeam_channel::{Receiver, Sender};
     use ::demikernel::runtime::{
         memory::{into_sgarray, DemiBuffer},
+        types::DEMI_SGARRAY_MAXLEN,
         OperationResult, QDesc, QToken,
     };
 
@@ -21,8 +22,9 @@ mod test {
     /// ensure most OS operations will complete.
     const TIMEOUT_MILLISECONDS: Duration = Duration::from_millis(100);
 
+    use ::arrayvec::ArrayVec;
     use ::socket2::{Domain, Protocol, Type};
-    use std::{
+    use ::std::{
         net::SocketAddr,
         sync::{Arc, Barrier},
         thread::{self, JoinHandle},
@@ -276,7 +278,7 @@ mod test {
                 },
             };
             let (_, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
-            let bytes: DemiBuffer = match qr {
+            let bytes: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN> = match qr {
                 OperationResult::Pop(_, bytes) => bytes,
                 _ => {
                     // Close socket on error.
@@ -439,7 +441,7 @@ mod test {
                 },
             };
             let (_, qr): (QDesc, OperationResult) = safe_wait(&mut libos, qt)?;
-            let bytes: DemiBuffer = match qr {
+            let bytes: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN> = match qr {
                 OperationResult::Pop(_, bytes) => bytes,
                 _ => {
                     // Close socket on error.

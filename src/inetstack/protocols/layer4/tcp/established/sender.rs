@@ -8,7 +8,7 @@
 use crate::{
     collections::{async_queue::SharedAsyncQueue, async_value::SharedAsyncValue},
     inetstack::{
-        consts::MAX_HEADER_SIZE,
+        consts::{MAX_BATCH_SIZE_NUM_PACKETS, MAX_HEADER_SIZE},
         protocols::{
             layer3::SharedLayer3Endpoint,
             layer4::tcp::{
@@ -20,6 +20,7 @@ use crate::{
     },
     runtime::{conditional_yield_until, fail::Fail, memory::DemiBuffer, SharedDemiRuntime},
 };
+use ::arrayvec::ArrayVec;
 use ::futures::{never::Never, pin_mut, select_biased, FutureExt};
 use ::std::{
     cmp, fmt,
@@ -227,12 +228,12 @@ impl Sender {
         }
     }
 
-    // This function sends a packet (or FIN) indicated by [buf] and waits for it to be acked.
+    // This function sends a list of packets (or FIN if empty) and waits for it to be acked.
     pub async fn push(
         cb: &mut ControlBlock,
         layer3_endpoint: &mut SharedLayer3Endpoint,
         runtime: &mut SharedDemiRuntime,
-        mut buf: Option<DemiBuffer>,
+        bufs: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>,
     ) -> Result<(), Fail> {
         // If the user is done sending (i.e. has called close on this connection), then they shouldn't be sending.
         debug_assert!(cb.sender.fin_seq_no.is_none());
@@ -245,26 +246,26 @@ impl Sender {
         trace!("push(): total unsent segments={:?}", cb.sender.unsent_queue.len());
 
         // Check if closing the socket and sending FIN.
-        if let Some(buf) = buf.as_mut() {
-            cb.sender.unsent_next_seq_no = cb.sender.unsent_next_seq_no + (buf.len() as u32).into();
-            if cb.sender.send_window.get() > 0 {
-                Self::send_segment(cb, layer3_endpoint, runtime.get_now(), buf);
-            }
-        } else {
+        if bufs.is_empty() {
             // We can always send the FIN immediately.
             cb.sender.fin_seq_no = Some(cb.sender.unsent_next_seq_no);
             cb.sender.unsent_next_seq_no = cb.sender.unsent_next_seq_no + 1.into();
             Self::send_fin(cb, layer3_endpoint, runtime.get_now())?;
+        } else {
+            for mut buf in bufs.into_iter() {
+                cb.sender.unsent_next_seq_no = cb.sender.unsent_next_seq_no + (buf.len() as u32).into();
+                if cb.sender.send_window.get() > 0 {
+                    Self::send_segment(cb, layer3_endpoint, runtime.get_now(), &mut buf);
+
+                    if !buf.is_empty() {
+                        cb.sender.unsent_queue.push(buf);
+                    }
+                }
+            }
         }
 
-        // Place the buffer in the unsent queue.
-        if let Some(buf) = buf.take() {
-            if !cb.sender.unacked_queue.is_empty() {
-                trace!("push(): total unacked segments={:?}", cb.sender.unacked_queue.len());
-            }
-            if !buf.is_empty() {
-                cb.sender.unsent_queue.push(buf);
-            }
+        if !cb.sender.unacked_queue.is_empty() {
+            trace!("push(): total unacked segments={:?}", cb.sender.unacked_queue.len());
         }
 
         // Wait until the sequnce number of the pushed buffer is acknowledged.
@@ -400,8 +401,7 @@ impl Sender {
         now: Instant,
         segment: &mut DemiBuffer,
     ) -> usize {
-        let buffer_length = segment.len();
-        debug_assert_ne!(buffer_length, 0);
+        debug_assert!(!segment.is_empty());
 
         let max_frame_size_bytes = Self::get_open_window_size_bytes(cb);
         if max_frame_size_bytes == 0 {
@@ -411,12 +411,12 @@ impl Sender {
         // Split the packet if necessary.
         // TODO: Use a scatter/gather array to coalesce multiple buffers into a single segment.
         let (frame_size_bytes, do_push) = {
-            if buffer_length > max_frame_size_bytes {
+            if segment.len() > max_frame_size_bytes {
                 // Suppress PSH flag for partial buffers.
                 (max_frame_size_bytes, false)
             } else {
                 // We can just send the whole packet. Clone it so we can attach headers/retransmit it later.
-                (buffer_length, true)
+                (segment.len(), true)
             }
         };
         let segment_data = segment

@@ -19,7 +19,7 @@ use crate::{
     demikernel::config::Config,
     expect_some,
     inetstack::{
-        consts::RECEIVE_BATCH_SIZE,
+        consts::MAX_BATCH_SIZE_NUM_PACKETS,
         protocols::{
             layer3::{ip::IpProtocol, SharedLayer3Endpoint},
             layer4::{
@@ -97,7 +97,7 @@ impl Peer {
         }
     }
 
-    fn receive_batch(&mut self, batch: ArrayVec<(Ipv4Addr, IpProtocol, DemiBuffer), RECEIVE_BATCH_SIZE>) {
+    fn receive_batch(&mut self, batch: ArrayVec<(Ipv4Addr, IpProtocol, DemiBuffer), MAX_BATCH_SIZE_NUM_PACKETS>) {
         timer!("inetstack::layer4::receive_batch");
         trace!("found packets: {:?}", batch.len());
         for (src_ipv4_addr, ip_type, payload) in batch {
@@ -338,19 +338,38 @@ impl Peer {
     }
 
     /// Pushes a buffer to a TCP socket.
-    pub async fn push(&mut self, sd: &mut Socket, buf: &mut DemiBuffer, addr: Option<SocketAddr>) -> Result<(), Fail> {
+    pub async fn push(
+        &mut self,
+        sd: &mut Socket,
+        bufs: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>,
+        addr: Option<SocketAddr>,
+    ) -> Result<(), Fail> {
         match sd {
-            Socket::Tcp(socket) => self.tcp.push(socket, buf).await,
-            Socket::Udp(socket) => self.udp.push(socket, buf, addr).await,
+            Socket::Tcp(socket) => self.tcp.push(socket, bufs).await,
+            Socket::Udp(socket) => {
+                for buf in bufs {
+                    self.udp.push(socket, buf, addr).await?;
+                }
+                Ok(())
+            },
         }
     }
 
     /// Create a pop request to write data from IO connection represented by `qd` into a buffer
     /// allocated by the application.
-    pub async fn pop(&mut self, sd: &mut Socket, size: usize) -> Result<(Option<SocketAddr>, DemiBuffer), Fail> {
+    pub async fn pop(
+        &mut self,
+        sd: &mut Socket,
+        size: usize,
+    ) -> Result<(Option<SocketAddr>, ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>), Fail> {
         match sd {
             Socket::Tcp(socket) => self.tcp.pop(socket, size).await,
-            Socket::Udp(socket) => self.udp.pop(socket, size).await,
+            Socket::Udp(socket) => {
+                let (addr, buf) = self.udp.pop(socket, size).await?;
+                let mut bufs: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS> = ArrayVec::new();
+                bufs.push(buf);
+                Ok((addr, bufs))
+            },
         }
     }
 }

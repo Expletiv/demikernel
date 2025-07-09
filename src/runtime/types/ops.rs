@@ -27,8 +27,8 @@ pub enum demi_opcode_t {
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
 pub struct demi_accept_result_t {
-    pub qd: i32,
-    pub addr: libc::sockaddr,
+    pub qd: i32,              // 4 bytes.
+    pub addr: libc::sockaddr, // 16 bytes.
 }
 
 #[repr(C)]
@@ -84,21 +84,23 @@ mod test {
     /// Tests if `demi_qresult_t` has the expected size.
     #[test]
     fn test_size_demi_qresult_t() -> Result<(), anyhow::Error> {
-        // Size of a demi_opcode_t enum.
         const QR_OPCODE_SIZE: usize = 4;
-        // Size of a u32.
+        crate::ensure_eq!(mem::size_of::<demi_opcode_t>(), QR_OPCODE_SIZE);
         const QR_QD_SIZE: usize = 4;
-        // Size of a demi_qtoken_t type alias.
+        crate::ensure_eq!(mem::size_of::<u32>(), QR_QD_SIZE);
         const QR_QT_SIZE: usize = 8;
-        // Size of a u64.
+        crate::ensure_eq!(mem::size_of::<demi_qtoken_t>(), QR_QT_SIZE);
         const QR_RET_SIZE: usize = 8;
-        // Size of a demi_qr_value_t structure.
+        crate::ensure_eq!(mem::size_of::<u64>(), QR_RET_SIZE);
         const QR_VALUE_SIZE: usize = mem::size_of::<demi_qr_value_t>();
+        const QR_RESULT_SIZE: usize = QR_OPCODE_SIZE + QR_QD_SIZE + QR_QT_SIZE + QR_RET_SIZE + QR_VALUE_SIZE;
+        const PADDING: usize = match QR_RESULT_SIZE % mem::align_of::<demi_qresult_t>() {
+            0 => 0,
+            remainder => mem::align_of::<demi_qresult_t>() - remainder,
+        };
+
         // Size of a demi_qresult_t structure.
-        crate::ensure_eq!(
-            mem::size_of::<demi_qresult_t>(),
-            QR_OPCODE_SIZE + QR_QD_SIZE + QR_QT_SIZE + QR_RET_SIZE + QR_VALUE_SIZE
-        );
+        crate::ensure_eq!(mem::size_of::<demi_qresult_t>(), QR_RESULT_SIZE + PADDING);
         Ok(())
     }
 }

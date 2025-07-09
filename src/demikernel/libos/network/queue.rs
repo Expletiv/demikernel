@@ -14,8 +14,10 @@ use crate::runtime::{
         transport::NetworkTransport,
     },
     queue::{IoQueue, QType},
+    types::DEMI_SGARRAY_MAXLEN,
     QToken, SharedObject,
 };
+use ::arrayvec::ArrayVec;
 use ::futures::{pin_mut, select_biased, FutureExt};
 use ::socket2::{Domain, Type};
 use ::std::{
@@ -260,12 +262,18 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
 
     /// Asynchronously push data to the queue. This function contains all of the single-queue, asynchronous code
     /// necessary to push to the queue and any single-queue functionality after the push completes.
-    pub async fn push_coroutine(&mut self, mut buf: DemiBuffer, addr: Option<SocketAddr>) -> Result<(), Fail> {
+    pub async fn push_coroutine(
+        &mut self,
+        bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>,
+        addr: Option<SocketAddr>,
+    ) -> Result<(), Fail> {
+        self.state_machine.may_push()?;
+
         let result = {
             let mut state_machine: SocketStateMachine = self.state_machine.clone();
             let mut transport: T = self.transport.clone();
             let state_tracker = state_machine.while_open().fuse();
-            let operation = transport.push(&mut self.socket, &mut buf, addr).fuse();
+            let operation = transport.push(&mut self.socket, bufs, addr).fuse();
             pin_mut!(state_tracker);
             pin_mut!(operation);
 
@@ -274,9 +282,6 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
                 result = operation => result,
             }
         };
-        if result.is_ok() {
-            debug_assert_eq!(buf.len(), 0);
-        }
         result
     }
 
@@ -293,7 +298,11 @@ impl<T: NetworkTransport> SharedNetworkQueue<T> {
 
     /// Asynchronously pops data from the queue. This function contains all of the single-queue, asynchronous code
     /// necessary to pop from a queue and any single-queue functionality after the pop completes.
-    pub async fn pop_coroutine(&mut self, size: Option<usize>) -> Result<(Option<SocketAddr>, DemiBuffer), Fail> {
+    pub async fn pop_coroutine(
+        &mut self,
+        size: Option<usize>,
+    ) -> Result<(Option<SocketAddr>, ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>), Fail> {
+        self.state_machine.may_pop()?;
         let size: usize = size.unwrap_or(limits::RECVBUF_SIZE_MAX);
 
         let mut state_machine: SocketStateMachine = self.state_machine.clone();

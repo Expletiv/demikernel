@@ -95,8 +95,8 @@ static void server(int argc,
 
         /* Parse operation result. */
         assert(qr.qr_opcode == DEMI_OPC_POP);
-        assert(qr.qr_value.sga.sga_segs != 0);
-        assert(!memcmp(qr.qr_value.sga.sga_segs[0].sgaseg_buf, expected_buf, data_size));
+        assert(qr.qr_value.sga.segments != 0);
+        assert(!memcmp(qr.qr_value.sga.segments[0].data_buf_ptr, expected_buf, data_size));
 
         /* Release scatter-gather array. */
         assert(demi_sgafree(&qr.qr_value.sga) == 0);
@@ -149,10 +149,10 @@ static void client(int argc,
 
         /* Allocate scatter-gather array. */
         sga = demi_sgaalloc(data_size);
-        assert(sga.sga_segs != 0);
+        assert(sga.segments != 0);
 
         /* Prepare data. */
-        memset(sga.sga_segs[0].sgaseg_buf, 1, data_size);
+        memset(sga.segments[0].data_buf_ptr, 1, data_size);
 
         /* Push data. */
         assert(demi_pushto(&qt, sockqd, &sga, (const struct sockaddr *)remote, sizeof(struct sockaddr_in)) == 0);

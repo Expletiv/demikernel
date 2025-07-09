@@ -239,7 +239,7 @@ impl Application {
                     },
                 };
 
-                num_bytes += sga.sga_segs[0].sgaseg_len as usize;
+                num_bytes += sga.segments[0].data_len_bytes as usize;
                 if let Err(e) = self.libos.sgafree(sga) {
                     println!("ERROR: sgafree() failed (error={:?})", e);
                     println!("WARN: leaking sga");
@@ -257,12 +257,12 @@ impl Application {
         };
 
         // Ensure that allocated array has the requested size.
-        if sga.sga_segs[0].sgaseg_len as usize != size {
+        if sga.segments[0].data_len_bytes as usize != size {
             if let Err(e) = self.libos.sgafree(sga) {
                 println!("ERROR: sgafree() failed (error={:?})", e);
                 println!("WARN: leaking sga");
             }
-            let seglen: usize = sga.sga_segs[0].sgaseg_len as usize;
+            let seglen: usize = sga.segments[0].data_len_bytes as usize;
             anyhow::bail!(
                 "failed to allocate scatter-gather array: expected size={:?} allocated size={:?}",
                 size,
@@ -271,8 +271,8 @@ impl Application {
         }
 
         // Fill in the array.
-        let ptr: *mut u8 = sga.sga_segs[0].sgaseg_buf as *mut u8;
-        let len: usize = sga.sga_segs[0].sgaseg_len as usize;
+        let ptr: *mut u8 = sga.segments[0].data_buf_ptr as *mut u8;
+        let len: usize = sga.segments[0].data_len_bytes as usize;
         let slice: &mut [u8] = unsafe { slice::from_raw_parts_mut(ptr, len) };
         slice.fill(value);
 

@@ -113,7 +113,7 @@ impl TcpServer {
                 demi_opcode_t::DEMI_OPC_POP => {
                     let qd: QDesc = qr.qr_qd.into();
                     let sga: demi_sgarray_t = unsafe { qr.qr_value.sga };
-                    let seglen: usize = sga.sga_segs[0].sgaseg_len as usize;
+                    let seglen: usize = sga.segments[0].data_len_bytes as usize;
 
                     // Ensure that client has closed the connection.
                     assert_eq!(seglen, 0, "client must have had closed the connection, but it has not");

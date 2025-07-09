@@ -3,7 +3,7 @@
 
 use crate::{
     inetstack::{
-        consts::MAX_HEADER_SIZE,
+        consts::{MAX_BATCH_SIZE_NUM_PACKETS, MAX_HEADER_SIZE},
         test_helpers::{self, engine::SharedEngine},
     },
     runtime::{
@@ -12,6 +12,7 @@ use crate::{
     },
 };
 use ::anyhow::Result;
+use ::arrayvec::ArrayVec;
 use ::libc::EBADF;
 use ::std::{
     net::{Ipv4Addr, SocketAddrV4},
@@ -91,12 +92,13 @@ fn udp_push_pop() -> Result<()> {
     carrie.push_frame(bob.pop_frame());
     let carrie_qt: QToken = carrie.udp_pop(carrie_fd)?;
 
-    let (remote_addr, received_buf): (Option<SocketAddrV4>, DemiBuffer) = match carrie.wait(carrie_qt)? {
-        (_, OperationResult::Pop(addr, buf)) => (addr, buf),
-        _ => anyhow::bail!("Pop failed"),
-    };
+    let (remote_addr, received_bufs): (Option<SocketAddrV4>, ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) =
+        match carrie.wait(carrie_qt)? {
+            (_, OperationResult::Pop(addr, bufs)) => (addr, bufs),
+            _ => anyhow::bail!("Pop failed"),
+        };
     assert_eq!(remote_addr.unwrap(), bob_addr);
-    assert_eq!(received_buf[..], buf[..]);
+    assert_eq!(received_bufs[0][..], buf[..]);
 
     // Close peers.
     bob.udp_close(bob_fd)?;
@@ -141,12 +143,13 @@ fn udp_push_pop_wildcard_address() -> Result<()> {
     // Take a packet from Bob and deliver to Carrie.
     carrie.push_frame(bob.pop_frame());
     let carrie_qt: QToken = carrie.udp_pop(carrie_fd)?;
-    let (remote_addr, received_buf): (Option<SocketAddrV4>, DemiBuffer) = match carrie.wait(carrie_qt)? {
-        (_, OperationResult::Pop(addr, buf)) => (addr, buf),
-        _ => anyhow::bail!("Pop failed"),
-    };
+    let (remote_addr, received_bufs): (Option<SocketAddrV4>, ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) =
+        match carrie.wait(carrie_qt)? {
+            (_, OperationResult::Pop(addr, bufs)) => (addr, bufs),
+            _ => anyhow::bail!("Pop failed"),
+        };
     assert_eq!(remote_addr.unwrap(), bob_addr);
-    assert_eq!(received_buf[..], buf[..]);
+    assert_eq!(received_bufs[0][..], buf[..]);
     // Close peers.
     bob.udp_close(bob_fd)?;
     carrie.udp_close(carrie_fd)?;
@@ -190,12 +193,13 @@ fn udp_ping_pong() -> Result<()> {
     carrie.push_frame(bob.pop_frame());
     let carrie_qt: QToken = carrie.udp_pop(carrie_fd)?;
 
-    let (remote_addr, received_buf_a): (Option<SocketAddrV4>, DemiBuffer) = match carrie.wait(carrie_qt)? {
-        (_, OperationResult::Pop(addr, buf)) => (addr, buf),
-        _ => anyhow::bail!("Pop failed"),
-    };
+    let (remote_addr, received_buf_a): (Option<SocketAddrV4>, ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) =
+        match carrie.wait(carrie_qt)? {
+            (_, OperationResult::Pop(addr, bufs)) => (addr, bufs),
+            _ => anyhow::bail!("Pop failed"),
+        };
     assert_eq!(remote_addr.unwrap(), bob_addr);
-    assert_eq!(received_buf_a[..], buf_a[..]);
+    assert_eq!(received_buf_a[0][..], buf_a[..]);
 
     now += Duration::from_micros(1);
 
@@ -212,12 +216,13 @@ fn udp_ping_pong() -> Result<()> {
     // Take a packet from Carrie and deliver to Bob.
     bob.push_frame(carrie.pop_frame());
     let bob_qt: QToken = bob.udp_pop(bob_fd)?;
-    let (remote_addr, received_buf_b): (Option<SocketAddrV4>, DemiBuffer) = match bob.wait(bob_qt)? {
-        (_, OperationResult::Pop(addr, buf)) => (addr, buf),
-        _ => anyhow::bail!("Pop failed"),
-    };
+    let (remote_addr, received_buf_b): (Option<SocketAddrV4>, ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) =
+        match bob.wait(bob_qt)? {
+            (_, OperationResult::Pop(addr, bufs)) => (addr, bufs),
+            _ => anyhow::bail!("Pop failed"),
+        };
     assert_eq!(remote_addr.unwrap(), carrie_addr);
-    assert_eq!(received_buf_b[..], buf_b[..]);
+    assert_eq!(received_buf_b[0][..], buf_b[..]);
 
     // Close peers.
     bob.udp_close(bob_fd)?;
@@ -321,12 +326,13 @@ fn udp_loop2_push_pop() -> Result<()> {
         // Take a packet from Bob and deliver to Carrie.
         carrie.push_frame(bob.pop_frame());
         let carrie_qt: QToken = carrie.udp_pop(carrie_fd)?;
-        let (remote_addr, received_buf): (Option<SocketAddrV4>, DemiBuffer) = match carrie.wait(carrie_qt)? {
-            (_, OperationResult::Pop(addr, buf)) => (addr, buf),
-            _ => anyhow::bail!("Pop failed"),
-        };
+        let (remote_addr, received_bufs): (Option<SocketAddrV4>, ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) =
+            match carrie.wait(carrie_qt)? {
+                (_, OperationResult::Pop(addr, bufs)) => (addr, bufs),
+                _ => anyhow::bail!("Pop failed"),
+            };
         assert_eq!(remote_addr.unwrap(), bob_addr);
-        assert_eq!(received_buf[..], buf[..]);
+        assert_eq!(received_bufs[0][..], buf[..]);
     }
 
     // Close peers.
@@ -384,12 +390,13 @@ fn udp_loop2_ping_pong() -> Result<()> {
         // Take a packet from Bob and deliver to Carrie.
         carrie.push_frame(bob.pop_frame());
         let carrie_qt: QToken = carrie.udp_pop(carrie_fd)?;
-        let (remote_addr, received_buf_a): (Option<SocketAddrV4>, DemiBuffer) = match carrie.wait(carrie_qt)? {
-            (_, OperationResult::Pop(addr, buf)) => (addr, buf),
-            _ => anyhow::bail!("Pop failed"),
-        };
+        let (remote_addr, received_buf_a): (Option<SocketAddrV4>, ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) =
+            match carrie.wait(carrie_qt)? {
+                (_, OperationResult::Pop(addr, bufs)) => (addr, bufs),
+                _ => anyhow::bail!("Pop failed"),
+            };
         assert_eq!(remote_addr.unwrap(), bob_addr);
-        assert_eq!(received_buf_a[..], buf_a[..]);
+        assert_eq!(received_buf_a[0][..], buf_a[..]);
 
         now += Duration::from_micros(1);
 
@@ -407,12 +414,13 @@ fn udp_loop2_ping_pong() -> Result<()> {
         // Take a packet from Carrie and deliver to Bob.
         bob.push_frame(carrie.pop_frame());
         let bob_qt: QToken = bob.udp_pop(bob_fd)?;
-        let (remote_addr, received_buf_b): (Option<SocketAddrV4>, DemiBuffer) = match bob.wait(bob_qt)? {
-            (_, OperationResult::Pop(addr, buf)) => (addr, buf),
-            _ => anyhow::bail!("Pop failed"),
-        };
+        let (remote_addr, received_buf_b): (Option<SocketAddrV4>, ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) =
+            match bob.wait(bob_qt)? {
+                (_, OperationResult::Pop(addr, bufs)) => (addr, bufs),
+                _ => anyhow::bail!("Pop failed"),
+            };
         assert_eq!(remote_addr.unwrap(), carrie_addr);
-        assert_eq!(received_buf_b[..], buf_b[..]);
+        assert_eq!(received_buf_b[0][..], buf_b[..]);
     }
 
     // Close peers.

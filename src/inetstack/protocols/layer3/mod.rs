@@ -13,7 +13,7 @@ pub use self::{arp::SharedArpPeer, icmpv4::SharedIcmpv4Peer, ip::IpProtocol, ipv
 use crate::{
     demikernel::config::Config,
     inetstack::{
-        consts::RECEIVE_BATCH_SIZE,
+        consts::MAX_BATCH_SIZE_NUM_PACKETS,
         protocols::layer2::{EtherType2, SharedLayer2Endpoint},
     },
     runtime::{
@@ -66,7 +66,9 @@ impl SharedLayer3Endpoint {
         })))
     }
 
-    pub fn receive(&mut self) -> Result<ArrayVec<(Ipv4Addr, IpProtocol, DemiBuffer), RECEIVE_BATCH_SIZE>, Fail> {
+    pub fn receive(
+        &mut self,
+    ) -> Result<ArrayVec<(Ipv4Addr, IpProtocol, DemiBuffer), MAX_BATCH_SIZE_NUM_PACKETS>, Fail> {
         let mut batch = ArrayVec::new();
         for (eth2_type, mut packet) in self.layer2_endpoint.receive()? {
             match eth2_type {

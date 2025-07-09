@@ -148,7 +148,7 @@ impl TcpClient {
                     match pop_qr.qr_opcode {
                         demi_opcode_t::DEMI_OPC_POP => {
                             let sga: demi_sgarray_t = unsafe { pop_qr.qr_value.sga };
-                            let received_len: u32 = sga.sga_segs[0].sgaseg_len;
+                            let received_len: u32 = sga.segments[0].data_len_bytes;
                             self.libos.sgafree(sga)?;
                             // 0 len pop represents socket closed from other side.
                             demikernel::ensure_eq!(
@@ -216,7 +216,7 @@ impl TcpClient {
                 },
                 demi_opcode_t::DEMI_OPC_POP => {
                     let sga: demi_sgarray_t = unsafe { qr.qr_value.sga };
-                    let received_len: u32 = sga.sga_segs[0].sgaseg_len;
+                    let received_len: u32 = sga.segments[0].data_len_bytes;
                     self.libos.sgafree(sga)?;
 
                     // 0 len pop represents socket closed from other side.

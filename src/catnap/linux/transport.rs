@@ -16,7 +16,7 @@ mod socket;
 use crate::{
     catnap::transport::socket::{SharedSocketData, SocketData},
     demikernel::config::Config,
-    expect_ok, expect_some,
+    expect_some,
     runtime::{
         fail::Fail,
         memory::{DemiBuffer, DemiMemoryAllocator},
@@ -24,9 +24,12 @@ use crate::{
             socket::option::{SocketOption, TcpSocketOptions},
             transport::NetworkTransport,
         },
-        poll_yield, DemiRuntime, SharedDemiRuntime, SharedObject,
+        poll_yield,
+        types::DEMI_SGARRAY_MAXLEN,
+        DemiRuntime, SharedDemiRuntime, SharedObject,
     },
 };
+use ::arrayvec::ArrayVec;
 use ::futures::FutureExt;
 use ::slab::Slab;
 use ::socket2::{Domain, Protocol, Socket, Type};
@@ -35,6 +38,7 @@ use ::std::{
     net::{Shutdown, SocketAddr, SocketAddrV4},
     ops::{Deref, DerefMut},
     os::fd::{AsRawFd, RawFd},
+    time::Duration,
 };
 
 //======================================================================================================================
@@ -530,7 +534,7 @@ impl NetworkTransport for SharedCatnapTransport {
                         libc::ENOTCONN => break,
                         errno if DemiRuntime::should_retry(errno) => {
                             // Wait for a new incoming event.
-                            data.pop(0).await?;
+                            data.pop(0, None).await?;
                             continue;
                         },
                         errno => return Err(Fail::new(errno, "operation failed")),
@@ -553,12 +557,12 @@ impl NetworkTransport for SharedCatnapTransport {
     async fn push(
         &mut self,
         sd: &mut Self::SocketDescriptor,
-        buffer: &mut DemiBuffer,
+        bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>,
         addr: Option<SocketAddr>,
     ) -> Result<(), Fail> {
-        self.data_from_sd(sd).push(addr, buffer.clone()).await?;
-        // Clear out the original buffer.
-        expect_ok!(buffer.trim(buffer.len()), "Should be able to empty the buffer");
+        for buf in bufs {
+            self.data_from_sd(sd).push(addr, buf).await?;
+        }
         Ok(())
     }
 
@@ -569,8 +573,32 @@ impl NetworkTransport for SharedCatnapTransport {
         &mut self,
         sd: &mut Self::SocketDescriptor,
         size: usize,
-    ) -> Result<(Option<SocketAddr>, DemiBuffer), Fail> {
-        self.data_from_sd(sd).pop(size).await
+    ) -> Result<(Option<SocketAddr>, ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>), Fail> {
+        let mut total_size = 0;
+        let mut bufs: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN> = ArrayVec::new();
+        let mut addr: Option<SocketAddr> = None;
+        while total_size < size && bufs.len() < DEMI_SGARRAY_MAXLEN - 1 {
+            let (src_addr, buf) = if !bufs.is_empty() {
+                match self.data_from_sd(sd).pop(size - total_size, Some(Duration::ZERO)).await {
+                    Ok(result) => result,
+                    Err(e) if e.errno == libc::ETIMEDOUT => break,
+                    Err(e) => return Err(e),
+                }
+            } else {
+                self.data_from_sd(sd).pop(size - total_size, None).await?
+            };
+            match addr {
+                None => addr = src_addr,
+                addr if src_addr != addr => {
+                    self.data_from_sd(sd).push_front(buf, src_addr);
+                    return Ok((addr, bufs));
+                },
+                _ => (),
+            }
+            total_size += buf.len();
+            bufs.push(buf)
+        }
+        Ok((addr, bufs))
     }
 
     /// Close the socket on the underlying transport. Also unregisters the socket with epoll.

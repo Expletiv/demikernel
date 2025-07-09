@@ -9,8 +9,10 @@ use crate::runtime::{
     fail::Fail,
     memory::{DemiBuffer, DemiMemoryAllocator},
     network::socket::option::SocketOption,
+    types::DEMI_SGARRAY_MAXLEN,
     SharedDemiRuntime,
 };
+use ::arrayvec::ArrayVec;
 use ::socket2::{Domain, Type};
 use ::std::{
     fmt::Debug,
@@ -69,7 +71,7 @@ pub trait NetworkTransport: Clone + 'static + DemiMemoryAllocator {
     fn push(
         &mut self,
         sd: &mut Self::SocketDescriptor,
-        buf: &mut DemiBuffer,
+        buf: ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>,
         addr: Option<SocketAddr>,
     ) -> impl std::future::Future<Output = Result<(), Fail>>;
 
@@ -78,7 +80,7 @@ pub trait NetworkTransport: Clone + 'static + DemiMemoryAllocator {
         &mut self,
         sd: &mut Self::SocketDescriptor,
         size: usize,
-    ) -> impl std::future::Future<Output = Result<(Option<SocketAddr>, DemiBuffer), Fail>>;
+    ) -> impl std::future::Future<Output = Result<(Option<SocketAddr>, ArrayVec<DemiBuffer, DEMI_SGARRAY_MAXLEN>), Fail>>;
 
     /// Asynchronously close a socket.
     fn close(&mut self, sd: &mut Self::SocketDescriptor) -> impl std::future::Future<Output = Result<(), Fail>>;

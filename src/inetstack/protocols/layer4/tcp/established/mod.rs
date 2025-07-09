@@ -19,12 +19,16 @@ use crate::{
     async_timer,
     inetstack::{
         config::TcpConfig,
-        consts::MSL,
+        consts::{MAX_BATCH_SIZE_NUM_PACKETS, MSL},
         protocols::{
             layer3::SharedLayer3Endpoint,
             layer4::tcp::{
                 congestion_control::CongestionControlConstructor,
-                established::{ctrlblk::ControlBlock, ctrlblk::State, receiver::Receiver, sender::Sender},
+                established::{
+                    ctrlblk::{ControlBlock, State},
+                    receiver::Receiver,
+                    sender::Sender,
+                },
                 header::TcpHeader,
                 SeqNumber,
             },
@@ -35,6 +39,7 @@ use crate::{
         SharedDemiRuntime, SharedObject,
     },
 };
+use ::arrayvec::ArrayVec;
 use ::futures::{join, pin_mut, FutureExt};
 use ::std::{
     net::SocketAddrV4,
@@ -212,8 +217,13 @@ impl SharedEstablishedSocket {
         let wait_for_fin = pin!(me3.control_block.receiver.wait_for_fin().fuse());
         let mut runtime = self.runtime.clone();
         let mut layer3_endpoint = self.layer3_endpoint.clone();
-        let push_fin_and_wait_for_ack =
-            pin!(Sender::push(&mut me2.control_block, &mut layer3_endpoint, &mut runtime, None).fuse());
+        let push_fin_and_wait_for_ack = pin!(Sender::push(
+            &mut me2.control_block,
+            &mut layer3_endpoint,
+            &mut runtime,
+            ArrayVec::new()
+        )
+        .fuse());
         let (result1, result2) = join!(wait_for_fin, push_fin_and_wait_for_ack);
         result1?;
         result2?;
@@ -233,19 +243,25 @@ impl SharedEstablishedSocket {
         // 1. Send FIN and wait for ack before closing.
         let mut runtime = self.runtime.clone();
         let mut layer3_endpoint = self.layer3_endpoint.clone();
-        Sender::push(&mut self.control_block, &mut layer3_endpoint, &mut runtime, None).await?;
+        Sender::push(
+            &mut self.control_block,
+            &mut layer3_endpoint,
+            &mut runtime,
+            ArrayVec::new(),
+        )
+        .await?;
         debug_assert_eq!(self.control_block.state, State::Closed);
 
         Ok(())
     }
 
-    pub async fn push(&mut self, buf: DemiBuffer) -> Result<(), Fail> {
+    pub async fn push(&mut self, bufs: ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>) -> Result<(), Fail> {
         let mut runtime = self.runtime.clone();
         let mut layer3_endpoint = self.layer3_endpoint.clone();
-        Sender::push(&mut self.control_block, &mut layer3_endpoint, &mut runtime, Some(buf)).await
+        Sender::push(&mut self.control_block, &mut layer3_endpoint, &mut runtime, bufs).await
     }
 
-    pub async fn pop(&mut self, size: Option<usize>) -> Result<DemiBuffer, Fail> {
+    pub async fn pop(&mut self, size: Option<usize>) -> Result<ArrayVec<DemiBuffer, MAX_BATCH_SIZE_NUM_PACKETS>, Fail> {
         self.control_block.receiver.pop(size).await
     }
 

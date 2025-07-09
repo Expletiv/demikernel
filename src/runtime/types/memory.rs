@@ -5,8 +5,10 @@
 // Constants
 //======================================================================================================================
 
-/// Maximum Length for Scatter-Gather Arrays
-pub const DEMI_SGARRAY_MAXLEN: usize = 1;
+use ::std::{mem, ptr};
+
+/// Maximum Length for Scatter-Gather Arrays. Cannot be larger than u16::MAX
+pub const DEMI_SGARRAY_MAXLEN: usize = 20;
 
 //======================================================================================================================
 // Structures
@@ -16,26 +18,43 @@ pub const DEMI_SGARRAY_MAXLEN: usize = 1;
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
 pub struct demi_sgaseg_t {
-    /// Underlying data.
-    pub sgaseg_buf: *mut libc::c_void,
-    /// Length of underlying data.
-    pub sgaseg_len: u32,
+    pub reserved_metadata_ptr: *mut libc::c_void,
+    pub data_buf_ptr: *mut libc::c_void,
+    pub data_len_bytes: u32,
 }
 
 /// Scatter-Gather Array
 #[repr(C, packed)]
 #[derive(Copy, Clone)]
 pub struct demi_sgarray_t {
-    /// Reserved.
-    pub sga_buf: *mut libc::c_void,
-    /// Number of segments in this scatter-gather array.
-    pub sga_numsegs: u32,
-    /// Scatter-gather array segments.
-    pub sga_segs: [demi_sgaseg_t; DEMI_SGARRAY_MAXLEN],
-    /// Source address of the data contained in this scatter-gather array (if present).
-    pub sga_addr: libc::sockaddr,
+    pub num_segments: u32,
+    pub segments: [demi_sgaseg_t; DEMI_SGARRAY_MAXLEN],
+    pub sockaddr_src: libc::sockaddr,
 }
 
+//======================================================================================================================
+// Trait Implementations
+//======================================================================================================================
+
+impl Default for demi_sgaseg_t {
+    fn default() -> Self {
+        Self {
+            reserved_metadata_ptr: ptr::null_mut() as *mut _,
+            data_buf_ptr: ptr::null_mut() as *mut libc::c_void,
+            data_len_bytes: 0,
+        }
+    }
+}
+
+impl Default for demi_sgarray_t {
+    fn default() -> Self {
+        Self {
+            num_segments: 0,
+            segments: [demi_sgaseg_t::default(); DEMI_SGARRAY_MAXLEN],
+            sockaddr_src: unsafe { mem::zeroed() },
+        }
+    }
+}
 //======================================================================================================================
 // Unit Tests
 //======================================================================================================================
@@ -50,29 +69,32 @@ mod test {
     #[test]
     fn test_size_demi_sgaseg_t() -> Result<(), anyhow::Error> {
         // Size of a void pointer.
-        const SGASEG_BUF_SIZE: usize = 8;
+        const RESERVED_METADATA_SIZE: usize = 8;
+        // Size of a void pointer.
+        const DATA_BUF_PTR_SIZE: usize = 8;
         // Size of a u32.
-        const SGASEG_LEN_SIZE: usize = 4;
+        const DATA_LEN_SIZE: usize = 4;
         // Size of a demi_sgaseg_t structure.
-        crate::ensure_eq!(mem::size_of::<demi_sgaseg_t>(), SGASEG_BUF_SIZE + SGASEG_LEN_SIZE);
+        crate::ensure_eq!(
+            mem::size_of::<demi_sgaseg_t>(),
+            RESERVED_METADATA_SIZE + DATA_BUF_PTR_SIZE + DATA_LEN_SIZE
+        );
         Ok(())
     }
 
     /// Tests if the `demi_sga_t` structure has the expected size.
     #[test]
     fn test_size_demi_sgarray_t() -> Result<(), anyhow::Error> {
-        // Size of a void pointer.
-        const SGA_BUF_SIZE: usize = 8;
         // Size of a u32.
-        const SGA_NUMSEGS_SIZE: usize = 4;
+        const NUM_SEGMENTS_SIZE: usize = 4;
         // Size of an array of demi_sgaseg_t structures.
-        const SGA_SEGS_SIZE: usize = mem::size_of::<demi_sgaseg_t>() * DEMI_SGARRAY_MAXLEN;
+        const ELEMENTS_SIZE: usize = mem::size_of::<demi_sgaseg_t>() * DEMI_SGARRAY_MAXLEN;
         // Size of a SockAddr structure.
-        const SGA_ADDR_SIZE: usize = 16;
+        const SOCKADDR_SRC_SIZE: usize = 16;
         // Size of a demi_sgarray_t structure.
         crate::ensure_eq!(
             mem::size_of::<demi_sgarray_t>(),
-            SGA_BUF_SIZE + SGA_NUMSEGS_SIZE + SGA_SEGS_SIZE + SGA_ADDR_SIZE
+            NUM_SEGMENTS_SIZE + ELEMENTS_SIZE + SOCKADDR_SRC_SIZE
         );
         Ok(())
     }

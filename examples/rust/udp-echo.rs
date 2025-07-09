@@ -148,18 +148,19 @@ impl Application {
                 demi_opcode_t::DEMI_OPC_POP => {
                     let sockqd: QDesc = qr.qr_qd.into();
                     let sga: demi_sgarray_t = unsafe { qr.qr_value.sga };
-                    let saddr: SocketAddr = match Self::sockaddr_to_socketaddrv4(&unsafe { qr.qr_value.sga.sga_addr }) {
-                        Ok(saddr) => SocketAddr::from(saddr),
-                        Err(e) => {
-                            // If error, free scatter-gather array.
-                            if let Err(e) = self.libos.sgafree(sga) {
-                                println!("ERROR: sgafree() failed (error={:?})", e);
-                                println!("WARN: leaking sga");
-                            };
-                            anyhow::bail!("could not parse sockaddr: {}", e)
-                        },
-                    };
-                    num_bytes += sga.sga_segs[0].sgaseg_len as usize;
+                    let saddr: SocketAddr =
+                        match Self::sockaddr_to_socketaddrv4(&unsafe { qr.qr_value.sga.sockaddr_src }) {
+                            Ok(saddr) => SocketAddr::from(saddr),
+                            Err(e) => {
+                                // If error, free scatter-gather array.
+                                if let Err(e) = self.libos.sgafree(sga) {
+                                    println!("ERROR: sgafree() failed (error={:?})", e);
+                                    println!("WARN: leaking sga");
+                                };
+                                anyhow::bail!("could not parse sockaddr: {}", e)
+                            },
+                        };
+                    num_bytes += sga.segments[0].data_len_bytes as usize;
                     // Push packet back.
                     let qt: QToken = match self.libos.pushto(sockqd, &sga, saddr) {
                         Ok(qt) => qt,

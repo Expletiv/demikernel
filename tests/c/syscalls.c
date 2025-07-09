@@ -155,8 +155,8 @@ static bool inval_getsockopt(void)
 }
 
 /*
-* @brief Issues an invalid call to getpeername().
-*/
+ * @brief Issues an invalid call to getpeername().
+ */
 static bool inval_getpeername(void)
 {
     int qd = -1;
@@ -176,7 +176,7 @@ static bool inval_sgaalloc(void)
     size_t len = 0;
 
     demi_sgarray_t sga = demi_sgaalloc(len);
-    return (sga.sga_buf == NULL);
+    return (sga.sga_numsegs == 0);
 }
 
 /**
@@ -237,12 +237,7 @@ struct test
 /**
  * @brief Tests for system calls in demi/libos.h
  */
-static struct test tests_libos[] = {{inval_socket, "invalid demi_socket()"},   {inval_accept, "invalid demi_accept()"},
-                                    {inval_bind, "invalid demi_bind()"},       {inval_close, "invalid_demi_close()"},
-                                    {inval_connect, "invalid demi_connect()"}, {inval_listen, "invalid demi_listen()"},
-                                    {inval_pop, "invalid demi_pop()"},         {inval_push, "invalid demi_push()"},
-                                    {inval_pushto, "invalid demi_pushto()"},   {inval_getpeername, "invalid demi_getpeername()"},
-                                    {inval_setsockopt, "invalid demi_setsockopt()"}, {inval_getsockopt, "invalid demi_getsockopt()}"}};
+static struct test tests_libos[] = {{inval_socket, "invalid demi_socket()"}, {inval_accept, "invalid demi_accept()"}, {inval_bind, "invalid demi_bind()"}, {inval_close, "invalid_demi_close()"}, {inval_connect, "invalid demi_connect()"}, {inval_listen, "invalid demi_listen()"}, {inval_pop, "invalid demi_pop()"}, {inval_push, "invalid demi_push()"}, {inval_pushto, "invalid demi_pushto()"}, {inval_getpeername, "invalid demi_getpeername()"}, {inval_setsockopt, "invalid demi_setsockopt()"}, {inval_getsockopt, "invalid demi_getsockopt()}"}};
 
 /**
  * @brief Tests for system calls in demi/sga.h

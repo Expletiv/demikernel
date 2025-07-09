@@ -30,7 +30,7 @@ typedef struct demi_sgarray
     // Number of segments in the scatter-gather array.
     uint32_t sga_numsegs;
     // Scatter-gather array segments.
-    demi_sgaseg_t sga_segs[DEMI_SGARRAY_MAXSIZE];
+    demi_sgaseg_t segments[DEMI_SGARRAY_MAXSIZE];
     // Source address of scatter-gather array.
     struct sockaddr_in sga_addr;
 } demi_sgarray_t;
@@ -42,9 +42,9 @@ The `demi_sgaseg_t` is defined as follows:
 typedef struct demi_sgaseg
 {
     // Underlying data.
-    void *sgaseg_buf;
+    void *data_buf_ptr;
     // Size in bytes of data.
-    uint32_t sgaseg_len;
+    uint32_t data_len_bytes;
 } demi_sgaseg_t;
 ```
 
