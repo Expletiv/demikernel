@@ -36,7 +36,6 @@ pub type demi_log_callback_t = extern "C" fn(
     u32,
 );
 
-/// Demikernel Arguments
 #[repr(C, packed)]
 pub struct demi_args_t {
     pub argc: core::ffi::c_int,
@@ -63,7 +62,6 @@ impl Default for demi_args_t {
 #[cfg(test)]
 mod test {
 
-    /// Tests if the `DemiArgs` structure has the expected size.
     #[test]
     fn test_size_demi_args() -> Result<(), anyhow::Error> {
         // Size of a void pointer.
@@ -73,11 +71,10 @@ mod test {
         // Size of a c char.
         const DEMIARGS_CALLBACK_SIZE: usize = 8;
 
-        // The expected size of the `DemiArgs` structure.
+        // Expected size
         const DEMIARGS_SIZE: usize =
             DEMIARGS_ARGC_SIZE + DEMIARGS_ARGV_SIZE + DEMIARGS_CALLBACK_SIZE + DEMIARGS_CALLBACK_SIZE;
 
-        // Check if the sizes match.
         assert_eq!(std::mem::size_of::<crate::runtime::types::demi_args_t>(), DEMIARGS_SIZE);
 
         Ok(())

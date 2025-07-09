@@ -29,7 +29,6 @@ pub struct CallbackLogWriter {
 // Associated Functions
 //=====================================================================================================================
 impl CallbackLogWriter {
-    /// Creates a new `CallbackLogWriter` instance.
     pub fn new(callback: demi_log_callback_t) -> Self {
         Self { callback }
     }
@@ -40,9 +39,9 @@ impl CallbackLogWriter {
 //======================================================================================================================
 impl LogWriter for CallbackLogWriter {
     fn write(&self, _now: &mut flexi_logger::DeferredNow, record: &log::Record) -> std::io::Result<()> {
-        let module: &str = record.module_path().unwrap_or("{unnamed}");
-        let file: &str = record.file().unwrap_or("{unknown file}");
-        let message: String = record.args().to_string();
+        let module = record.module_path().unwrap_or("{unnamed}");
+        let file = record.file().unwrap_or("{unknown file}");
+        let message = record.args().to_string();
         ((self.callback)(
             record.level() as i32,
             module.as_ptr() as *const std::ffi::c_char,
@@ -66,7 +65,6 @@ impl LogWriter for CallbackLogWriter {
 // Standalone Functions
 //======================================================================================================================
 
-/// Initializes logging features.
 pub fn initialize() {
     let _ = LOG_HANDLE.get_or_init(|| Logger::try_with_env().unwrap().format(with_thread).start().unwrap());
 }
@@ -77,7 +75,7 @@ pub fn initialize() {
 #[allow(unused)]
 pub fn custom_initialize<F: FnOnce() -> Logger>(f: F) {
     let _ = LOG_HANDLE.get_or_init(|| {
-        let logger: Logger = f();
+        let logger = f();
         logger.start().unwrap()
     });
 }

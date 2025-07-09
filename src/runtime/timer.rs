@@ -18,13 +18,9 @@ use ::std::{
     time::{Duration, Instant},
 };
 
-//======================================================================================================================
-// Thread local variable
-//======================================================================================================================
-
 thread_local! {
-/// This is our shared sense of time. It is explicitly moved forward ONLY by the runtime and used to trigger time outs.
-static THREAD_TIME: SharedTimer = SharedTimer::default();
+    /// This is our shared sense of time. It is explicitly moved forward ONLY by the runtime and used to trigger time outs.
+    static THREAD_TIME: SharedTimer = SharedTimer::default();
 }
 
 //======================================================================================================================
@@ -91,8 +87,7 @@ impl SharedTimer {
             if now < entry.expiry {
                 break;
             }
-            let entry: TimerQueueEntry =
-                expect_some!(self.heap.pop(), "should have an entry because we were able to peek").0;
+            let entry = expect_some!(self.heap.pop(), "should have an entry because we were able to peek").0;
             entry.waker.wake_by_ref();
         }
         self.now = now;
@@ -106,7 +101,7 @@ impl SharedTimer {
         let id = self.last_id;
         self.last_id.increment();
 
-        let entry: TimerQueueEntry = TimerQueueEntry { expiry, id, waker };
+        let entry = TimerQueueEntry { expiry, id, waker };
         self.heap.push(Reverse(entry));
         id
     }
@@ -141,7 +136,7 @@ pub fn global_get_time() -> Instant {
 
 /// Blocks until the system time moves
 pub async fn wait(timeout: Duration) {
-    let now: Instant = global_get_time();
+    let now = global_get_time();
     wait_until(now + timeout).await
 }
 
@@ -208,15 +203,14 @@ impl Future for YieldPoint {
     type Output = ();
 
     fn poll(self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<Self::Output> {
-        let self_: &mut Self = self.get_mut();
+        let self_ = self.get_mut();
         match self_.state {
             YieldState::Running => {
                 // If the timer expired while we were running and before we yielded, just return.
                 if self_.expiry <= global_get_time() {
                     Poll::Ready(())
                 } else {
-                    let id: YieldPointId =
-                        THREAD_TIME.with(|s| s.clone().add_timeout(self_.expiry, context.waker().clone()));
+                    let id = THREAD_TIME.with(|s| s.clone().add_timeout(self_.expiry, context.waker().clone()));
                     self_.state = YieldState::Yielded(id);
                     Poll::Pending
                 }

@@ -65,7 +65,6 @@ mod test {
     use crate::runtime::types::memory::*;
     use std::mem;
 
-    /// Tests if the `demi_sgaseg_t` structure has the expected size.
     #[test]
     fn test_size_demi_sgaseg_t() -> Result<(), anyhow::Error> {
         // Size of a void pointer.
@@ -74,7 +73,7 @@ mod test {
         const DATA_BUF_PTR_SIZE: usize = 8;
         // Size of a u32.
         const DATA_LEN_SIZE: usize = 4;
-        // Size of a demi_sgaseg_t structure.
+
         crate::ensure_eq!(
             mem::size_of::<demi_sgaseg_t>(),
             RESERVED_METADATA_SIZE + DATA_BUF_PTR_SIZE + DATA_LEN_SIZE
@@ -82,7 +81,6 @@ mod test {
         Ok(())
     }
 
-    /// Tests if the `demi_sga_t` structure has the expected size.
     #[test]
     fn test_size_demi_sgarray_t() -> Result<(), anyhow::Error> {
         // Size of a u32.
@@ -91,7 +89,7 @@ mod test {
         const ELEMENTS_SIZE: usize = mem::size_of::<demi_sgaseg_t>() * DEMI_SGARRAY_MAXLEN;
         // Size of a SockAddr structure.
         const SOCKADDR_SRC_SIZE: usize = 16;
-        // Size of a demi_sgarray_t structure.
+
         crate::ensure_eq!(
             mem::size_of::<demi_sgarray_t>(),
             NUM_SEGMENTS_SIZE + ELEMENTS_SIZE + SOCKADDR_SRC_SIZE
