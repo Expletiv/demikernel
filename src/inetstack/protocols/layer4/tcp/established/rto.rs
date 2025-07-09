@@ -45,7 +45,7 @@ impl RtoCalculator {
         // Clock granularity in seconds.
         const GRANULARITY: f64 = 0.001f64;
 
-        let rtt: f64 = rtt.as_secs_f64();
+        let rtt = rtt.as_secs_f64();
 
         if !self.received_sample {
             // Initial sample formula from RFC 6298 Section 2.2:
@@ -59,7 +59,7 @@ impl RtoCalculator {
         }
 
         // The new RTO value is the smoothed RTT plus the maximum of the clock granularity and 4 times the RTT variance.
-        let rto: f64 = self.srtt + GRANULARITY.max(4.0 * self.rttvar);
+        let rto = self.srtt + GRANULARITY.max(4.0 * self.rttvar);
 
         // Store the updated RTT value.
         self.update_rto(rto);
