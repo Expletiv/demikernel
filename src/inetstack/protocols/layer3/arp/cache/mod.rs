@@ -54,7 +54,7 @@ impl ArpCache {
     ) -> ArpCache {
         ArpCache(if is_enabled {
             let hash_ttl_cache = HashTtlCache::<Ipv4Addr, Record>::new(now, default_ttl);
-            let mut cache: HashTtlCache<Ipv4Addr, Record> = hash_ttl_cache;
+            let mut cache = hash_ttl_cache;
             if let Some(values) = values {
                 for (&k, &v) in values {
                     if let Some(record) = cache.insert(k, Record { link_addr: v }) {
@@ -102,7 +102,7 @@ impl ArpCache {
     // Exports address resolutions that are stored in the ARP cache.
     #[cfg(test)]
     pub fn export(&self) -> HashMap<Ipv4Addr, MacAddress> {
-        let mut map: HashMap<Ipv4Addr, MacAddress> = HashMap::default();
+        let mut map = HashMap::default();
         if let Some(ref cache) = self.0 {
             for (k, v) in cache.iter() {
                 map.insert(*k, v.link_addr);

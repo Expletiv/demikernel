@@ -33,9 +33,7 @@ pub struct Icmpv4Header {
 // Associate Functions
 //======================================================================================================================
 
-/// Associate Functions for Icmpv4Header
 impl Icmpv4Header {
-    /// Creates a header for a ICMP Message.
     pub fn new(icmpv4_type: Icmpv4Type2, code: u8) -> Self {
         Self {
             protocol: icmpv4_type,
@@ -43,52 +41,51 @@ impl Icmpv4Header {
         }
     }
 
-    /// Strips and parses the ICMP header from the packet in [buf].
-    pub fn parse_and_strip(buf: &mut DemiBuffer) -> Result<Self, Fail> {
-        if buf.len() < ICMPV4_HEADER_SIZE {
+    /// Strips and parses the ICMP header from the packet in [buffer].
+    pub fn parse_and_strip(buffer: &mut DemiBuffer) -> Result<Self, Fail> {
+        if buffer.len() < ICMPV4_HEADER_SIZE {
             return Err(Fail::new(EBADMSG, "ICMPv4 datagram too small for header"));
         }
-        let hdr_buf: &[u8; ICMPV4_HEADER_SIZE] = &buf[..ICMPV4_HEADER_SIZE].try_into().unwrap();
+        let header: &[u8; ICMPV4_HEADER_SIZE] = &buffer[..ICMPV4_HEADER_SIZE].try_into().unwrap();
 
-        let type_byte: u8 = hdr_buf[0];
-        let code: u8 = hdr_buf[1];
-        if Self::compute_checksum(hdr_buf, &buf[ICMPV4_HEADER_SIZE..]) != 0 {
+        let type_byte = header[0];
+        let code = header[1];
+        if Self::compute_checksum(header, &buffer[ICMPV4_HEADER_SIZE..]) != 0 {
             return Err(Fail::new(EBADMSG, "ICMPv4 checksum mismatch"));
         }
-        let rest_of_header: &[u8; 4] = hdr_buf[4..8].try_into().unwrap();
-        let icmpv4_type: Icmpv4Type2 = Icmpv4Type2::parse(type_byte, rest_of_header)?;
+        let remaining_header = header[4..8].try_into().unwrap();
+        let icmpv4_type = Icmpv4Type2::parse(type_byte, remaining_header)?;
 
-        buf.adjust(ICMPV4_HEADER_SIZE)?;
+        buffer.adjust(ICMPV4_HEADER_SIZE)?;
         Ok(Self {
             protocol: icmpv4_type,
             code,
         })
     }
 
-    /// Serializes and prepends the ICMP header into the packet in [buf]. This function assumes that the packet has
+    /// Serializes and prepends the ICMP header into the packet in [buffer]. This function assumes that the packet has
     /// sufficient headroom to fit the ICMP header.
-    pub fn serialize_and_attach(&self, buf: &mut DemiBuffer) {
-        buf.prepend(ICMPV4_HEADER_SIZE).expect("Should have headroom");
+    pub fn serialize_and_attach(&self, buffer: &mut DemiBuffer) {
+        buffer.prepend(ICMPV4_HEADER_SIZE).expect("Should have headroom");
 
         let (type_byte, rest_of_header) = self.protocol.serialize();
-        buf[0] = type_byte;
-        buf[1] = self.code;
+        buffer[0] = type_byte;
+        buffer[1] = self.code;
         // Skip the checksum for now.
-        buf[2] = 0;
-        buf[3] = 0;
-        buf[4..8].copy_from_slice(&rest_of_header[..]);
-        let (hdr_buf, payload): (&[u8], &[u8]) = buf[..].split_at(ICMPV4_HEADER_SIZE);
-        let checksum: u16 = Self::compute_checksum(hdr_buf, payload);
-        buf[2..4].copy_from_slice(&checksum.to_be_bytes());
+        buffer[2] = 0;
+        buffer[3] = 0;
+        buffer[4..8].copy_from_slice(&rest_of_header[..]);
+        let (header, payload) = buffer[..].split_at(ICMPV4_HEADER_SIZE);
+        let checksum = Self::compute_checksum(header, payload);
+        buffer[2..4].copy_from_slice(&checksum.to_be_bytes());
     }
 
     /// Computes the checksum of the target ICMPv4 header. We can assume that the header buffer is the right size
     /// because we just split it from the body up above.
-    fn compute_checksum(buf: &[u8], body: &[u8]) -> u16 {
-        let mut state: u32 = compute_generic_checksum(buf, None);
-        state = compute_generic_checksum(body, Some(state));
-
-        fold16(state)
+    fn compute_checksum(buffer: &[u8], body: &[u8]) -> u16 {
+        let mut checksum = compute_generic_checksum(buffer, None);
+        checksum = compute_generic_checksum(body, Some(checksum));
+        fold16(checksum)
     }
 
     pub fn get_protocol(&self) -> Icmpv4Type2 {

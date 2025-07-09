@@ -43,7 +43,7 @@ fn import() -> Result<()> {
     let ttl = Duration::from_secs(1);
 
     // Create an address resolution map.
-    let mut map: HashMap<Ipv4Addr, MacAddress> = HashMap::new();
+    let mut map = HashMap::new();
     map.insert(test_helpers::ALICE_IPV4, test_helpers::ALICE_MAC);
 
     // Create an ARP Cache and import address resolution map.
@@ -67,7 +67,7 @@ fn export() -> Result<()> {
     crate::ensure_eq!(cache.get(test_helpers::ALICE_IPV4), Some(&test_helpers::ALICE_MAC));
 
     // Export address resolution map.
-    let map: HashMap<Ipv4Addr, MacAddress> = cache.export();
+    let map = cache.export();
 
     // Check if address resolutions are in the map that was exported.
     crate::ensure_eq!(

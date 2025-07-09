@@ -82,28 +82,28 @@ impl ArpHeader {
             return Err(Fail::new(EBADMSG, "ARP message too short"));
         }
         let buf: &[u8; ARP_MESSAGE_SIZE] = &buf[..ARP_MESSAGE_SIZE].try_into().unwrap();
-        let hardware_type: u16 = u16::from_be_bytes([buf[0], buf[1]]);
+        let hardware_type = u16::from_be_bytes([buf[0], buf[1]]);
         if hardware_type != ARP_HTYPE_ETHER2 {
             return Err(Fail::new(ENOTSUP, "unsupported HTYPE"));
         }
-        let protocol_type: u16 = u16::from_be_bytes([buf[2], buf[3]]);
+        let protocol_type = u16::from_be_bytes([buf[2], buf[3]]);
         if protocol_type != ARP_PTYPE_IPV4 {
             return Err(Fail::new(ENOTSUP, "unsupported PTYPE"));
         }
-        let hardware_address_len: u8 = buf[4];
+        let hardware_address_len = buf[4];
         if hardware_address_len != ARP_HLEN_ETHER2 {
             return Err(Fail::new(ENOTSUP, "unsupported HLEN"));
         }
-        let protocol_address_len: u8 = buf[5];
+        let protocol_address_len = buf[5];
         if protocol_address_len != ARP_PLEN_IPV4 {
             return Err(Fail::new(ENOTSUP, "unsupported PLEN"));
         }
         let operation: ArpOperation = u16::from_be_bytes([buf[6], buf[7]]).try_into()?;
-        let sender_hardware_addr: MacAddress = MacAddress::from_bytes(&buf[8..14]);
-        let sender_protocol_addr: Ipv4Addr = Ipv4Addr::new(buf[14], buf[15], buf[16], buf[17]);
-        let target_hardware_addr: MacAddress = MacAddress::from_bytes(&buf[18..24]);
-        let target_protocol_addr: Ipv4Addr = Ipv4Addr::new(buf[24], buf[25], buf[26], buf[27]);
-        let pdu: ArpHeader = Self {
+        let sender_hardware_addr = MacAddress::from_bytes(&buf[8..14]);
+        let sender_protocol_addr = Ipv4Addr::new(buf[14], buf[15], buf[16], buf[17]);
+        let target_hardware_addr = MacAddress::from_bytes(&buf[18..24]);
+        let target_protocol_addr = Ipv4Addr::new(buf[24], buf[25], buf[26], buf[27]);
+        let pdu = Self {
             operation,
             sender_hardware_addr,
             sender_protocol_addr,
@@ -117,7 +117,7 @@ impl ArpHeader {
     pub fn create_and_serialize(&self) -> DemiBuffer {
         // We need to have a downward dependency to ethernet header size because we need to allocate enough headroom
         // for all of the headers.
-        let mut pkt: DemiBuffer = DemiBuffer::new_with_headroom(0, (ARP_MESSAGE_SIZE + ETHERNET2_HEADER_SIZE) as u16);
+        let mut pkt = DemiBuffer::new_with_headroom(0, (ARP_MESSAGE_SIZE + ETHERNET2_HEADER_SIZE) as u16);
         pkt.prepend(ARP_MESSAGE_SIZE).expect("Should have sufficient headroom");
 
         let buf: &mut [u8; ARP_MESSAGE_SIZE] = (&mut pkt[..ARP_MESSAGE_SIZE]).try_into().unwrap();

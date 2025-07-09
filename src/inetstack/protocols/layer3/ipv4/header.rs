@@ -114,35 +114,35 @@ impl Ipv4Header {
             return Err(Fail::new(EBADMSG, "ipv4 datagram too small"));
         }
 
-        let version: u8 = buf[0] >> 4;
+        let version = buf[0] >> 4;
         if version != IPV4_VERSION {
             return Err(Fail::new(ENOTSUP, "unsupported IP version"));
         }
 
         // Internet header length.
-        let ihl: u8 = buf[0] & 0xF;
-        let hdr_size: u16 = (ihl as u16) << 2;
+        let ihl = buf[0] & 0xF;
+        let hdr_size = (ihl as u16) << 2;
         if hdr_size < IPV4_HEADER_MIN_SIZE {
             return Err(Fail::new(EBADMSG, "ipv4 IHL is too small"));
         }
         if buf.len() < hdr_size as usize {
             return Err(Fail::new(EBADMSG, "ipv4 datagram too small to fit in header"));
         }
-        let hdr_buf: &[u8] = &buf[..hdr_size as usize];
+        let hdr_buf = &buf[..hdr_size as usize];
 
         // Differentiated services code point.
-        let dscp: u8 = hdr_buf[1] >> 2;
+        let dscp = hdr_buf[1] >> 2;
         if dscp != 0 {
             warn!("ignoring dscp field (dscp={:?})", dscp);
         }
 
         // Explicit congestion notification.
-        let ecn: u8 = hdr_buf[1] & 3;
+        let ecn = hdr_buf[1] & 3;
         if ecn != 0 {
             warn!("ignoring ecn field (ecn={:?})", ecn);
         }
 
-        let total_length: u16 = u16::from_be_bytes([hdr_buf[2], hdr_buf[3]]);
+        let total_length = u16::from_be_bytes([hdr_buf[2], hdr_buf[3]]);
         if total_length < hdr_size {
             return Err(Fail::new(EBADMSG, "ipv4 datagram smaller than header"));
         }
@@ -157,7 +157,7 @@ impl Ipv4Header {
         // of zero.  This was horribly misguided.  With the exception of datagramss where the DF (don't fragment) flag
         // is set, all IPv4 datagrams are _required_ to have a (temporally) unique identification field for datagrams
         // with the same source, destination, and protocol.  Thus we should expect most datagrams to have a non-zero Id.
-        let identification: u16 = u16::from_be_bytes([hdr_buf[4], hdr_buf[5]]);
+        let identification = u16::from_be_bytes([hdr_buf[4], hdr_buf[5]]);
 
         // Control flags.
         //
@@ -165,7 +165,7 @@ impl Ipv4Header {
         // (don't fragment) bit set.  This appears to be because we don't support fragmentation (yet anyway).  But the
         // lack of a set DF bit doesn't make a datagram a fragment.  So we should accept datagrams regardless of the
         // setting of this bit.
-        let flags: u8 = hdr_buf[6] >> 5;
+        let flags = hdr_buf[6] >> 5;
         // Don't accept evil datagrams (see RFC 3514).
         if flags & IPV4_CTRL_FLAG_EVIL != 0 {
             return Err(Fail::new(EBADMSG, "ipv4 datagram is marked as evil"));
@@ -177,21 +177,21 @@ impl Ipv4Header {
             return Err(Fail::new(ENOTSUP, "ipv4 fragmentation is not supported"));
         }
 
-        let fragment_offset: u16 = u16::from_be_bytes([hdr_buf[6], hdr_buf[7]]) & 0x1fff;
+        let fragment_offset = u16::from_be_bytes([hdr_buf[6], hdr_buf[7]]) & 0x1fff;
         // TODO: drop this check once we support fragmentation.
         if fragment_offset != 0 {
             warn!("fragmentation is not supported offset={:?}", fragment_offset);
             return Err(Fail::new(ENOTSUP, "ipv4 fragmentation is not supported"));
         }
 
-        let time_to_live: u8 = hdr_buf[8];
+        let time_to_live = hdr_buf[8];
         if time_to_live == 0 {
             return Err(Fail::new(EBADMSG, "ipv4 datagram too old"));
         }
 
-        let protocol: IpProtocol = IpProtocol::try_from(hdr_buf[9])?;
+        let protocol = IpProtocol::try_from(hdr_buf[9])?;
 
-        let header_checksum: u16 = u16::from_be_bytes([hdr_buf[10], hdr_buf[11]]);
+        let header_checksum = u16::from_be_bytes([hdr_buf[10], hdr_buf[11]]);
         if header_checksum == 0xffff {
             return Err(Fail::new(EBADMSG, "ipv4 checksum invalid"));
         }
@@ -199,11 +199,11 @@ impl Ipv4Header {
             return Err(Fail::new(EBADMSG, "ipv4 checksum mismatch"));
         }
 
-        let src_addr: Ipv4Addr = Ipv4Addr::new(hdr_buf[12], hdr_buf[13], hdr_buf[14], hdr_buf[15]);
-        let dst_addr: Ipv4Addr = Ipv4Addr::new(hdr_buf[16], hdr_buf[17], hdr_buf[18], hdr_buf[19]);
+        let src_addr = Ipv4Addr::new(hdr_buf[12], hdr_buf[13], hdr_buf[14], hdr_buf[15]);
+        let dst_addr = Ipv4Addr::new(hdr_buf[16], hdr_buf[17], hdr_buf[18], hdr_buf[19]);
 
         // Truncate datagram.
-        let padding_bytes: usize = buf.len() - (total_length as usize);
+        let padding_bytes = buf.len() - (total_length as usize);
         buf.adjust(hdr_size as usize)?;
         buf.trim(padding_bytes)?;
 
@@ -229,7 +229,7 @@ impl Ipv4Header {
     pub fn serialize_and_attach(&self, buf: &mut DemiBuffer) {
         buf.prepend(IPV4_HEADER_MIN_SIZE as usize)
             .expect("Should be sufficient headroom");
-        let pkt_size_bytes: usize = buf.len();
+        let pkt_size_bytes = buf.len();
 
         // Version + IHL.
         buf[0] = (self.version << 4) | self.ihl;
@@ -261,7 +261,7 @@ impl Ipv4Header {
         buf[16..20].copy_from_slice(&self.dst_addr.octets());
 
         // Header Checksum.
-        let checksum: u16 = Self::compute_checksum(buf);
+        let checksum = Self::compute_checksum(buf);
         buf[10..12].copy_from_slice(&checksum.to_be_bytes());
     }
 
@@ -278,7 +278,7 @@ impl Ipv4Header {
     }
 
     pub fn compute_checksum(buf: &[u8]) -> u16 {
-        let mut state: u32 = 0xffff;
+        let mut state = 0xffff;
 
         if buf.len() < IPV4_HEADER_MIN_SIZE as usize {
             // This should not happen by construction.
