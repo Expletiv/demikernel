@@ -19,7 +19,7 @@ use super::layer4::ephemeral::EphemeralPorts;
 /// API for the Physical Layer for any underlying hardware that implements a raw NIC interface (e.g., DPDK, raw
 /// sockets). It must implement [DemiMemoryAllocator] to specify how to allocate DemiBuffers for the physical layer.
 pub trait PhysicalLayer: 'static + DemiMemoryAllocator {
-    /// Transmits a single [PacketBuf].
+    /// Transmits a single [Demibuffer].
     fn transmit(&mut self, pkt: DemiBuffer) -> Result<(), Fail>;
 
     /// Receives a batch of [DemiBuffer].

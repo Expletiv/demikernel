@@ -12,7 +12,7 @@ use crate::{
     runtime::{fail::Fail, limits, memory::DemiBuffer, DemiRuntime},
 };
 use ::socket2::Socket;
-use ::std::{cmp::min, io, mem::MaybeUninit, net::SocketAddr};
+use ::std::{cmp::min, mem::MaybeUninit, net::SocketAddr, slice};
 
 //======================================================================================================================
 // Structures
@@ -21,7 +21,7 @@ use ::std::{cmp::min, io, mem::MaybeUninit, net::SocketAddr};
 /// This structure represents outgoing packets.
 struct Outgoing {
     addr: Option<SocketAddr>,
-    buf: DemiBuffer,
+    buffer: DemiBuffer,
     result: SharedAsyncValue<Option<Result<(), Fail>>>,
 }
 
@@ -54,43 +54,43 @@ impl ActiveSocketData {
     pub fn poll_send(&mut self) {
         if let Some(Outgoing {
             addr,
-            mut buf,
+            mut buffer,
             mut result,
         }) = self.send_queue.try_pop()
         {
             // A dummy request to detect when the socket has connected.
-            if buf.is_empty() {
+            if buffer.is_empty() {
                 result.set(Some(Ok(())));
                 return;
             }
             // Try to send the buffer.
-            let io_result: Result<usize, io::Error> = match addr {
-                Some(addr) => self.socket.send_to(&buf, &addr.into()),
-                None => self.socket.send(&buf),
+            let io_result = match addr {
+                Some(addr) => self.socket.send_to(&buffer, &addr.into()),
+                None => self.socket.send(&buffer),
             };
             match io_result {
                 // Operation completed.
                 Ok(nbytes) => {
-                    trace!("data pushed ({:?}/{:?} bytes)", nbytes, buf.len());
+                    trace!("data pushed ({:?}/{:?} bytes)", nbytes, buffer.len());
                     expect_ok!(
-                        buf.adjust(nbytes),
+                        buffer.adjust(nbytes),
                         "OS should not have sent more bytes than in the buffer"
                     );
-                    if buf.is_empty() {
+                    if buffer.is_empty() {
                         // Done sending this buffer
                         result.set(Some(Ok(())));
                     } else {
                         // Only sent part of the buffer so try again later.
-                        self.send_queue.push_front(Outgoing { addr, buf, result });
+                        self.send_queue.push_front(Outgoing { addr, buffer, result });
                     }
                 },
                 Err(e) => {
-                    let errno: i32 = get_libc_err(e);
+                    let errno = get_libc_err(e);
                     if DemiRuntime::should_retry(errno) {
                         // Put the buffer back and try again later.
-                        self.send_queue.push_front(Outgoing { addr, buf, result });
+                        self.send_queue.push_front(Outgoing { addr, buffer, result });
                     } else {
-                        let cause: String = format!("failed to send on socket: {:?}", errno);
+                        let cause = format!("failed to send on socket: {:?}", errno);
                         error!("poll_send(): {}", cause);
                         result.set(Some(Err(Fail::new(errno, &cause))));
                     }
@@ -103,30 +103,30 @@ impl ActiveSocketData {
     /// queue.
     /// TODO: Incoming queue should possibly be byte oriented.
     pub fn poll_recv(&mut self) {
-        let mut buf: DemiBuffer = DemiBuffer::new(limits::POP_SIZE_MAX as u16);
+        let mut buffer = DemiBuffer::new(limits::POP_SIZE_MAX as u16);
         if self.closed {
             return;
         }
         match self
             .socket
-            .recv_from(unsafe { std::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut MaybeUninit<u8>, buf.len()) })
+            .recv_from(unsafe { slice::from_raw_parts_mut(buffer.as_mut_ptr() as *mut MaybeUninit<u8>, buffer.len()) })
         {
             // Operation completed.
-            Ok((nbytes, socketaddr)) => {
-                if let Err(e) = buf.trim(buf.len() - nbytes) {
+            Ok((num_bytes, socketaddr)) => {
+                if let Err(e) = buffer.trim(buffer.len() - num_bytes) {
                     self.recv_queue.push(Err(e));
                 } else {
-                    trace!("data popped ({:?} bytes)", nbytes);
-                    if buf.is_empty() {
+                    trace!("data popped ({:?} bytes)", num_bytes);
+                    if buffer.is_empty() {
                         self.closed = true;
                     }
-                    self.recv_queue.push(Ok((socketaddr.as_socket(), buf)));
+                    self.recv_queue.push(Ok((socketaddr.as_socket(), buffer)));
                 }
             },
             Err(e) => {
-                let errno: i32 = get_libc_err(e);
+                let errno = get_libc_err(e);
                 if !DemiRuntime::should_retry(errno) {
-                    let cause: String = format!("failed to receive on socket: {:?}", errno);
+                    let cause = format!("failed to receive on socket: {:?}", errno);
                     error!("poll_recv(): {}", cause);
                     self.recv_queue.push(Err(Fail::new(errno, &cause)));
                 }
@@ -135,11 +135,11 @@ impl ActiveSocketData {
     }
 
     /// Pushes data to the socket. Blocks until completion.
-    pub async fn push(&mut self, addr: Option<SocketAddr>, buf: DemiBuffer) -> Result<(), Fail> {
-        let mut result: SharedAsyncValue<Option<Result<(), Fail>>> = SharedAsyncValue::new(None);
+    pub async fn push(&mut self, addr: Option<SocketAddr>, buffer: DemiBuffer) -> Result<(), Fail> {
+        let mut result = SharedAsyncValue::new(None);
         self.send_queue.push(Outgoing {
             addr,
-            buf,
+            buffer,
             result: result.clone(),
         });
         loop {
@@ -153,19 +153,18 @@ impl ActiveSocketData {
         }
     }
 
-    /// Pops data from the socket. Blocks until some data is found but does not wait until the buf has reached [size].
+    /// Pops data from the socket. Blocks until some data is found but does not wait until the buffer has reached [size].
     pub async fn pop(&mut self, size: usize) -> Result<(Option<SocketAddr>, DemiBuffer), Fail> {
-        let (addr, mut incoming): (Option<SocketAddr>, DemiBuffer) = self.recv_queue.pop(None).await??;
+        let (addr, mut buffer) = self.recv_queue.pop(None).await??;
         // Figure out how much data we got.
-        let bytes_read: usize = min(incoming.len(), size);
+        let bytes_read = min(buffer.len(), size);
         // Trim the buffer and leave for next read if we got more than expected.
-        if let Ok(remainder) = incoming.split_back(bytes_read) {
+        if let Ok(remainder) = buffer.split_back(bytes_read) {
             if !remainder.is_empty() {
                 self.recv_queue.push_front(Ok((addr, remainder)));
             }
         }
-
-        Ok((addr, incoming))
+        Ok((addr, buffer))
     }
 
     pub fn get_socket(&self) -> &Socket {

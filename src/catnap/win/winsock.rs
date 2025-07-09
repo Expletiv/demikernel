@@ -24,10 +24,10 @@ use windows::{
     core::{GUID, PSTR},
     Win32::Networking::WinSock::{
         closesocket, getpeername, getsockopt, setsockopt, WSACleanup, WSAIoctl, WSASocketW, WSAStartup, INVALID_SOCKET,
-        IN_ADDR_0_0, LPFN_ACCEPTEX, LPFN_CONNECTEX, LPFN_DISCONNECTEX, LPFN_GETACCEPTEXSOCKADDRS,
-        RIO_EXTENSION_FUNCTION_TABLE, SIO_GET_EXTENSION_FUNCTION_POINTER, SIO_GET_MULTIPLE_EXTENSION_FUNCTION_POINTER,
-        SOCKADDR, SOCKADDR_IN, SOCKET, SOL_SOCKET, SO_PROTOCOL_INFOW, WSADATA, WSAID_ACCEPTEX, WSAID_CONNECTEX,
-        WSAID_DISCONNECTEX, WSAID_GETACCEPTEXSOCKADDRS, WSAPROTOCOL_INFOW, WSA_FLAG_OVERLAPPED,
+        LPFN_ACCEPTEX, LPFN_CONNECTEX, LPFN_DISCONNECTEX, LPFN_GETACCEPTEXSOCKADDRS, RIO_EXTENSION_FUNCTION_TABLE,
+        SIO_GET_EXTENSION_FUNCTION_POINTER, SIO_GET_MULTIPLE_EXTENSION_FUNCTION_POINTER, SOCKADDR, SOCKADDR_IN, SOCKET,
+        SOL_SOCKET, SO_PROTOCOL_INFOW, WSADATA, WSAID_ACCEPTEX, WSAID_CONNECTEX, WSAID_DISCONNECTEX,
+        WSAID_GETACCEPTEXSOCKADDRS, WSAPROTOCOL_INFOW, WSA_FLAG_OVERLAPPED,
     },
 };
 
@@ -92,7 +92,7 @@ impl SocketExtensions {
 
     /// Resolve the RIO function table, which uses a different I/O control code than individual functions.
     fn resolve_rio_fn_table(s: SOCKET) -> Result<RIO_EXTENSION_FUNCTION_TABLE, Fail> {
-        let mut result: RIO_EXTENSION_FUNCTION_TABLE = RIO_EXTENSION_FUNCTION_TABLE::default();
+        let mut result = RIO_EXTENSION_FUNCTION_TABLE::default();
         result.cbSize = std::mem::size_of::<RIO_EXTENSION_FUNCTION_TABLE>() as u32;
 
         // Safety: SIO_GET_MULTIPLE_EXTENSION_FUNCTION_POINTER expects input of type GUID and output of type
@@ -119,14 +119,14 @@ impl SocketExtensions {
     /// Lookup a single function pointer using SIO_GET_EXTENSION_FUNCTION_POINTER ioctl. To be sound, T must be a `fn`
     /// type.
     fn lookup_single_fn<T>(s: SOCKET, guid: &GUID) -> Result<Option<T>, Fail> {
-        let mut fn_ptr: Option<T> = None;
+        let mut fn_ptr = None;
 
         // Safety: SIO_GET_EXTENSION_FUNCTION_POINTER expects type GUID for input. Option<fn()> is compatible with C
         // output type for this ioctl.
         unsafe {
             WinsockRuntime::do_ioctl(s, SIO_GET_EXTENSION_FUNCTION_POINTER, Some(guid), Some(&mut fn_ptr)).map_err(
                 |err| {
-                    let msg: String = format!("{} for function lookup {:?}", err.cause, guid);
+                    let msg = format!("{} for function lookup {:?}", err.cause, guid);
                     Fail::new(err.errno, msg.as_str())
                 },
             )?;
@@ -144,7 +144,7 @@ impl WinsockRuntime {
     /// Start up the Winsock runtime, creating a new instance of WinsockRuntime. While it is not functionally useful,
     /// it is valid to instantiate multiple instances of this struct.
     pub fn new() -> Result<Self, Fail> {
-        let mut data: WSADATA = WSADATA::default();
+        let mut data = WSADATA::default();
         if unsafe { WSAStartup(0x202u16, &mut data as *mut WSADATA) } != 0 {
             return Err(expect_last_wsa_error());
         }
@@ -161,11 +161,11 @@ impl WinsockRuntime {
         input: Option<&T>,
         output: Option<&mut U>,
     ) -> Result<(), Fail> {
-        let input: Option<*const libc::c_void> = input.map(|t: &T| -> *const libc::c_void { (t as *const T).cast() });
-        let input_size: usize = input.map(|_| std::mem::size_of::<T>()).unwrap_or(0);
+        let input = input.map(|t: &T| -> *const libc::c_void { (t as *const T).cast() });
+        let input_size = input.map(|_| std::mem::size_of::<T>()).unwrap_or(0);
 
-        let output: Option<*mut libc::c_void> = output.map(|u: &mut U| -> *mut libc::c_void { (u as *mut U).cast() });
-        let output_size: usize = output.map(|_| std::mem::size_of::<U>()).unwrap_or(0);
+        let output = output.map(|u: &mut U| -> *mut libc::c_void { (u as *mut U).cast() });
+        let output_size = output.map(|_| std::mem::size_of::<U>()).unwrap_or(0);
 
         if input_size > u32::MAX as usize {
             return Err(Fail::new(
@@ -180,8 +180,8 @@ impl WinsockRuntime {
             ));
         }
 
-        let mut bytes_returned: u32 = 0;
-        let ret: i32 = unsafe {
+        let mut bytes_returned = 0;
+        let ret = unsafe {
             WSAIoctl(
                 s,
                 control_code,
@@ -199,7 +199,7 @@ impl WinsockRuntime {
             if bytes_returned == output_size as u32 {
                 Ok(())
             } else {
-                let s: String = format!("WSAIoctl returned {} bytes; expected {}", bytes_returned, output_size);
+                let s = format!("WSAIoctl returned {} bytes; expected {}", bytes_returned, output_size);
                 Err(Fail::new(libc::EFAULT, s.as_str()))
             }
         } else {
@@ -223,7 +223,7 @@ impl WinsockRuntime {
 
     /// Implementation of setsockopt.
     pub(super) unsafe fn do_setsockopt<'a, T>(s: SOCKET, level: i32, opt: i32, val: Option<&'a T>) -> Result<(), Fail> {
-        let val: Option<&'a [u8]> =
+        let val =
             val.map(|val| unsafe { std::slice::from_raw_parts((val as *const T).cast(), std::mem::size_of::<T>()) });
 
         if unsafe { setsockopt(s, level, opt, val) } == 0 {
@@ -242,8 +242,8 @@ impl WinsockRuntime {
 
     pub(super) unsafe fn do_getsockopt<T>(s: SOCKET, level: i32, optname: i32) -> Result<T, Fail> {
         let mut out: MaybeUninit<T> = MaybeUninit::zeroed();
-        let optval: PSTR = PSTR::from_raw(out.as_mut_ptr().cast());
-        let mut optlen: i32 =
+        let optval = PSTR::from_raw(out.as_mut_ptr().cast());
+        let mut optlen =
             i32::try_from(std::mem::size_of::<T>()).map_err(|_| Fail::new(libc::E2BIG, "option type too large"))?;
         if unsafe { getsockopt(s, level, optname, optval, &mut optlen) } == 0 {
             Ok(unsafe { out.assume_init() })
@@ -260,16 +260,15 @@ impl WinsockRuntime {
 
     /// Gets ip and port from SOCKADDR_IN and converts to SocketAddrV4
     pub fn getpeername(s: SOCKET) -> Result<SocketAddrV4, Fail> {
-        let mut sockaddr_in: SOCKADDR_IN = SOCKADDR_IN::default();
-        let sockaddr_ptr: &mut SOCKADDR = &mut unsafe { mem::transmute::<SOCKADDR_IN, SOCKADDR>(sockaddr_in) };
-        let mut namelen: i32 = std::mem::size_of::<SOCKADDR>() as i32;
+        let mut sockaddr_in = SOCKADDR_IN::default();
+        let sockaddr_ptr = &mut unsafe { mem::transmute::<SOCKADDR_IN, SOCKADDR>(sockaddr_in) };
+        let mut namelen = std::mem::size_of::<SOCKADDR>() as i32;
 
         if unsafe { getpeername(s, sockaddr_ptr, &mut namelen) } == 0 {
             sockaddr_in = unsafe { mem::transmute::<SOCKADDR, SOCKADDR_IN>(*sockaddr_ptr) };
-            let port: u16 = sockaddr_in.sin_port;
-            let addr: IN_ADDR_0_0 = unsafe { sockaddr_in.sin_addr.S_un.S_un_b };
-            let addrv4: SocketAddrV4 =
-                SocketAddrV4::new(Ipv4Addr::new(addr.s_b1, addr.s_b2, addr.s_b3, addr.s_b4), port);
+            let port = sockaddr_in.sin_port;
+            let addr = unsafe { sockaddr_in.sin_addr.S_un.S_un_b };
+            let addrv4 = SocketAddrV4::new(Ipv4Addr::new(addr.s_b1, addr.s_b2, addr.s_b3, addr.s_b4), port);
             Ok(addrv4)
         } else {
             Err(expect_last_wsa_error())
@@ -280,14 +279,13 @@ impl WinsockRuntime {
     /// which may be shared by multiple sockets.
     fn get_or_init_extensions(&mut self, s: SOCKET) -> Result<Rc<SocketExtensions>, Fail> {
         let protocol: WSAPROTOCOL_INFOW = unsafe { self.getsockopt(s, SOL_SOCKET, SO_PROTOCOL_INFOW) }?;
+        let extensions = self.extensions_by_provider.entry(protocol.ProviderId).or_default();
 
-        let extensions: &mut Weak<SocketExtensions> =
-            self.extensions_by_provider.entry(protocol.ProviderId).or_default();
         if let Some(extensions) = extensions.upgrade() {
             return Ok(extensions);
         }
 
-        let new_extensions: Rc<SocketExtensions> = SocketExtensions::new(s)?;
+        let new_extensions = SocketExtensions::new(s)?;
         *extensions = Rc::downgrade(&new_extensions);
 
         Ok(new_extensions)
@@ -300,7 +298,7 @@ impl WinsockRuntime {
         protocol_info: Option<&WSAPROTOCOL_INFOW>,
         flags: u32,
     ) -> Result<SOCKET, Fail> {
-        let protocol_info: Option<*const WSAPROTOCOL_INFOW> = protocol_info.map(|i| i as *const WSAPROTOCOL_INFOW);
+        let protocol_info = protocol_info.map(|i| i as *const WSAPROTOCOL_INFOW);
         match unsafe { WSASocketW(domain, typ, protocol, protocol_info, 0, flags) } {
             INVALID_SOCKET => Err(expect_last_wsa_error()),
             socket => Ok(socket),
@@ -318,7 +316,7 @@ impl WinsockRuntime {
     ) -> Result<Socket, Fail> {
         // Safety: SOCKET is a loose handle; it must be closed with `closesocket` to clean up resources. Socket struct
         // will take ownership by end of method; failures after this call need to be cause a `closesocket` call.
-        let s: SOCKET = unsafe { Self::raw_socket(domain, typ, protocol, None, WSA_FLAG_OVERLAPPED) }?;
+        let s = unsafe { Self::raw_socket(domain, typ, protocol, None, WSA_FLAG_OVERLAPPED) }?;
 
         self.get_or_init_extensions(s)
             .and_then(|extensions: Rc<SocketExtensions>| Socket::new(s, protocol, options, extensions, iocp))

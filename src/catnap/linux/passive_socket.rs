@@ -43,14 +43,14 @@ impl PassiveSocketData {
             // Operation completed.
             Ok((new_socket, saddr)) => {
                 trace!("connection accepted ({:?})", new_socket);
-                let addr: SocketAddr = expect_some!(saddr.as_socket(), "not a SocketAddrV4");
+                let addr = expect_some!(saddr.as_socket(), "not a SocketAddrV4");
                 self.accept_queue.push(Ok((new_socket, addr)))
             },
             Err(e) => {
                 // Check the return error code.
-                let errno: i32 = get_libc_err(e);
+                let errno = get_libc_err(e);
                 if !DemiRuntime::should_retry(errno) {
-                    let cause: String = format!("failed to accept on socket: {:?}", errno);
+                    let cause = format!("failed to accept on socket: {:?}", errno);
                     error!("poll_accept(): {}", cause);
                     self.accept_queue.push(Err(Fail::new(errno, &cause)));
                 }

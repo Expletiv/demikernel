@@ -51,7 +51,7 @@ impl SharedSocketData {
 
     /// Moves an inactive socket to a passive listening socket.
     pub fn move_socket_to_passive(&mut self) {
-        let socket: Socket = match self.deref_mut() {
+        let socket = match self.deref_mut() {
             SocketData::Inactive(socket) => expect_some!(socket.take(), "should have data"),
             SocketData::Active(_) => unreachable!("should not be able to move an active socket to a passive one"),
             SocketData::Passive(_) => return,
@@ -61,7 +61,7 @@ impl SharedSocketData {
 
     /// Moves an inactive socket to an active established socket.
     pub fn move_socket_to_active(&mut self) {
-        let socket: Socket = match self.deref_mut() {
+        let socket = match self.deref_mut() {
             SocketData::Inactive(socket) => expect_some!(socket.take(), "should have data"),
             SocketData::Active(_) => return,
             SocketData::Passive(_) => unreachable!("should not be able to move a passive socket to an active one"),
@@ -71,7 +71,7 @@ impl SharedSocketData {
 
     /// Gets a reference to the actual Socket for reading the socket's metadata (mostly the raw file descriptor).
     pub fn get_socket<'a>(&'a self) -> &'a Socket {
-        let _self: &'a SocketData = self.as_ref();
+        let _self = self.as_ref();
         match _self {
             SocketData::Inactive(Some(socket)) => socket,
             SocketData::Active(data) => data.get_socket(),
@@ -82,7 +82,7 @@ impl SharedSocketData {
 
     /// Gets a mutable reference to the actual Socket for I/O operations.
     pub fn get_mut_socket<'a>(&'a mut self) -> &'a mut Socket {
-        let _self: &'a mut SocketData = self.as_mut();
+        let _self = self.as_mut();
         match _self {
             SocketData::Inactive(Some(socket)) => socket,
             SocketData::Active(data) => data.get_mut_socket(),
@@ -97,10 +97,10 @@ impl SharedSocketData {
     }
 
     /// Push some data to an active established connection.
-    pub async fn push(&mut self, addr: Option<SocketAddr>, buf: DemiBuffer) -> Result<(), Fail> {
+    pub async fn push(&mut self, addr: Option<SocketAddr>, buffer: DemiBuffer) -> Result<(), Fail> {
         match self.deref_mut() {
             SocketData::Inactive(_) => unreachable!("Cannot write to an inactive socket"),
-            SocketData::Active(data) => data.push(addr, buf).await,
+            SocketData::Active(data) => data.push(addr, buffer).await,
             SocketData::Passive(_) => unreachable!("Cannot write to a passive socket"),
         }
     }
