@@ -25,8 +25,7 @@ use ::futures::Future;
 use ::std::{
     iter::Flatten,
     pin::Pin,
-    ptr::NonNull,
-    task::{Context, Poll, Waker},
+    task::{Context, Waker},
     vec::IntoIter,
 };
 
@@ -34,15 +33,14 @@ use ::std::{
 // Structures
 //======================================================================================================================
 
-/// This represents a resource management group. All tasks belong to a task group. By default, a task belongs to the
-/// same task group as the allocating task.
+/// Resource management group; all tasks belong to one.
+/// By default, tasks inherit the allocator's group.
 #[derive(Default)]
 pub struct TaskGroup {
-    /// Stores all the tasks that are held by the scheduler.
+    /// All scheduled tasks.
     tasks: PinSlab<Box<dyn Task>>,
-    /// Holds the waker bits for controlling task scheduling.
-    waker_page_refs: Vec<WakerPageRef>,
-    /// List of ready tasks.
+    /// Waker pages controlling scheduling.
+    pages: Vec<WakerPageRef>,
     ready_tasks: Flatten<IntoIter<Vec<usize>>>,
 }
 
@@ -51,170 +49,138 @@ pub struct TaskGroup {
 //======================================================================================================================
 
 impl TaskGroup {
-    /// Given a handle to a task, remove it from the scheduler.
-    pub fn remove(&mut self, pin_slab_index: usize) -> Option<Box<dyn Task>> {
-        // We should not have a scheduler handle that refers to an invalid id, so unwrap and expect are safe here.
-        let (waker_page_ref, waker_page_offset): (&WakerPageRef, usize) = {
-            let (waker_page_index, waker_page_offset) = self.get_waker_page_index_and_offset(pin_slab_index)?;
-            (&self.waker_page_refs[waker_page_index], waker_page_offset)
-        };
-        waker_page_ref.clear(waker_page_offset);
-        if let Some(task) = self.tasks.remove_unpin(pin_slab_index) {
+    /// Remove task by handle.
+    pub fn remove(&mut self, idx: usize) -> Option<Box<dyn Task>> {
+        let (page_idx, offset) = self.locate(idx)?;
+        self.pages[page_idx].clear(offset);
+
+        if let Some(task) = self.tasks.remove_unpin(idx) {
             trace!(
                 "remove(): name={:?}, id={:?}, pin_slab_index={:?}",
-                task.get_name(),
-                task.get_id(),
-                pin_slab_index
+                task.name(),
+                task.id(),
+                idx
             );
             Some(task)
         } else {
-            warn!("Unable to unpin and remove: pin_slab_index={:?}", pin_slab_index);
+            warn!("Unable to unpin and remove: pin_slab_index={:?}", idx);
             None
         }
     }
 
-    /// Insert a new task into our scheduler returning a handle corresponding to it.
-    pub fn insert_and_poll_task(&mut self, task: Box<dyn Task>) -> Option<InsertResult> {
-        let task_name: &'static str = task.get_name();
-        // The pin slab index can be reverse-computed in a page index and an offset within the page.
-        let pin_slab_index: usize = self.tasks.insert(task)?;
+    pub fn insert(&mut self, task: Box<dyn Task>) -> Option<InsertResult> {
+        let name = task.name();
+        let idx = self.tasks.insert(task)?;
 
-        self.add_new_pages_up_to_pin_slab_index(pin_slab_index);
+        self.grow_pages(idx);
 
-        // Initialize the appropriate page offset.
-        let (waker_page_ref, waker_page_offset): (&WakerPageRef, usize) = {
-            let (waker_page_index, waker_page_offset) = self.get_waker_page_index_and_offset(pin_slab_index)?;
-            (&self.waker_page_refs[waker_page_index], waker_page_offset)
-        };
-        waker_page_ref.initialize(waker_page_offset);
+        let (page_idx, offset) = self.locate(idx)?;
+        self.pages[page_idx].initialize(offset);
 
-        trace!("insert(): name={:?}, pin_slab_index={:?}", task_name, pin_slab_index);
+        trace!("insert(): name={:?}, idx={:?}", name, idx);
 
-        // Poll new task.
-        match self.poll_runnable_task(pin_slab_index) {
+        match self.run_task(idx) {
             Some(task) => Some(InsertResult::Completed(task)),
-            None => Some(InsertResult::Inserted(pin_slab_index.into())),
+            None => Some(InsertResult::Inserted(idx.into())),
         }
     }
 
-    pub fn get_mut_task(&mut self, pin_slab_index: usize) -> Option<Pin<&mut Box<dyn Task>>> {
-        self.tasks.get_pin_mut(pin_slab_index)
+    pub fn get_task_mut(&mut self, idx: usize) -> Option<Pin<&mut Box<dyn Task>>> {
+        self.tasks.get_pin_mut(idx)
     }
 
     /// Computes the page and page offset of a given task based on its total offset.
-    fn get_waker_page_index_and_offset(&self, pin_slab_index: usize) -> Option<(usize, usize)> {
+    fn locate(&self, pin_slab_index: usize) -> Option<(usize, usize)> {
         // This check ensures that slab slot is actually occupied but trusts that pin_slab_index is for this task.
         if !self.tasks.contains(pin_slab_index) {
             return None;
         }
-        let waker_page_index: usize = pin_slab_index >> WAKER_BIT_LENGTH_SHIFT;
-        let waker_page_offset: usize = Self::get_waker_page_offset(pin_slab_index);
-        Some((waker_page_index, waker_page_offset))
+        let index = pin_slab_index >> WAKER_BIT_LENGTH_SHIFT;
+        let offset = Self::get_page_offset(pin_slab_index);
+        Some((index, offset))
     }
 
-    /// Add new page(s) to hold this future's status if the current page is filled. This may result in addition of
-    /// multiple pages because of the gap between the pin slab index and the current page index.
-    fn add_new_pages_up_to_pin_slab_index(&mut self, pin_slab_index: usize) {
-        while pin_slab_index >= (self.waker_page_refs.len() << WAKER_BIT_LENGTH_SHIFT) {
-            self.waker_page_refs.push(WakerPageRef::default());
+    /// Grow pages to fit the given pin slab index.
+    fn grow_pages(&mut self, idx: usize) {
+        while idx >= (self.pages.len() << WAKER_BIT_LENGTH_SHIFT) {
+            self.pages.push(WakerPageRef::default());
         }
     }
 
-    pub fn get_num_waker_pages(&self) -> usize {
-        self.waker_page_refs.len()
-    }
-
-    fn get_waker_page_offset(pin_slab_index: usize) -> usize {
+    fn get_page_offset(pin_slab_index: usize) -> usize {
         pin_slab_index & (WAKER_BIT_LENGTH - 1)
     }
 
-    fn get_pin_slab_index(waker_page_index: usize, waker_page_offset: usize) -> usize {
-        (waker_page_index << WAKER_BIT_LENGTH_SHIFT) + waker_page_offset
+    fn get_pin_slab_index(page_idx: usize, page_offset: usize) -> usize {
+        (page_idx << WAKER_BIT_LENGTH_SHIFT) + page_offset
     }
 
-    fn get_pinned_task_ptr(&mut self, pin_slab_index: usize) -> Pin<&mut Box<dyn Task>> {
-        // Get the pinned ref.
-        expect_some!(
-            self.tasks.get_pin_mut(pin_slab_index),
-            "Invalid offset: {:?}",
-            pin_slab_index
-        )
+    fn pinned_task(&mut self, idx: usize) -> Pin<&mut Box<dyn Task>> {
+        expect_some!(self.tasks.get_pin_mut(idx), "Invalid offset: {:?}", idx)
     }
 
     pub fn get_waker(&self, task_offset: usize) -> Option<Waker> {
-        let (waker_page_index, waker_page_offset) = self.get_waker_page_index_and_offset(task_offset)?;
-
-        let raw_waker: NonNull<u8> = self.waker_page_refs[waker_page_index].as_raw_waker_ref(waker_page_offset);
+        let (index, offset) = self.locate(task_offset)?;
+        let raw_waker = self.pages[index].as_raw_waker_ref(offset);
         Some(unsafe { Waker::from_raw(WakerRef::new(raw_waker).into()) })
     }
 
-    pub fn poll_group(
-        &mut self,
-        max_iterations: Option<usize>,
-        keep_checking_for_new_tasks: bool,
-    ) -> Vec<Box<dyn Task>> {
-        let mut iterations_run: usize = 0;
-        // Return value.
-        let mut completed_tasks: Vec<Box<dyn Task>> = Vec::new();
-        // Definitely check for additional tasks on the first iteration, but then set to [keep_checking_for_new_tasks].
-        let mut check_for_additonal_tasks: bool = true;
+    // Always check for new tasks on the first iteration; afterward, based on refill.
+    pub fn run(&mut self, limit: Option<usize>, refill: bool) -> Vec<Box<dyn Task>> {
+        let mut iter = 0;
+        let mut tasks = Vec::new();
 
-        // Loop over the ready tasks.
-        while let Some(next_ready_task_offset) = self.get_next_runnable_task(check_for_additonal_tasks) {
-            if let Some(task) = self.poll_runnable_task(next_ready_task_offset) {
-                completed_tasks.push(task);
+        while let Some(offset) = self.next(iter == 0 || refill) {
+            if let Some(task) = self.run_task(offset) {
+                tasks.push(task);
             }
-            check_for_additonal_tasks = keep_checking_for_new_tasks;
-            match max_iterations {
-                Some(max_iterations) if iterations_run >= max_iterations => return completed_tasks,
-                _ => iterations_run += 1,
+
+            if limit.is_some_and(|max| iter >= max) {
+                return tasks;
             }
+
+            iter += 1
         }
-        completed_tasks
+
+        tasks
     }
 
-    /// Get the next runnable task. If no runnable tasks, it will check for new tasks if the [check_for_new_tasks] flag
-    /// is set, then try again.
-    fn get_next_runnable_task(&mut self, check_for_new_tasks: bool) -> Option<usize> {
-        match self.ready_tasks.next() {
-            Some(task) => Some(task),
-            None if check_for_new_tasks => {
-                self.ready_tasks = self.check_for_new_ready_tasks();
-                self.ready_tasks.next()
-            },
-            None => None,
+    fn next(&mut self, refill: bool) -> Option<usize> {
+        if let Some(task) = self.ready_tasks.next() {
+            return Some(task);
         }
+
+        if refill {
+            self.ready_tasks = self.refill_ready();
+            return self.ready_tasks.next();
+        }
+
+        None
     }
 
-    /// Go over the waker pages looking for new runnable tasks.
-    fn check_for_new_ready_tasks(&mut self) -> Flatten<IntoIter<Vec<usize>>> {
-        let mut indices: Vec<Vec<usize>> = vec![];
-        for i in 0..self.get_num_waker_pages() {
-            let notified: u64 = self.waker_page_refs[i].take_notified();
-            indices.push(
-                BitIter::from(notified)
-                    .map(|x| Self::get_pin_slab_index(i, x))
-                    .collect(),
-            )
+    /// Scan all waker pages for notified tasks.
+    fn refill_ready(&mut self) -> Flatten<IntoIter<Vec<usize>>> {
+        let mut out = vec![];
+
+        for i in 0..self.pages.len() {
+            let bits = self.pages[i].take_notified();
+            out.push(BitIter::from(bits).map(|x| Self::get_pin_slab_index(i, x)).collect())
         }
-        indices.into_iter().flatten()
+
+        out.into_iter().flatten()
     }
 
-    // Runs a single ready task. If the task completes after running, returns.
-    fn poll_runnable_task(&mut self, pin_slab_index: usize) -> Option<Box<dyn Task>> {
-        // Perform the actual work of running the task.
-        let poll_result: Poll<()> = {
-            let waker: Waker = self.get_waker(pin_slab_index)?;
-            let mut waker_context: Context = Context::from_waker(&waker);
-            let mut pinned_ptr = self.get_pinned_task_ptr(pin_slab_index);
-            let pinned_ref = unsafe { Pin::new_unchecked(&mut *pinned_ptr) };
+    // Poll a ready task; return it if done.
+    fn run_task(&mut self, idx: usize) -> Option<Box<dyn Task>> {
+        let waker = self.get_waker(idx)?;
+        let mut cx = Context::from_waker(&waker);
+        let mut ptr = self.pinned_task(idx);
+        let task = unsafe { Pin::new_unchecked(&mut *ptr) };
 
-            Future::poll(pinned_ref, &mut waker_context)
-        };
-
-        if poll_result == Poll::Ready(()) {
-            return self.remove(pin_slab_index);
+        if Future::poll(task, &mut cx).is_ready() {
+            return self.remove(idx);
         }
+
         None
     }
 }

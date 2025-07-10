@@ -131,19 +131,16 @@ impl SharedDemiRuntime {
         }))
     }
 
-    /// Inserts the background `coroutine` named `task_name` into the scheduler. There should only be one of these
-    /// because we should never be polling with more than one coroutine.
-    pub fn insert_io_polling_coroutine<F: FusedFuture<Output = ()> + 'static>(
+    /// There should only be one of these.
+    pub fn insert_polling_coroutine<F: FusedFuture<Output = ()> + 'static>(
         &mut self,
         task_name: &'static str,
         coroutine: Pin<Box<F>>,
     ) -> Result<QToken, Fail> {
-        self.insert_and_poll_coroutine(task_name, self.background_group_id, coroutine)
+        self.insert_coroutine_inner(task_name, self.background_group_id, coroutine)
     }
 
-    /// Inserts the background `coroutine` named `task_name` into the scheduler. There should only be one of these
-    /// because we should never be polling with more than one coroutine.
-    pub fn insert_nonpolling_coroutine<F: FusedFuture + 'static>(
+    pub fn insert_coroutine<F: FusedFuture + 'static>(
         &mut self,
         task_name: &'static str,
         coroutine: Pin<Box<F>>,
@@ -151,11 +148,11 @@ impl SharedDemiRuntime {
     where
         F::Output: Unpin + Clone + Any,
     {
-        self.insert_and_poll_coroutine(task_name, self.foreground_group_id, coroutine)
+        self.insert_coroutine_inner(task_name, self.foreground_group_id, coroutine)
     }
 
-    /// Inserts a coroutine of type T and task and polls it once.
-    fn insert_and_poll_coroutine<F: FusedFuture + 'static>(
+    /// Inserts a coroutine of type T and task and runs it once.
+    fn insert_coroutine_inner<F: FusedFuture + 'static>(
         &mut self,
         task_name: &'static str,
         group_id: SchedulerId,
@@ -168,18 +165,18 @@ impl SharedDemiRuntime {
         #[cfg(feature = "profiler")]
         let coroutine = coroutine_timer!(task_name, coroutine);
         let task = TaskWithResult::<F::Output>::new(task_name, coroutine);
-        match self.scheduler.insert_and_poll_task(group_id, task) {
+        match self.scheduler.insert(group_id, task) {
             Some(InsertResult::Inserted(task_id)) => {
                 let qt = self.qtoken_to_scheduler_id.insert_with_new_id(task_id).unwrap();
                 self.scheduler
-                    .get_mut_task(group_id, task_id)
+                    .get_task_mut(group_id, task_id)
                     .unwrap()
                     .set_id(qt.into());
                 // Stash the newly allocated qtoken in the task.
                 Ok(qt)
             },
             Some(InsertResult::Completed(mut boxed_task)) => {
-                trace!("Completed while inserting coroutine: {:?}", boxed_task.get_name());
+                trace!("Completed while inserting coroutine: {:?}", boxed_task.name());
                 // Place into id map so that the application can retrive the result later.
                 let qt = self.qtoken_to_scheduler_id.insert_with_new_id(0_u64.into()).unwrap();
                 boxed_task.set_id(qt.into());
@@ -195,7 +192,7 @@ impl SharedDemiRuntime {
             },
             None => {
                 let cause = format!("cannot schedule coroutine (task_name={:?})", &task_name);
-                error!("insert_nonpolling_coroutine(): {}", cause);
+                error!("insert_coroutine(): {}", cause);
                 Err(Fail::new(libc::EAGAIN, &cause))
             },
         }
@@ -282,7 +279,7 @@ impl SharedDemiRuntime {
                 self.run_scheduler();
             }
             while let Some(mut task) = self.completed_tasks.pop_front() {
-                let qt = expect_some!(task.get_id(), "should have been set on insert").into();
+                let qt = expect_some!(task.id(), "should have been set on insert").into();
                 let (qd, result) = expect_some!(task.get_result(), "coroutine not finished");
                 self.qtoken_to_scheduler_id.remove(&qt);
 
@@ -304,12 +301,8 @@ impl SharedDemiRuntime {
     /// completed task queue and then try again. Returns None if there are still no completed tasks after polling the
     /// scheduler.
     pub fn run_scheduler(&mut self) {
-        // 1. Run each of the background tasks once.
-        self.poll_background_tasks();
-        // 2. Run all foreground tasks until none are ready.
-        let completed_tasks = self.poll_foreground_tasks();
-
-        // 3. Update the list of previously completed tasks.
+        self.run_background_tasks();
+        let completed_tasks = self.run_foreground_tasks();
         self.completed_tasks = VecDeque::from(completed_tasks);
     }
 
@@ -408,33 +401,21 @@ impl SharedDemiRuntime {
         self.socket_id_to_qdesc_map.is_in_use(socket_addrv4)
     }
 
-    pub fn poll_background_tasks(&mut self) {
-        let background_group_id = self.background_group_id;
-        // Ignore any results from tasks that completed because background tasks do not return anything.
-        self.scheduler
-            .poll_group_once(background_group_id, Some(TIMER_RESOLUTION));
+    // Ignore any results because background tasks do not return anything.
+    pub fn run_background_tasks(&mut self) {
+        let id = self.background_group_id;
+        self.scheduler.run_once(id, Some(TIMER_RESOLUTION));
     }
 
-    pub fn poll_foreground_tasks(&mut self) -> Vec<OperationTask> {
-        let foreground_group_id = self.foreground_group_id;
-
-        let completed_tasks = self
-            .scheduler
-            .poll_group_until_unrunnable(foreground_group_id, Some(TIMER_RESOLUTION));
-
-        completed_tasks
+    pub fn run_foreground_tasks(&mut self) -> Vec<OperationTask> {
+        let id = self.foreground_group_id;
+        self.scheduler
+            .run(id, Some(TIMER_RESOLUTION))
             .into_iter()
-            .filter_map(|boxed_task| -> Option<OperationTask> {
-                let qt: QToken = expect_some!(boxed_task.get_id(), "should have been set on insert").into();
-                trace!(
-                    "Completed while polling coroutine (qt={:?}): {:?}",
-                    qt,
-                    boxed_task.get_name()
-                );
-
-                // OperationTasks return a value to the application, so we must stash these for later. Otherwise, we
-                // just discard the return value of the completed coroutine.
-                OperationTask::try_from(boxed_task.as_any()).ok()
+            .filter_map(|task| -> Option<OperationTask> {
+                let qt: QToken = expect_some!(task.id(), "should have been set on insert").into();
+                trace!("Completed coroutine (qt={:?}): {:?}", qt, task.name());
+                OperationTask::try_from(task.as_any()).ok()
             })
             .collect()
     }
@@ -595,7 +576,6 @@ impl DerefMut for SharedDemiRuntime {
 // Traits
 //======================================================================================================================
 
-/// Demikernel Runtime
 pub trait Runtime: Clone + Unpin + 'static {}
 
 //======================================================================================================================
@@ -627,15 +607,12 @@ mod tests {
     }
 
     #[test]
-    fn poll_and_wait_for_first_task() -> Result<()> {
+    fn insert_and_wait_for_first_task() -> Result<()> {
         let mut runtime = SharedDemiRuntime::default();
 
-        let qt = runtime
-            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
-        let _ = runtime
-            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
-        let _ = runtime
-            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
+        let qt = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
+        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
+        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
 
         let task = runtime.wait(qt, Duration::ZERO)?;
         ensure_eq!(task.0, QDesc::from(0));
@@ -643,15 +620,12 @@ mod tests {
     }
 
     #[test]
-    fn poll_and_wait_for_middle_task() -> Result<()> {
+    fn insert_and_wait_for_middle_task() -> Result<()> {
         let mut runtime = SharedDemiRuntime::default();
 
-        let _ = runtime
-            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
-        let qt2 = runtime
-            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
-        let _ = runtime
-            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
+        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
+        let qt2 = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
+        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
 
         let task = runtime.wait(qt2, Duration::ZERO)?;
         ensure_eq!(task.0, QDesc::from(1));
@@ -659,15 +633,12 @@ mod tests {
     }
 
     #[test]
-    fn poll_and_wait_for_last_task() -> Result<()> {
+    fn insert_and_wait_for_last_task() -> Result<()> {
         let mut runtime = SharedDemiRuntime::default();
 
-        let _ = runtime
-            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
-        let _ = runtime
-            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
-        let qt3 = runtime
-            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
+        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
+        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
+        let qt3 = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
 
         let task = runtime.wait(qt3, Duration::ZERO)?;
         ensure_eq!(task.0, QDesc::from(2));
@@ -675,15 +646,12 @@ mod tests {
     }
 
     #[test]
-    fn poll_and_wait_any_for_first_tasks() -> Result<()> {
+    fn insert_and_wait_any_for_first_tasks() -> Result<()> {
         let mut runtime = SharedDemiRuntime::default();
 
-        let qt = runtime
-            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
-        let qt2 = runtime
-            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
-        let _ = runtime
-            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
+        let qt = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
+        let qt2 = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
+        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
         let qts = vec![qt, qt2];
         let task = runtime.wait_any(&qts, Duration::ZERO)?;
         ensure_eq!(task.2, QDesc::from(0));
@@ -691,15 +659,12 @@ mod tests {
     }
 
     #[test]
-    fn poll_and_wait_any_for_last_tasks() -> Result<()> {
+    fn insert_and_wait_any_for_last_tasks() -> Result<()> {
         let mut runtime = SharedDemiRuntime::default();
 
-        let _ = runtime
-            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
-        let qt2 = runtime
-            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
-        let qt3 = runtime
-            .insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
+        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
+        let qt2 = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
+        let qt3 = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
         let qts = vec![qt2, qt3];
         let task = runtime.wait_any(&qts, Duration::ZERO)?;
         ensure_eq!(task.2, QDesc::from(1));
@@ -707,20 +672,18 @@ mod tests {
     }
 
     #[bench]
-    fn insert_io_coroutine_bench(b: &mut Bencher) {
-        let mut runtime = SharedDemiRuntime::default();
-
-        b.iter(|| {
-            runtime.insert_nonpolling_coroutine("dummy coroutine", Box::pin(dummy_coroutine(10, QDesc::from(0)).fuse()))
-        });
-    }
-
-    #[bench]
     fn insert_background_coroutine_bench(b: &mut Bencher) {
         let mut runtime = SharedDemiRuntime::default();
 
+        b.iter(|| runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(10, QDesc::from(0)).fuse())));
+    }
+
+    #[bench]
+    fn insert_coroutine_bench(b: &mut Bencher) {
+        let mut runtime = SharedDemiRuntime::default();
+
         b.iter(|| {
-            runtime.insert_nonpolling_coroutine(
+            runtime.insert_coroutine(
                 "dummy background coroutine",
                 Box::pin(dummy_background_coroutine().fuse()),
             )
@@ -728,14 +691,14 @@ mod tests {
     }
 
     #[bench]
-    fn wait_any_nonpolling_coroutine_bench(b: &mut Bencher) {
+    fn wait_any_coroutine_bench(b: &mut Bencher) {
         const NUM_TASKS: usize = 1024;
         let mut qts = [QToken::from(0); NUM_TASKS];
         let mut runtime = SharedDemiRuntime::default();
         // Insert a large number of coroutines.
         for qt in qts.iter_mut().take(NUM_TASKS) {
             *qt = expect_ok!(
-                runtime.insert_nonpolling_coroutine(
+                runtime.insert_coroutine(
                     "dummy coroutine",
                     Box::pin(dummy_coroutine(1000000000, QDesc::from(0)).fuse())
                 ),
@@ -748,14 +711,14 @@ mod tests {
     }
 
     #[bench]
-    fn wait_any_io_polling_coroutine_bench(b: &mut Bencher) {
+    fn wait_any_polling_coroutine_bench(b: &mut Bencher) {
         const NUM_TASKS: usize = 1024;
         let mut qts = [QToken::from(0); NUM_TASKS];
         let mut runtime = SharedDemiRuntime::default();
         // Insert a large number of coroutines.
         for qt in qts.iter_mut().take(NUM_TASKS) {
             *qt = expect_ok!(
-                runtime.insert_io_polling_coroutine(
+                runtime.insert_polling_coroutine(
                     "dummy background coroutine",
                     Box::pin(dummy_background_coroutine().fuse()),
                 ),

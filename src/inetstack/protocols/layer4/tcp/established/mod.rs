@@ -173,7 +173,7 @@ impl SharedEstablishedSocket {
             me.receive(header, data);
         }
         let me2 = me.clone();
-        runtime.insert_nonpolling_coroutine(
+        runtime.insert_coroutine(
             "bgc::inetstack::tcp::established::background",
             Box::pin(async move { me2.background().await }.fuse()),
         )?;

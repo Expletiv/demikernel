@@ -59,8 +59,8 @@ impl Waker64 {
     /// If the operation does not overflow, the old value is returned.
     /// Otherwise, `None` is returned instead.
     pub fn fetch_sub(&self, val: u64) -> Option<u64> {
-        let s: &mut u64 = unsafe { &mut *self.0.get() };
-        let old: u64 = *s;
+        let s = unsafe { &mut *self.0.get() };
+        let old = *s;
         if val > *s {
             return None;
         }
@@ -101,67 +101,67 @@ mod tests {
 
     #[bench]
     fn fetch_and_bench(b: &mut Bencher) {
-        let x: u64 = rand::thread_rng().gen_range(0..64);
-        let w64: Waker64 = Waker64::new(0);
+        let x = rand::thread_rng().gen_range(0..64);
+        let w64 = Waker64::new(0);
 
         b.iter(|| {
-            let val: u64 = black_box(x);
+            let val = black_box(x);
             w64.fetch_and(val);
         });
     }
 
     #[bench]
     fn fetch_or_bench(b: &mut Bencher) {
-        let x: u64 = rand::thread_rng().gen_range(0..64);
-        let w64: Waker64 = Waker64::new(0);
+        let x = rand::thread_rng().gen_range(0..64);
+        let w64 = Waker64::new(0);
 
         b.iter(|| {
-            let val: u64 = black_box(x);
+            let val = black_box(x);
             w64.fetch_or(val);
         });
     }
 
     #[bench]
     fn fetch_add_bench(b: &mut Bencher) {
-        let x: u64 = rand::thread_rng().gen_range(0..64);
-        let w64: Waker64 = Waker64::new(0);
+        let x = rand::thread_rng().gen_range(0..64);
+        let w64 = Waker64::new(0);
 
         b.iter(|| {
-            let val: u64 = black_box(x);
+            let val = black_box(x);
             w64.fetch_add(val);
         });
     }
 
     #[bench]
     fn fetch_sub_bench(b: &mut Bencher) {
-        let x: u64 = rand::thread_rng().gen_range(0..64);
+        let x = rand::thread_rng().gen_range(0..64);
 
         b.iter(|| {
-            let val: u64 = black_box(x);
-            let w64: Waker64 = Waker64::new(64);
+            let val = black_box(x);
+            let w64 = Waker64::new(64);
             expect_some!(w64.fetch_sub(val), "fetch_sub() overflowed");
         });
     }
 
     #[bench]
     fn load_bench(b: &mut Bencher) {
-        let x: u64 = rand::thread_rng().gen_range(0..64);
-        let w64: Waker64 = Waker64::new(x);
+        let x = rand::thread_rng().gen_range(0..64);
+        let w64 = Waker64::new(x);
 
         b.iter(|| {
-            let val: u64 = w64.load();
+            let val = w64.load();
             black_box(val);
         });
     }
 
     #[bench]
     fn swap_bench(b: &mut Bencher) {
-        let x: u64 = rand::thread_rng().gen_range(0..64);
-        let w64: Waker64 = Waker64::new(0);
+        let x = rand::thread_rng().gen_range(0..64);
+        let w64 = Waker64::new(0);
 
         b.iter(|| {
-            let val: u64 = black_box(x);
-            let oldval: u64 = w64.swap(val);
+            let val = black_box(x);
+            let oldval = w64.swap(val);
             black_box(oldval);
         });
     }

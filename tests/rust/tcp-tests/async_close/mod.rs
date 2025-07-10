@@ -62,7 +62,7 @@ fn async_close_and_wait_twice_1(libos: &mut LibOS) -> Result<()> {
     // Succeed to close socket.
     let qt: QToken = libos.async_close(sockqd)?;
 
-    // Poll once to ensure the async_close() coroutine runs and finishes the close.
+    // Wait once to ensure the async_close() coroutine runs and finishes the close.
     match libos.wait(qt, None) {
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_CLOSE && qr.qr_ret == 0 => {},
         Ok(_) => anyhow::bail!("wait() should succeed with async_close()"),
@@ -143,7 +143,7 @@ fn async_close_unbound_socket(libos: &mut LibOS) -> Result<()> {
     // Succeed to close socket.
     let qt: QToken = libos.async_close(sockqd)?;
 
-    // Poll once to ensure the async_close() coroutine runs and finishes the close.
+    // Wait once to ensure the async_close() coroutine runs and finishes the close.
     match libos.wait(qt, None) {
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_CLOSE && qr.qr_ret == 0 => Ok(()),
         Ok(_) => anyhow::bail!("wait() should succeed with async_close()"),
@@ -160,7 +160,7 @@ fn async_close_bound_socket(libos: &mut LibOS, local: &SocketAddr) -> Result<()>
     // Succeed to close socket.
     let qt: QToken = libos.async_close(sockqd)?;
 
-    // Poll once to ensure the async_close() coroutine runs and finishes the close.
+    // Wait once to ensure the async_close() coroutine runs and finishes the close.
     match libos.wait(qt, None) {
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_CLOSE && qr.qr_ret == 0 => Ok(()),
         Ok(_) => anyhow::bail!("wait() should succeed with async_close()"),
@@ -178,7 +178,7 @@ fn async_close_listening_socket(libos: &mut LibOS, local: &SocketAddr) -> Result
     // Succeed to close socket.
     let qt: QToken = libos.async_close(sockqd)?;
 
-    // Poll once to ensure the async_close() coroutine runs and finishes the close.
+    // Wait once to ensure the async_close() coroutine runs and finishes the close.
     match libos.wait(qt, None) {
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_CLOSE && qr.qr_ret == 0 => Ok(()),
         Ok(_) => anyhow::bail!("wait() should succeed with async_close()"),

@@ -33,8 +33,8 @@ pub struct WakerPageRef(NonNull<WakerPage>);
 
 /// Associate Functions for Waker Page References
 impl WakerPageRef {
-    pub fn new(waker_page: NonNull<WakerPage>) -> Self {
-        Self(waker_page)
+    pub fn new(page: NonNull<WakerPage>) -> Self {
+        Self(page)
     }
 
     /// Casts the target [WakerPageRef] into a [NonNull<u8>].
@@ -61,12 +61,12 @@ impl WakerPageRef {
         debug_assert!(ix < WAKER_BIT_LENGTH);
 
         // Bump the refcount of the underlying waker page.
-        let self_: WakerPageRef = self.clone();
+        let self_ = self.clone();
         mem::forget(self_);
 
         unsafe {
             let base_ptr: *mut u8 = self.0.as_ptr().cast();
-            let ptr: NonNull<u8> = NonNull::new_unchecked(base_ptr.add(ix));
+            let ptr = NonNull::new_unchecked(base_ptr.add(ix));
             ptr
         }
     }
@@ -78,7 +78,7 @@ impl WakerPageRef {
 
 impl Clone for WakerPageRef {
     fn clone(&self) -> Self {
-        let old_refount: u64 = unsafe { self.0.as_ref().refcount_inc() };
+        let old_refount = unsafe { self.0.as_ref().refcount_inc() };
         debug_assert!(old_refount < u64::MAX);
         Self(self.0)
     }
@@ -107,9 +107,9 @@ impl Deref for WakerPageRef {
 
 impl Default for WakerPageRef {
     fn default() -> Self {
-        let layout: Layout = Layout::new::<WakerPage>();
+        let layout = Layout::new::<WakerPage>();
         assert_eq!(layout.align(), WAKER_PAGE_SIZE);
-        let mut ptr: NonNull<WakerPage> = expect_ok!(Global.allocate(layout), "Failed to allocate WakerPage").cast();
+        let mut ptr = expect_ok!(Global.allocate(layout), "Failed to allocate WakerPage").cast();
         unsafe {
             let page: &mut WakerPage = ptr.as_mut();
             page.reset();
@@ -126,92 +126,68 @@ impl Default for WakerPageRef {
 mod tests {
     use crate::runtime::scheduler::page::WakerPageRef;
     use ::anyhow::Result;
-    use ::std::ptr::NonNull;
 
     #[test]
     fn test_clone() -> Result<()> {
-        let p: WakerPageRef = WakerPageRef::default();
+        let page = WakerPageRef::default();
+        crate::ensure_eq!(page.refcount(), 1);
 
-        let refcount: u64 = p.refcount_get();
-        crate::ensure_eq!(refcount, 1);
+        // Clone page
+        let page_clone = page.clone();
+        crate::ensure_eq!(page_clone.refcount(), 2);
+        crate::ensure_eq!(page.refcount(), 2);
 
-        // Clone p
-        let p_clone: WakerPageRef = p.clone();
-        let refcount: u64 = p_clone.refcount_get();
-        crate::ensure_eq!(refcount, 2);
-        let refcount: u64 = p.refcount_get();
-        crate::ensure_eq!(refcount, 2);
+        // Clone page_clone
+        let page_clone_clone = page_clone.clone();
+        crate::ensure_eq!(page_clone_clone.refcount(), 3);
+        crate::ensure_eq!(page_clone.refcount(), 3);
+        crate::ensure_eq!(page.refcount(), 3);
 
-        // Clone p_clone
-        let p_clone_clone: WakerPageRef = p_clone.clone();
-        let refcount: u64 = p_clone_clone.refcount_get();
-        crate::ensure_eq!(refcount, 3);
-        let refcount: u64 = p_clone.refcount_get();
-        crate::ensure_eq!(refcount, 3);
-        let refcount: u64 = p.refcount_get();
-        crate::ensure_eq!(refcount, 3);
+        // Drop page_clone_clone
+        drop(page_clone_clone);
+        crate::ensure_eq!(page_clone.refcount(), 2);
+        crate::ensure_eq!(page.refcount(), 2);
 
-        // Drop p_clone_clone
-        drop(p_clone_clone);
-        let refcount: u64 = p_clone.refcount_get();
-        crate::ensure_eq!(refcount, 2);
-        let refcount: u64 = p.refcount_get();
-        crate::ensure_eq!(refcount, 2);
+        // Drop page_clone
+        drop(page_clone);
+        crate::ensure_eq!(page.refcount(), 1);
 
-        // Drop p_clone
-        drop(p_clone);
-        let refcount: u64 = p.refcount_get();
-        crate::ensure_eq!(refcount, 1);
+        // Clone page
+        let page_clone = page.clone();
+        crate::ensure_eq!(page_clone.refcount(), 2);
+        crate::ensure_eq!(page.refcount(), 2);
 
-        // Clone p
-        let p_clone: WakerPageRef = p.clone();
-        let refcount: u64 = p_clone.refcount_get();
-        crate::ensure_eq!(refcount, 2);
-        let refcount: u64 = p.refcount_get();
-        crate::ensure_eq!(refcount, 2);
+        // Clone page again
+        let page_clone_clone = page.clone();
+        crate::ensure_eq!(page_clone_clone.refcount(), 3);
+        crate::ensure_eq!(page_clone.refcount(), 3);
+        crate::ensure_eq!(page.refcount(), 3);
 
-        // Clone p again
-        let p_clone_clone: WakerPageRef = p.clone();
-        let refcount: u64 = p_clone_clone.refcount_get();
-        crate::ensure_eq!(refcount, 3);
-        let refcount: u64 = p_clone.refcount_get();
-        crate::ensure_eq!(refcount, 3);
-        let refcount: u64 = p.refcount_get();
-        crate::ensure_eq!(refcount, 3);
+        // Drop page
+        drop(page);
+        crate::ensure_eq!(page_clone_clone.refcount(), 2);
+        crate::ensure_eq!(page_clone.refcount(), 2);
 
-        // Drop p
-        drop(p);
-        let refcount: u64 = p_clone_clone.refcount_get();
-        crate::ensure_eq!(refcount, 2);
-        let refcount: u64 = p_clone.refcount_get();
-        crate::ensure_eq!(refcount, 2);
-
-        // Drop p_clone_clone
-        drop(p_clone_clone);
-        let refcount: u64 = p_clone.refcount_get();
-        crate::ensure_eq!(refcount, 1);
+        // Drop page_clone_clone
+        drop(page_clone_clone);
+        crate::ensure_eq!(page_clone.refcount(), 1);
 
         Ok(())
     }
 
     #[test]
     fn test_into() -> Result<()> {
-        let p: WakerPageRef = WakerPageRef::default();
+        let page = WakerPageRef::default();
+        crate::ensure_eq!(page.refcount(), 1);
 
-        let refcount: u64 = p.refcount_get();
-        crate::ensure_eq!(refcount, 1);
+        let _ = page.as_raw_waker_ref(0);
+        crate::ensure_eq!(page.refcount(), 2);
 
-        let _: NonNull<u8> = p.as_raw_waker_ref(0);
-        let refcount: u64 = p.refcount_get();
-        crate::ensure_eq!(refcount, 2);
+        let _ = page.as_raw_waker_ref(31);
+        crate::ensure_eq!(page.refcount(), 3);
 
-        let _: NonNull<u8> = p.as_raw_waker_ref(31);
-        let refcount: u64 = p.refcount_get();
-        crate::ensure_eq!(refcount, 3);
-
-        let _: NonNull<u8> = p.as_raw_waker_ref(63);
-        let refcount: u64 = p.refcount_get();
-        crate::ensure_eq!(refcount, 4);
+        let _ = page.as_raw_waker_ref(63);
+        crate::ensure_eq!(page.refcount(), 4);
 
         Ok(())
     }

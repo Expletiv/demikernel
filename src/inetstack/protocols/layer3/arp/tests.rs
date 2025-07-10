@@ -52,7 +52,7 @@ fn arp_immediate_reply() -> Result<()> {
     // Move clock forward and poll the engine.
     now += Duration::from_micros(1);
     engine.advance_clock(now);
-    engine.get_runtime().poll_background_tasks();
+    engine.get_runtime().run_background_tasks();
 
     // Check if the ARP cache outputs a reply message.
     let mut buffers = engine.pop_expected_frames(1);
@@ -120,7 +120,7 @@ fn arp_cache_update() -> Result<()> {
     // Move clock forward and poll the engine.
     now += Duration::from_micros(1);
     engine.advance_clock(now);
-    engine.get_runtime().poll_background_tasks();
+    engine.get_runtime().run_background_tasks();
 
     // Check if the ARP cache has been updated.
     let cache = engine.get_transport().export_arp_cache();
@@ -154,13 +154,10 @@ fn arp_cache_timeout() -> Result<()> {
     let mut engine = new_engine(now, test_helpers::ALICE_CONFIG_PATH)?;
     let mut inetstack = engine.get_transport();
     let coroutine = Box::pin(async move { inetstack.arp_query(other_remote_ipv4).await }.fuse());
-    let _qt = engine
-        .get_runtime()
-        .clone()
-        .insert_nonpolling_coroutine("arp query", coroutine)?;
+    let _qt = engine.get_runtime().clone().insert_coroutine("arp query", coroutine)?;
 
     for _ in 0..(ARP_RETRY_COUNT + 1) {
-        engine.get_runtime().poll_foreground_tasks();
+        engine.get_runtime().run_foreground_tasks();
         // Check if the ARP cache outputs a reply message.
         let buffers = engine.pop_expected_frames(1);
         crate::ensure_eq!(buffers.len(), 1);
