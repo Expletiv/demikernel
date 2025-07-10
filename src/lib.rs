@@ -141,18 +141,18 @@ macro_rules! collect_test {
 #[macro_export]
 macro_rules! dump_test {
     ($vec:ident) => {{
-        let mut nfailed: usize = 0;
+        let mut num_failed = 0;
         // Dump results.
         for (test_name, test_status, test_result) in $vec {
             std::println!("[{}] {}", test_status, test_name);
             if let Err(e) = test_result {
-                nfailed += 1;
+                num_failed += 1;
                 std::println!("{}", e);
             }
         }
 
-        if nfailed > 0 {
-            anyhow::bail!("{} tests failed", nfailed);
+        if num_failed > 0 {
+            anyhow::bail!("{} tests failed", num_failed);
         } else {
             std::println!("all tests passed");
             Ok(())

@@ -46,7 +46,7 @@ impl Future for PollFuture {
     /// A yield for just one cycle. The first time that this future is polled, it is not ready but the next time it
     /// runs.
     fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<Self::Output> {
-        let self_: &mut Self = self.get_mut();
+        let self_ = self.get_mut();
         if self_.state == YieldState::Running {
             // Set our state
             self_.state = YieldState::Yielded;

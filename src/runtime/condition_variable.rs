@@ -47,11 +47,9 @@ pub struct ConditionVariable {
 pub struct SharedConditionVariable(SharedObject<ConditionVariable>);
 
 struct YieldPoint {
-    /// Unique identifier.
     id: YieldPointId,
-    /// Reference to the condition variable that issued this future.
-    cond_var: SharedConditionVariable,
-    /// State of the yield.
+    /// Condition variable that issued this future.
+    condition_variable: SharedConditionVariable,
     state: YieldState,
 }
 
@@ -88,7 +86,7 @@ impl SharedConditionVariable {
         self.last_id += 1;
         YieldPoint {
             id: YieldPointId(self.last_id),
-            cond_var: self.clone(),
+            condition_variable: self.clone(),
             state: YieldState::Running,
         }
         .await
@@ -137,17 +135,17 @@ impl Future for YieldPoint {
     /// The first time that this future is polled, it is not ready but the next time must be a signal so then it is
     /// ready.
     fn poll(self: Pin<&mut Self>, context: &mut Context) -> Poll<Self::Output> {
-        let state: YieldState = self.state;
-        let num_ready: usize = self.cond_var.num_ready;
-        let self_: &mut Self = self.get_mut();
+        let state = self.state;
+        let num_ready = self.condition_variable.num_ready;
+        let self_ = self.get_mut();
         match state {
             YieldState::Running => {
-                self_.cond_var.add_waiter(self_.id, context.waker().clone());
+                self_.condition_variable.add_waiter(self_.id, context.waker().clone());
                 self_.state = YieldState::Yielded;
                 Poll::Pending
             },
             YieldState::Yielded if num_ready > 0 => {
-                self_.cond_var.num_ready -= 1;
+                self_.condition_variable.num_ready -= 1;
                 self_.state = YieldState::Running;
                 Poll::Ready(())
             },
@@ -158,7 +156,7 @@ impl Future for YieldPoint {
 
 impl Drop for YieldPoint {
     fn drop(&mut self) {
-        self.cond_var.remove_waiter(self.id)
+        self.condition_variable.remove_waiter(self.id)
     }
 }
 
