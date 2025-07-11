@@ -30,7 +30,7 @@
 
 #[cfg(feature = "libdpdk")]
 use crate::runtime::libdpdk::{
-    rte_errno, rte_mbuf, rte_mbuf_from_indirect, rte_mempool, rte_pktmbuf_adj, rte_pktmbuf_clone, rte_pktmbuf_detach,
+    rte_errno, rte_mbuf, rte_mbuf_from_indirect, rte_pktmbuf_adj, rte_pktmbuf_clone, rte_pktmbuf_detach,
     rte_pktmbuf_free, rte_pktmbuf_prepend, rte_pktmbuf_trim,
 };
 use crate::{
@@ -215,17 +215,15 @@ impl MetaData {
         }
     }
 
-    // Increments the reference count and returns the new value.
     #[inline]
     fn inc_refcnt(&mut self) -> u16 {
         self.refcnt += 1;
         self.refcnt
     }
 
-    // Decrements the reference count and returns the new value.
     #[inline]
     fn dec_refcnt(&mut self) -> u16 {
-        // We should never decrement an already zero reference count.  Check this on debug builds.
+        // We should never decrement an already zero reference count. Check this on debug builds.
         debug_assert_ne!(self.refcnt, 0);
         self.refcnt -= 1;
         self.refcnt
@@ -234,7 +232,7 @@ impl MetaData {
     // Gets the MetaData for the last segment in the buffer chain.
     #[inline]
     fn get_last_segment(&mut self) -> &mut MetaData {
-        let mut md: &mut MetaData = self;
+        let mut md = self;
         while md.next.is_some() {
             // Safety: The call to as_mut is safe, as the pointer is aligned and dereferenceable, and the MetaData
             // struct it points to is initialized properly.
@@ -319,20 +317,14 @@ impl DemiBuffer {
     // propagate actual allocation failures outward, if we determine that would be helpful.  For now, we stick to the
     // status quo, and assume this allocation never fails.
     pub fn new(capacity: u16) -> Self {
-        // Allocate some memory off the heap.
-        let (metadata_buf, buffer): (&mut MaybeUninit<MetaData>, &mut [MaybeUninit<u8>]) =
-            allocate_metadata_data(capacity);
-
+        let (metadata_buf, buffer) = allocate_metadata_data(capacity);
         Self::new_from_parts(metadata_buf, buffer.as_mut_ptr(), 0, capacity, None)
     }
 
     /// Creates a new heap-allocated DemiBuffer with reserved headroom. The application cannot use this space but it
     /// is reserved for Demikernel to use for headers.
     pub fn new_with_headroom(capacity: u16, headroom: u16) -> Self {
-        // Allocate some memory off the heap.
-        let (metadata_buf, buffer): (&mut MaybeUninit<MetaData>, &mut [MaybeUninit<u8>]) =
-            allocate_metadata_data(capacity + headroom);
-
+        let (metadata_buf, buffer) = allocate_metadata_data(capacity + headroom);
         Self::new_from_parts(metadata_buf, buffer.as_mut_ptr(), headroom, capacity, None)
     }
 
@@ -343,12 +335,11 @@ impl DemiBuffer {
     /// Possibly this requirement could be relaxed with more buffer reference types, or buffers which carry an explicit
     /// lifetime. Until a compelling use case arises, this will cap to `'static`.
     pub fn new_in_pool(pool: &BufferPool) -> Option<Self> {
-        let buffer: PoolBuf = pool.pool().get()?;
-        let (mut buffer, pool): (NonNull<[MaybeUninit<u8>]>, Rc<MemoryPool>) = PoolBuf::into_raw(buffer);
+        let buffer = pool.pool().get()?;
+        let (mut buffer, pool) = PoolBuf::into_raw(buffer);
 
         // Safety: the buffer size and alignment requirements are enforced by BufferPool.
-        let (metadata_buf, buffer): (&mut MaybeUninit<MetaData>, &mut [MaybeUninit<u8>]) =
-            unsafe { split_buffer_for_metadata(buffer.as_mut()) };
+        let (metadata_buf, buffer) = unsafe { split_buffer_for_metadata(buffer.as_mut()) };
 
         assert!(buffer.len() <= (u16::MAX as usize));
 
@@ -369,14 +360,14 @@ impl DemiBuffer {
         capacity: u16,
         pool: Option<Rc<MemoryPool>>,
     ) -> Self {
-        let buf_addr: *mut u8 = if capacity + headroom > 0 {
+        let buf_addr = if capacity + headroom > 0 {
             // TODO: casting the MaybeUninit away can cause UB (when deref'd). Change the exposed data type from
             // DemiBuffer to better expose un/initialized values.
             buf_addr.cast()
         } else {
             ptr::null_mut()
         };
-        let metadata: NonNull<MetaData> = NonNull::from(metadata_buf.write(MetaData::new(DemiMetaData {
+        let metadata = NonNull::from(metadata_buf.write(MetaData::new(DemiMetaData {
             buf_addr,
             data_off: headroom,
             refcnt: 1,
@@ -392,9 +383,8 @@ impl DemiBuffer {
         })));
 
         // Embed the buffer type into the lower bits of the pointer.
-        let tagged: NonNull<MetaData> = metadata.with_addr(metadata.addr() | Tag::Heap);
+        let tagged = metadata.with_addr(metadata.addr() | Tag::Heap);
 
-        // Return the new DemiBuffer.
         DemiBuffer {
             tagged_ptr: tagged,
             _phantom: PhantomData,
@@ -411,17 +401,16 @@ impl DemiBuffer {
     /// Allocates a new DemiBuffer with some headroom and copies the slice contents.
     pub fn from_slice_with_headroom(slice: &[u8], headroom: usize) -> Result<Self, Fail> {
         // Check size of the slice to ensure a single DemiBuffer can hold it.
-        let size: u16 = if slice.len() + headroom < u16::MAX as usize {
+        let size = if slice.len() + headroom < u16::MAX as usize {
             (slice.len() + headroom) as u16
         } else {
             return Err(Fail::new(libc::EINVAL, "slice is larger than a DemiBuffer can hold"));
         };
 
-        // Allocate some memory off the heap.
-        let (temp, buffer): (&mut MaybeUninit<MetaData>, &mut [MaybeUninit<u8>]) = allocate_metadata_data(size);
+        let (temp, buffer) = allocate_metadata_data(size);
 
         // Point buf_addr at the newly allocated data space (if any).
-        let buf_addr: *mut u8 = if size == 0 {
+        let buf_addr = if size == 0 {
             // No direct data, so don't point buf_addr at anything.
             null_mut()
         } else {
@@ -435,7 +424,7 @@ impl DemiBuffer {
         };
 
         // Set field values as appropriate.
-        let metadata: NonNull<MetaData> = NonNull::from(temp.write(MetaData::new(DemiMetaData {
+        let metadata = NonNull::from(temp.write(MetaData::new(DemiMetaData {
             buf_addr,
             data_off: headroom as u16,
             refcnt: 1,
@@ -449,9 +438,8 @@ impl DemiBuffer {
         })));
 
         // Embed the buffer type into the lower bits of the pointer.
-        let tagged: NonNull<MetaData> = metadata.with_addr(metadata.addr() | Tag::Heap);
+        let tagged = metadata.with_addr(metadata.addr() | Tag::Heap);
 
-        // Return the new DemiBuffer.
         Ok(DemiBuffer {
             tagged_ptr: tagged,
             _phantom: PhantomData,
@@ -475,8 +463,8 @@ impl DemiBuffer {
     // It is the caller's responsibility to guarantee this, which is why this function is marked "unsafe".
     pub unsafe fn from_mbuf(mbuf_ptr: *mut rte_mbuf) -> Self {
         // Convert the raw pointer into a NonNull and add a tag indicating it is a DPDK buffer (i.e. a MBuf).
-        let temp: NonNull<MetaData> = NonNull::new_unchecked(mbuf_ptr as *mut _);
-        let tagged: NonNull<MetaData> = temp.with_addr(temp.addr() | Tag::Dpdk);
+        let temp = NonNull::new_unchecked(mbuf_ptr as *mut _);
+        let tagged = temp.with_addr(temp.addr() | Tag::Dpdk);
 
         DemiBuffer {
             tagged_ptr: tagged,
@@ -503,13 +491,11 @@ impl DemiBuffer {
         }
     }
 
-    /// Returns `true` if this `DemiBuffer` was allocated off of the heap, and `false` otherwise.
     pub fn is_heap_allocated(&self) -> bool {
         self.get_tag() == Tag::Heap
     }
 
     #[cfg(feature = "libdpdk")]
-    /// Returns `true` if this `DemiBuffer` was allocated by DPDK, and `false` otherwise.
     pub fn is_dpdk_allocated(&self) -> bool {
         self.get_tag() == Tag::Dpdk
     }
@@ -539,11 +525,11 @@ impl DemiBuffer {
     }
 
     fn heap_buf_into_direct(self) -> DemiBuffer {
-        let metadata: &mut MetaData = self.as_metadata();
+        let metadata = self.as_metadata();
 
         // Step 1: get the direct buffer.
-        let offset: isize = -(size_of::<MetaData>() as isize);
-        let direct: &mut MetaData = unsafe {
+        let offset = -(size_of::<MetaData>() as isize);
+        let direct = unsafe {
             // Safety: The offset call is safe as `offset` is known to be "in bounds" for buf_addr.
             // Safety: The as_mut call is safe as the pointer is aligned, dereferenceable, and
             // points to an initialized MetaData instance.
@@ -557,8 +543,8 @@ impl DemiBuffer {
         metadata.ol_flags &= !METADATA_F_INDIRECT;
 
         // Step 3: reconstitute the direct DemiBuffer.
-        let direct: NonNull<MetaData> = NonNull::from(direct);
-        let tagged: NonNull<MetaData> = direct.with_addr(direct.addr() | Tag::Heap);
+        let direct = NonNull::from(direct);
+        let tagged = direct.with_addr(direct.addr() | Tag::Heap);
 
         unsafe { DemiBuffer::from_raw(tagged.cast()) }
     }
@@ -566,7 +552,7 @@ impl DemiBuffer {
     #[cfg(feature = "libdpdk")]
     unsafe fn dpdk_buf_into_direct(self) -> DemiBuffer {
         // Step 1: get the direct buffer.
-        let direct: *mut rte_mbuf = rte_mbuf_from_indirect(self.as_mbuf());
+        let direct = rte_mbuf_from_indirect(self.as_mbuf());
 
         // Step 2: detach the indirect buffer.
         rte_pktmbuf_detach(self.as_mbuf());
@@ -596,7 +582,7 @@ impl DemiBuffer {
         // TODO: Review having this "match", since MetaData and MBuf are laid out the same, these are equivalent cases.
         match self.get_tag() {
             Tag::Heap => {
-                let metadata: &mut MetaData = self.as_metadata();
+                let metadata = self.as_metadata();
                 if nbytes > metadata.data_len as usize {
                     return Err(Fail::new(libc::EINVAL, "tried to remove more bytes than are present"));
                 }
@@ -607,7 +593,7 @@ impl DemiBuffer {
             },
             #[cfg(feature = "libdpdk")]
             Tag::Dpdk => {
-                let mbuf: *mut rte_mbuf = self.as_mbuf();
+                let mbuf = self.as_mbuf();
                 unsafe {
                     // Safety: The `mbuf` dereference below is safe, as it is aligned and dereferenceable.
                     if ((*mbuf).data_len as usize) < nbytes {
@@ -617,8 +603,8 @@ impl DemiBuffer {
 
                 // Safety: rte_pktmbuf_adj is a FFI, which is safe since we call it with an actual MBuf pointer.
                 if unsafe { rte_pktmbuf_adj(mbuf, nbytes as u16) } == ptr::null_mut() {
-                    let rte_errno: libc::c_int = unsafe { rte_errno() };
-                    let cause: String = format!("tried to remove more bytes than are present: {:?}", rte_errno);
+                    let rte_errno = unsafe { rte_errno() };
+                    let cause = format!("tried to remove more bytes than are present: {:?}", rte_errno);
                     warn!("adjust(): {}", cause);
                     return Err(Fail::new(libc::EINVAL, &cause));
                 }
@@ -636,8 +622,8 @@ impl DemiBuffer {
         // TODO: Review having this "match", since MetaData and MBuf are laid out the same, these are equivalent cases.
         match self.get_tag() {
             Tag::Heap => {
-                let md_first: &mut MetaData = self.as_metadata();
-                let md_last: &mut MetaData = md_first.get_last_segment();
+                let md_first = self.as_metadata();
+                let md_last = md_first.get_last_segment();
 
                 if nbytes > md_last.data_len as usize {
                     return Err(Fail::new(libc::EINVAL, "tried to remove more bytes than are present"));
@@ -648,7 +634,7 @@ impl DemiBuffer {
             },
             #[cfg(feature = "libdpdk")]
             Tag::Dpdk => {
-                let mbuf: *mut rte_mbuf = self.as_mbuf();
+                let mbuf = self.as_mbuf();
                 unsafe {
                     // Safety: The `mbuf` dereference below is safe, as it is aligned and dereferenceable.
                     if ((*mbuf).data_len as usize) < nbytes {
@@ -657,9 +643,9 @@ impl DemiBuffer {
                 }
 
                 // Safety: rte_pktmbuf_trim is a FFI, which is safe since we call it with an actual MBuf pointer.
-                let rte_errno: libc::c_int = unsafe { rte_pktmbuf_trim(mbuf, nbytes as u16) };
+                let rte_errno = unsafe { rte_pktmbuf_trim(mbuf, nbytes as u16) };
                 if rte_errno != 0 {
-                    let cause: String = format!("tried to remove more bytes than are present: {:?}", rte_errno);
+                    let cause = format!("tried to remove more bytes than are present: {:?}", rte_errno);
                     warn!("trim(): {}", cause);
                     return Err(Fail::new(libc::EINVAL, &cause));
                 }
@@ -673,7 +659,7 @@ impl DemiBuffer {
     pub fn prepend(&mut self, nbytes: usize) -> Result<(), Fail> {
         match self.get_tag() {
             Tag::Heap => {
-                let metadata: &mut MetaData = self.as_metadata();
+                let metadata = self.as_metadata();
                 if nbytes > metadata.data_off as usize {
                     return Err(Fail::new(
                         libc::EINVAL,
@@ -690,14 +676,14 @@ impl DemiBuffer {
             },
             #[cfg(feature = "libdpdk")]
             Tag::Dpdk => {
-                let mbuf: *mut rte_mbuf = unsafe {
+                let mbuf = unsafe {
                     // Safety: rte_pktmbuf_prepend does both sanity and headroom space checks.
                     rte_pktmbuf_prepend(self.as_mbuf(), nbytes as u16) as *mut rte_mbuf
                 };
 
                 if mbuf.is_null() {
-                    let rte_errno: libc::c_int = unsafe { rte_errno() };
-                    let cause: String = format!("tried to prepend more bytes than are allowed: {:?}", rte_errno);
+                    let rte_errno = unsafe { rte_errno() };
+                    let cause = format!("tried to prepend more bytes than are allowed: {:?}", rte_errno);
                     warn!("prepend(): {}", cause);
 
                     return Err(Fail::new(libc::EINVAL, &cause));
@@ -765,20 +751,20 @@ impl DemiBuffer {
     fn split(&mut self, split_front: bool, offset: usize) -> Result<Self, Fail> {
         // Check if this is a multi-segment buffer.
         if self.is_multi_segment() {
-            let cause: &'static str = "cannot split a multi-segment buffer";
+            let cause = "cannot split a multi-segment buffer";
             error!("split_front(): {}", cause);
             return Err(Fail::new(libc::EINVAL, cause));
         }
 
         // Check if split offset is valid.
         if self.len() < offset {
-            let cause: String = format!("cannot split buffer at given offset (offset={:?})", offset);
+            let cause = format!("cannot split buffer at given offset (offset={:?})", offset);
             error!("split_front(): {}", &cause);
             return Err(Fail::new(libc::EINVAL, &cause));
         }
 
         // Clone the target buffer before any changes are applied.
-        let mut cloned_buf: DemiBuffer = self.clone();
+        let mut cloned_buf = self.clone();
 
         if split_front {
             // Remove data starting at `offset` from the front half buffer (cloned buffer).
@@ -802,7 +788,6 @@ impl DemiBuffer {
             cloned_buf.adjust(offset).unwrap();
         }
 
-        // Return the cloned buffer.
         Ok(cloned_buf)
     }
 
@@ -849,8 +834,7 @@ impl DemiBuffer {
     #[inline]
     fn get_ptr<U>(&self) -> NonNull<U> {
         // Safety: The call to NonZeroUsize::new_unchecked is safe, as its argument is guaranteed to be non-zero.
-        let address: NonZeroUsize =
-            unsafe { NonZeroUsize::new_unchecked(usize::from(self.tagged_ptr.addr()) & !Tag::MASK) };
+        let address = unsafe { NonZeroUsize::new_unchecked(usize::from(self.tagged_ptr.addr()) & !Tag::MASK) };
         self.tagged_ptr.with_addr(address).cast::<U>()
     }
 
@@ -872,8 +856,8 @@ impl DemiBuffer {
 
     // Gets a raw pointer to the DemiBuffer data.
     fn data_ptr(&self) -> *mut u8 {
-        let metadata: &mut MetaData = self.as_metadata();
-        let buf_ptr: *mut u8 = metadata.buf_addr;
+        let metadata = self.as_metadata();
+        let buf_ptr = metadata.buf_addr;
         // Safety: The call to offset is safe, as its argument is known to remain within the allocated region.
         unsafe { buf_ptr.offset(metadata.data_off as isize) }
     }
@@ -890,12 +874,12 @@ impl DemiBuffer {
     fn is_multi_segment(&self) -> bool {
         match self.get_tag() {
             Tag::Heap => {
-                let md_front: &MetaData = self.as_metadata();
+                let md_front = self.as_metadata();
                 md_front.nb_segs != 1
             },
             #[cfg(feature = "libdpdk")]
             Tag::Dpdk => {
-                let mbuf: *const rte_mbuf = self.as_mbuf();
+                let mbuf = self.as_mbuf();
                 // Safety: The `mbuf` dereferences in this block are safe, as it is aligned and dereferenceable.
                 unsafe { (*mbuf).nb_segs != 1 }
             },
@@ -910,10 +894,10 @@ impl DemiBuffer {
 // Allocates the MetaData (plus the space for any directly attached data) for a new heap-allocated DemiBuffer.
 fn allocate_metadata_data<'a>(direct_data_size: u16) -> (&'a mut MaybeUninit<MetaData>, &'a mut [MaybeUninit<u8>]) {
     // We need space for the MetaData struct, plus any extra memory for directly attached data.
-    let amount: usize = size_of::<MetaData>() + direct_data_size as usize;
+    let amount = size_of::<MetaData>() + direct_data_size as usize;
 
     // Given our limited allocation amount (u16::MAX) and fixed alignment size, this unwrap cannot panic.
-    let layout: Layout = Layout::from_size_align(amount, CPU_DATA_CACHE_LINE_SIZE_IN_BYTES).unwrap();
+    let layout = Layout::from_size_align(amount, CPU_DATA_CACHE_LINE_SIZE_IN_BYTES).unwrap();
 
     // Safety: This is safe, as we check for a null return value before dereferencing "allocation".
     let allocation: *mut MaybeUninit<u8> = unsafe { alloc(layout) }.cast();
@@ -922,7 +906,7 @@ fn allocate_metadata_data<'a>(direct_data_size: u16) -> (&'a mut MaybeUninit<Met
     }
 
     // Safety: the slice is valid based on the constraints to the above allocation.
-    let buffer: &mut [MaybeUninit<u8>] = unsafe { slice::from_raw_parts_mut(allocation, amount) };
+    let buffer = unsafe { slice::from_raw_parts_mut(allocation, amount) };
 
     // Safety: buffer is aligned to CPU_DATA_CACHE_LINE_SIZE (which is overaligned for MetaData) and will always be no
     // smaller than MetaData.
@@ -945,17 +929,16 @@ unsafe fn split_buffer_for_metadata(
 
     // Safety: buffer is not null and properly aligned since it comes from a reference. MaybeUninit does not
     // require initialization.
-    let metadata: &mut MaybeUninit<MetaData> =
-        unsafe { &mut *metadata_buf.as_mut_ptr().cast::<MaybeUninit<MetaData>>() };
+    let metadata = unsafe { &mut *metadata_buf.as_mut_ptr().cast::<MaybeUninit<MetaData>>() };
 
     (metadata, data_buf)
 }
 
 // Frees the MetaData (plus the space for any directly attached data) for a heap-allocated DemiBuffer.
 fn free_metadata_data(mut buffer: NonNull<MetaData>) {
-    let (amount, pool): (usize, Option<Rc<MemoryPool>>) = {
+    let (amount, pool) = {
         // Safety: This is safe, as `buffer` is aligned, dereferenceable, and we don't let `metadata` escape this function.
-        let metadata: &mut MetaData = unsafe { buffer.as_mut() };
+        let metadata = unsafe { buffer.as_mut() };
 
         // Determine the size of the original allocation.
         // Note that this code currently assumes we're not using a "private data" feature akin to DPDK's.
@@ -977,8 +960,8 @@ fn free_metadata_data(mut buffer: NonNull<MetaData>) {
             // `buffer` will also be valid and dereferenceable. The `MetaData` buffer is created from
             // `PoolBuf::into_raw` by the constructor, so the buffer may be passed back to `PoolBuf::from_raw`.
             unsafe {
-                let pool_layout: Layout = pool.layout();
-                let mem_slice: &mut [MaybeUninit<u8>] =
+                let pool_layout = pool.layout();
+                let mem_slice =
                     slice::from_raw_parts_mut(buffer.cast::<MaybeUninit<u8>>().as_ptr(), pool_layout.size());
                 mem::drop(PoolBuf::from_raw(NonNull::from(mem_slice), pool));
             }
@@ -986,8 +969,8 @@ fn free_metadata_data(mut buffer: NonNull<MetaData>) {
 
         None => {
             // Convert buffer pointer into a raw allocation pointer.
-            let allocation: *mut u8 = buffer.cast::<u8>().as_ptr();
-            let layout: Layout = Layout::from_size_align(amount, CPU_DATA_CACHE_LINE_SIZE_IN_BYTES).unwrap();
+            let allocation = buffer.cast::<u8>().as_ptr();
+            let layout = Layout::from_size_align(amount, CPU_DATA_CACHE_LINE_SIZE_IN_BYTES).unwrap();
 
             // Safety: this is safe because we're using the same (de)allocator and Layout used for allocation.
             unsafe { dealloc(allocation, layout) };
@@ -1011,15 +994,15 @@ impl Clone for DemiBuffer {
 
                 // Allocate space for a new MetaData struct without any direct data.  This will become the clone.
                 // TODO: Pooled MetaData should be reallocated from the pool.
-                let (head, _): (&mut MaybeUninit<MetaData>, _) = allocate_metadata_data(0);
-                let mut temp: NonNull<MaybeUninit<MetaData>> = NonNull::from(&*head);
+                let (head, _) = allocate_metadata_data(0);
+                let mut temp = NonNull::from(&*head);
 
                 // This might be a chain of buffers.  If so, we'll walk the list.  There is always a first one.
-                let mut next_entry: Option<NonNull<MetaData>> = Some(self.get_ptr::<MetaData>());
+                let mut next_entry = Some(self.get_ptr::<MetaData>());
                 while let Some(mut entry) = next_entry {
                     // Safety: This is safe, as `entry` is aligned, dereferenceable, and the MetaData struct it
                     // points to is initialized.
-                    let original: &mut MetaData = unsafe { entry.as_mut() };
+                    let original = unsafe { entry.as_mut() };
 
                     // Remember the next entry in the chain.
                     next_entry = original.next;
@@ -1027,10 +1010,10 @@ impl Clone for DemiBuffer {
                     // Initialize the MetaData of the indirect buffer.
                     {
                         // Safety: Safe, as `temp` is aligned, dereferenceable, and `clone` isn't aliased in this block.
-                        let clone: &mut MaybeUninit<MetaData> = unsafe { temp.as_mut() };
+                        let clone = unsafe { temp.as_mut() };
 
                         // Next needs to point to the next entry in the cloned chain, not the original.
-                        let next: Option<NonNull<MetaData>> = if next_entry.is_none() {
+                        let next = if next_entry.is_none() {
                             None
                         } else {
                             // Allocate space for the next segment's MetaData struct.
@@ -1041,11 +1024,10 @@ impl Clone for DemiBuffer {
 
                         // Add indirect flag to clone for non-empty buffers. Empty buffers don't reference any data, so
                         // aren't indirect.
-                        let ol_flags: u64 =
-                            original.ol_flags | if original.buf_len != 0 { METADATA_F_INDIRECT } else { 0 };
+                        let ol_flags = original.ol_flags | if original.buf_len != 0 { METADATA_F_INDIRECT } else { 0 };
 
                         // Copy other relevant fields from our progenitor.
-                        let values: DemiMetaData = DemiMetaData {
+                        let values = DemiMetaData {
                             // Our cloned segment has only one reference (the one we return from this function).
                             refcnt: 1,
                             next,
@@ -1079,8 +1061,8 @@ impl Clone for DemiBuffer {
                     } else {
                         // Cloning an indirect buffer.  Increment the ref count on the direct buffer with the data.
                         // The direct buffer's MetaData struct should immediately preceed the actual data.
-                        let offset: isize = -(size_of::<MetaData>() as isize);
-                        let direct: &mut MetaData = unsafe {
+                        let offset = -(size_of::<MetaData>() as isize);
+                        let direct = unsafe {
                             // Safety: The offset call is safe as `offset` is known to be "in bounds" for buf_addr.
                             // Safety: The as_mut call is safe as the pointer is aligned, dereferenceable, and
                             // points to an initialized MetaData instance.
@@ -1093,10 +1075,9 @@ impl Clone for DemiBuffer {
 
                 // Embed the buffer type into the lower bits of the pointer.
                 // Safety: head is initialized by the above loop.
-                let head_ptr: NonNull<MetaData> = NonNull::from(unsafe { head.assume_init_mut() });
-                let tagged: NonNull<MetaData> = head_ptr.with_addr(head_ptr.addr() | Tag::Heap);
+                let head_ptr = NonNull::from(unsafe { head.assume_init_mut() });
+                let tagged = head_ptr.with_addr(head_ptr.addr() | Tag::Heap);
 
-                // Return the new DemiBuffer.
                 DemiBuffer {
                     tagged_ptr: tagged,
                     _phantom: PhantomData,
@@ -1104,16 +1085,16 @@ impl Clone for DemiBuffer {
             },
             #[cfg(feature = "libdpdk")]
             Tag::Dpdk => unsafe {
-                let mbuf_ptr: *mut rte_mbuf = self.as_mbuf();
+                let mbuf_ptr = self.as_mbuf();
                 // TODO: This allocates the clone MBuf from the same MBuf pool as the original MBuf.  Since the clone
                 // never has any direct data, we could potentially save memory by allocating these from a special pool.
                 // Safety: it is safe to dereference "mbuf_ptr" as it is known to point to a valid MBuf.
-                let mempool_ptr: *mut rte_mempool = (*mbuf_ptr).pool;
+                let mempool_ptr = (*mbuf_ptr).pool;
                 // Safety: rte_pktmbuf_clone is a FFI, which is safe to call since we call it with valid arguments and
                 // properly check its return value for null (failure) before using.
-                let mbuf_ptr_clone: *mut rte_mbuf = rte_pktmbuf_clone(mbuf_ptr, mempool_ptr);
+                let mbuf_ptr_clone = rte_pktmbuf_clone(mbuf_ptr, mempool_ptr);
                 if mbuf_ptr_clone.is_null() {
-                    let rte_errno: libc::c_int = rte_errno();
+                    let rte_errno = rte_errno();
                     panic!("failed to clone mbuf: {:?}", rte_errno);
                 }
 
@@ -1155,7 +1136,7 @@ impl Drop for DemiBuffer {
         match self.get_tag() {
             Tag::Heap => {
                 // This might be a chain of buffers.  If so, we'll walk the list.
-                let mut next_entry: Option<NonNull<MetaData>> = Some(self.get_ptr());
+                let mut next_entry = Some(self.get_ptr());
                 while let Some(mut entry) = next_entry {
                     // Safety: This is safe, as `entry` is aligned, dereferenceable, and the MetaData struct it points
                     // to is initialized.
@@ -1171,8 +1152,8 @@ impl Drop for DemiBuffer {
                         // See if the data is directly attached, or indirectly attached.
                         if metadata.ol_flags & METADATA_F_INDIRECT != 0 {
                             // This is an indirect buffer.  Find the direct buffer that holds the actual data.
-                            let offset: isize = -(size_of::<MetaData>() as isize);
-                            let direct: &mut MetaData = unsafe {
+                            let offset = -(size_of::<MetaData>() as isize);
+                            let direct = unsafe {
                                 // Safety: The offset call is safe as `offset` is known to be "in bounds" for buf_addr.
                                 // Safety: The as_mut call is safe as the pointer is aligned, dereferenceable, and
                                 // points to an initialized MetaData instance.
@@ -1192,7 +1173,7 @@ impl Drop for DemiBuffer {
 
                                 // Convert to NonNull<MetaData> type.
                                 // Safety: The NonNull::new_unchecked call is safe, as `direct` is known to be non-null.
-                                let allocation: NonNull<MetaData> = unsafe { NonNull::new_unchecked(direct as *mut _) };
+                                let allocation = unsafe { NonNull::new_unchecked(direct as *mut _) };
 
                                 // Free the direct buffer.
                                 free_metadata_data(allocation);
@@ -1206,7 +1187,7 @@ impl Drop for DemiBuffer {
             },
             #[cfg(feature = "libdpdk")]
             Tag::Dpdk => {
-                let mbuf_ptr: *mut rte_mbuf = self.as_mbuf();
+                let mbuf_ptr = self.as_mbuf();
                 // Safety: This is safe, as mbuf_ptr does indeed point to a valid MBuf.
                 unsafe {
                     // Note: This DPDK routine properly handles MBuf chains, as well as indirect, and external MBufs.
@@ -1223,21 +1204,20 @@ impl TryFrom<&[u8]> for DemiBuffer {
 
     fn try_from(slice: &[u8]) -> Result<Self, Self::Error> {
         // Check size of the slice to ensure a single DemiBuffer can hold it.
-        let size: u16 = if slice.len() < u16::MAX as usize {
+        let size = if slice.len() < u16::MAX as usize {
             slice.len() as u16
         } else {
             return Err(Fail::new(libc::EINVAL, "slice is larger than a DemiBuffer can hold"));
         };
 
-        // Allocate some memory off the heap.
-        let (temp, buffer): (&mut MaybeUninit<MetaData>, &mut [MaybeUninit<u8>]) = allocate_metadata_data(size);
+        let (temp, buffer) = allocate_metadata_data(size);
 
         // Point buf_addr at the newly allocated data space (if any).
-        let buf_addr: *mut u8 = if size == 0 {
+        let buf_addr = if size == 0 {
             // No direct data, so don't point buf_addr at anything.
             null_mut()
         } else {
-            let buf_addr: *mut u8 = buffer.as_mut_ptr().cast();
+            let buf_addr = buffer.as_mut_ptr().cast();
 
             // Copy the data from the slice into the DemiBuffer.
             // Safety: This is safe, as the src/dst argument pointers are valid for reads/writes of `size` bytes,
@@ -1247,7 +1227,7 @@ impl TryFrom<&[u8]> for DemiBuffer {
         };
 
         // Set field values as appropriate.
-        let metadata: NonNull<MetaData> = NonNull::from(temp.write(MetaData::new(DemiMetaData {
+        let metadata = NonNull::from(temp.write(MetaData::new(DemiMetaData {
             buf_addr,
             data_off: 0,
             refcnt: 1,
@@ -1261,9 +1241,8 @@ impl TryFrom<&[u8]> for DemiBuffer {
         })));
 
         // Embed the buffer type into the lower bits of the pointer.
-        let tagged: NonNull<MetaData> = metadata.with_addr(metadata.addr() | Tag::Heap);
+        let tagged = metadata.with_addr(metadata.addr() | Tag::Heap);
 
-        // Return the new DemiBuffer.
         Ok(DemiBuffer {
             tagged_ptr: tagged,
             _phantom: PhantomData,
@@ -1283,43 +1262,43 @@ mod tests {
     #[test]
     fn basic() -> Result<()> {
         // Create a new (heap-allocated) `DemiBuffer` with a 42 byte data area.
-        let mut buf: DemiBuffer = DemiBuffer::new(42);
-        crate::ensure_eq!(buf.is_heap_allocated(), true);
-        crate::ensure_eq!(buf.len(), 42);
+        let mut buffer = DemiBuffer::new(42);
+        crate::ensure_eq!(buffer.is_heap_allocated(), true);
+        crate::ensure_eq!(buffer.len(), 42);
 
         // Remove 7 bytes from the beginning of the data area.  Length should now be 35.
-        crate::ensure_eq!(buf.adjust(7).is_ok(), true);
-        crate::ensure_eq!(buf.len(), 35);
+        crate::ensure_eq!(buffer.adjust(7).is_ok(), true);
+        crate::ensure_eq!(buffer.len(), 35);
 
         // Remove 7 bytes from the end of the data area.  Length should now be 28.
-        crate::ensure_eq!(buf.trim(7).is_ok(), true);
-        crate::ensure_eq!(buf.len(), 28);
+        crate::ensure_eq!(buffer.trim(7).is_ok(), true);
+        crate::ensure_eq!(buffer.len(), 28);
 
         // Verify bad requests actually fail.
-        crate::ensure_eq!(buf.adjust(30).is_err(), true);
-        crate::ensure_eq!(buf.trim(30).is_err(), true);
-        crate::ensure_eq!(buf.prepend(30).is_err(), true);
+        crate::ensure_eq!(buffer.adjust(30).is_err(), true);
+        crate::ensure_eq!(buffer.trim(30).is_err(), true);
+        crate::ensure_eq!(buffer.prepend(30).is_err(), true);
 
         Ok(())
     }
 
     #[test]
     fn headroom() -> Result<()> {
-        let mut buf: DemiBuffer = DemiBuffer::new_with_headroom(0, 42);
-        crate::ensure_eq!(buf.is_heap_allocated(), true);
-        crate::ensure_eq!(buf.len(), 0);
+        let mut buffer = DemiBuffer::new_with_headroom(0, 42);
+        crate::ensure_eq!(buffer.is_heap_allocated(), true);
+        crate::ensure_eq!(buffer.len(), 0);
 
         // Add 7 bytes to the beginning of the data area.  Length should now be 7.
-        crate::ensure_eq!(buf.prepend(7).is_ok(), true);
-        crate::ensure_eq!(buf.len(), 7);
+        crate::ensure_eq!(buffer.prepend(7).is_ok(), true);
+        crate::ensure_eq!(buffer.len(), 7);
 
         // Remove 7 bytes from the end of the data area.  Length should now be 0.
-        crate::ensure_eq!(buf.trim(7).is_ok(), true);
-        crate::ensure_eq!(buf.len(), 0);
+        crate::ensure_eq!(buffer.trim(7).is_ok(), true);
+        crate::ensure_eq!(buffer.len(), 0);
 
         // Verify bad requests actually fail.
-        crate::ensure_eq!(buf.adjust(30).is_err(), true);
-        crate::ensure_eq!(buf.trim(30).is_err(), true);
+        crate::ensure_eq!(buffer.adjust(30).is_err(), true);
+        crate::ensure_eq!(buffer.trim(30).is_err(), true);
 
         Ok(())
     }
@@ -1328,36 +1307,34 @@ mod tests {
     #[test]
     fn advanced() -> Result<()> {
         fn clone_me(buf: DemiBuffer) -> DemiBuffer {
-            // Clone and return the buffer.
             buf.clone()
             // `buf` should be dropped here.
         }
 
         fn convert_to_token(buf: DemiBuffer) -> NonNull<u8> {
-            // Convert the buffer into a raw token.
             buf.into_raw()
             // `buf` was consumed by into_raw(), so it isn't dropped here.  The token holds the reference.
         }
 
         // Create a buffer and clone it.
-        let fortytwo: DemiBuffer = DemiBuffer::new(42);
+        let fortytwo = DemiBuffer::new(42);
         crate::ensure_eq!(fortytwo.len(), 42);
-        let clone: DemiBuffer = clone_me(fortytwo);
+        let clone = clone_me(fortytwo);
         crate::ensure_eq!(clone.len(), 42);
 
         // Convert a buffer into a raw token and bring it back.
-        let token: NonNull<u8> = convert_to_token(clone);
-        let reconstituted: DemiBuffer = unsafe { DemiBuffer::from_raw(token) };
+        let token = convert_to_token(clone);
+        let reconstituted = unsafe { DemiBuffer::from_raw(token) };
         crate::ensure_eq!(reconstituted.len(), 42);
 
         // Create a zero-sized buffer.
-        let zero: DemiBuffer = DemiBuffer::new(0);
+        let zero = DemiBuffer::new(0);
         crate::ensure_eq!(zero.len(), 0);
         // Clone it, and keep the original around.
-        let clone: DemiBuffer = zero.clone();
+        let clone = zero.clone();
         crate::ensure_eq!(clone.len(), 0);
         // Clone the clone, and drop the first clone.
-        let another: DemiBuffer = clone_me(clone);
+        let another = clone_me(clone);
         crate::ensure_eq!(another.len(), 0);
 
         Ok(())
@@ -1367,10 +1344,10 @@ mod tests {
     #[test]
     fn split_back() -> Result<()> {
         // Create a new (heap-allocated) `DemiBuffer` by copying a slice of a `String`.
-        let str: &'static str = "word one two three four five six seven eight nine";
-        let slice: &[u8] = str.as_bytes();
+        let str = "word one two three four five six seven eight nine";
+        let slice = str.as_bytes();
         // `DemiBuffer::from_slice` shouldn't fail, as we passed it a valid slice of a `DemiBuffer`-allowable length.
-        let mut buf: DemiBuffer = match DemiBuffer::from_slice(slice) {
+        let mut buffer = match DemiBuffer::from_slice(slice) {
             Ok(buf) => buf,
             Err(e) => anyhow::bail!(
                 "DemiBuffer::from_slice should return a DemiBuffer for this slice: {}",
@@ -1379,37 +1356,37 @@ mod tests {
         };
 
         // The `DemiBuffer` data length should equal the original string length.
-        crate::ensure_eq!(buf.len(), str.len());
+        crate::ensure_eq!(buffer.len(), str.len());
 
         // The `DemiBuffer` data (content) should match that of the original string.
-        crate::ensure_eq!(&*buf, slice);
+        crate::ensure_eq!(&*buffer, slice);
 
         // Split this `DemiBuffer` into two.
         // `DemiBuffer::split_back` shouldn't fail, as we passed it a valid offset.
-        let mut split_buf: DemiBuffer = match buf.split_back(24) {
+        let mut split_buf = match buffer.split_back(24) {
             Ok(buf) => buf,
             Err(e) => anyhow::bail!("DemiBuffer::split_back shouldn't fail for this offset: {}", e),
         };
-        crate::ensure_eq!(buf.len(), 24);
+        crate::ensure_eq!(buffer.len(), 24);
         crate::ensure_eq!(split_buf.len(), 25);
 
         // Compare contents.
-        crate::ensure_eq!(&buf[..], &str.as_bytes()[..24]);
+        crate::ensure_eq!(&buffer[..], &str.as_bytes()[..24]);
         crate::ensure_eq!(&split_buf[..], &str.as_bytes()[24..]);
 
         // Split another `DemiBuffer` off of the already-split-off one.
         // `DemiBuffer::split_back` shouldn't fail, as we passed it a valid offset.
-        let another_buf: DemiBuffer = match split_buf.split_back(9) {
+        let another_buf = match split_buf.split_back(9) {
             Ok(buf) => buf,
             Err(e) => anyhow::bail!("DemiBuffer::split_back shouldn't fail for this offset: {}", e),
         };
 
-        crate::ensure_eq!(buf.len(), 24);
+        crate::ensure_eq!(buffer.len(), 24);
         crate::ensure_eq!(split_buf.len(), 9);
         crate::ensure_eq!(another_buf.len(), 16);
 
         // Compare contents (including the unaffected original to ensure that it is actually unaffected).
-        crate::ensure_eq!(&buf[..], &str.as_bytes()[..24]);
+        crate::ensure_eq!(&buffer[..], &str.as_bytes()[..24]);
         crate::ensure_eq!(&split_buf[..], &str.as_bytes()[24..33]);
         crate::ensure_eq!(&another_buf[..], &str.as_bytes()[33..]);
 
@@ -1420,10 +1397,10 @@ mod tests {
     #[test]
     fn split_front() -> Result<()> {
         // Create a new (heap-allocated) `DemiBuffer` by copying a slice of a `String`.
-        let str: &'static str = "word one two three four five six seven eight nine";
-        let slice: &[u8] = str.as_bytes();
+        let str = "word one two three four five six seven eight nine";
+        let slice = str.as_bytes();
         // `DemiBuffer::from_slice` shouldn't fail, as we passed it a valid slice of a `DemiBuffer`-allowable length.
-        let mut buf: DemiBuffer = match DemiBuffer::from_slice(slice) {
+        let mut buffer = match DemiBuffer::from_slice(slice) {
             Ok(buf) => buf,
             Err(e) => anyhow::bail!(
                 "DemiBuffer::from_slice should return a DemiBuffer for this slice: {}",
@@ -1432,36 +1409,36 @@ mod tests {
         };
 
         // The `DemiBuffer` data length should equal the original string length.
-        crate::ensure_eq!(buf.len(), str.len());
+        crate::ensure_eq!(buffer.len(), str.len());
 
         // The `DemiBuffer` data (content) should match that of the original string.
-        crate::ensure_eq!(&*buf, slice);
+        crate::ensure_eq!(&*buffer, slice);
 
         // Split this `DemiBuffer` into two.
         // `DemiBuffer::split_off` shouldn't fail, as we passed it a valid offset.
-        let mut split_buf: DemiBuffer = match buf.split_front(24) {
+        let mut split_buf = match buffer.split_front(24) {
             Ok(buf) => buf,
             Err(e) => anyhow::bail!("DemiBuffer::split_off shouldn't fail for this offset: {}", e),
         };
-        crate::ensure_eq!(buf.len(), 25);
+        crate::ensure_eq!(buffer.len(), 25);
         crate::ensure_eq!(split_buf.len(), 24);
 
         // Compare contents.
-        crate::ensure_eq!(&buf[..], &str.as_bytes()[24..]);
+        crate::ensure_eq!(&buffer[..], &str.as_bytes()[24..]);
         crate::ensure_eq!(&split_buf[..], &str.as_bytes()[..24]);
 
         // Split another `DemiBuffer` off of the already-split-off one.
         // `DemiBuffer::split_off` shouldn't fail, as we passed it a valid offset.
-        let another_buf: DemiBuffer = match split_buf.split_front(9) {
+        let another_buf = match split_buf.split_front(9) {
             Ok(buf) => buf,
             Err(e) => anyhow::bail!("DemiBuffer::split_off shouldn't fail for this offset: {}", e),
         };
-        crate::ensure_eq!(buf.len(), 25);
+        crate::ensure_eq!(buffer.len(), 25);
         crate::ensure_eq!(split_buf.len(), 15);
         crate::ensure_eq!(another_buf.len(), 9);
 
         // Compare contents (including the unaffected original to ensure that it is actually unaffected).
-        crate::ensure_eq!(&buf[..], &str.as_bytes()[24..]);
+        crate::ensure_eq!(&buffer[..], &str.as_bytes()[24..]);
         crate::ensure_eq!(&split_buf[..], &str.as_bytes()[9..24]);
         crate::ensure_eq!(&another_buf[..], &str.as_bytes()[..9]);
 

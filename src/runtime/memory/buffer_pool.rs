@@ -5,8 +5,6 @@
 // Imports
 //======================================================================================================================
 
-use std::{alloc::LayoutError, num::NonZeroUsize, rc::Rc};
-
 use crate::{
     pal::CPU_DATA_CACHE_LINE_SIZE_IN_BYTES,
     runtime::memory::{
@@ -14,6 +12,7 @@ use crate::{
         memory_pool::MemoryPool,
     },
 };
+use ::std::{alloc::LayoutError, num::NonZeroUsize, rc::Rc};
 
 //======================================================================================================================
 // Structures
@@ -48,26 +47,22 @@ impl BufferPool {
     }
 }
 
-// Unit tests for `BufferPool` type.
 #[cfg(test)]
 mod tests {
-    use std::{mem::MaybeUninit, num::NonZeroUsize, ptr::NonNull};
-
-    use ::anyhow::Result;
-    use anyhow::{anyhow, ensure};
-
     use crate::{
         ensure_eq,
         runtime::memory::{BufferPool, DemiBuffer, MetaData},
     };
+    use ::anyhow::{anyhow, ensure, Result};
+    use ::std::{mem::MaybeUninit, num::NonZeroUsize, ptr::NonNull};
 
     #[test]
     fn get_buffer_from_pool() -> Result<()> {
         const BUFFER_SIZE: usize = 0x1000;
         const PAGE_SIZE: usize = 0x80000000;
-        let mut buffer: Vec<MaybeUninit<u8>> = Vec::with_capacity(BUFFER_SIZE);
+        let mut buffer = Vec::with_capacity(BUFFER_SIZE);
         buffer.resize(buffer.capacity(), MaybeUninit::uninit());
-        let pool: BufferPool = BufferPool::new(u16::try_from(buffer.len() - std::mem::size_of::<MetaData>())?)?;
+        let pool = BufferPool::new(u16::try_from(buffer.len() - std::mem::size_of::<MetaData>())?)?;
 
         unsafe {
             pool.pool().populate(
@@ -78,7 +73,7 @@ mod tests {
 
         ensure_eq!(pool.pool().len(), 1);
 
-        let buffer: DemiBuffer = DemiBuffer::new_in_pool(&pool).ok_or(anyhow!("could not create buffer"))?;
+        let buffer = DemiBuffer::new_in_pool(&pool).ok_or(anyhow!("could not create buffer"))?;
 
         ensure_eq!(buffer.len(), BUFFER_SIZE - std::mem::size_of::<MetaData>());
         ensure!(pool.pool().is_empty());

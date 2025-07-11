@@ -70,7 +70,7 @@ pub fn sgaalloc<M: DemiMemoryAllocator>(size: usize, mem_alloc: &M) -> Result<de
     // Check the sizes before allocating anything.
     // We can't allocate a zero-sized buffer.
     if size == 0 {
-        let cause: &'static str = "cannot allocate a zero-sized buffer";
+        let cause = "cannot allocate a zero-sized buffer";
         error!("sgaalloc(): {}", cause);
         return Err(Fail::new(libc::EINVAL, cause));
     }
@@ -165,7 +165,7 @@ fn check_demi_buf_limits(sga_seg: &demi_sgaseg_t, clone: &mut DemiBuffer) -> Res
         }
 
         // Calculate the amount the new starting address is ahead of the old.  And then adjust `clone` to match.
-        let adjustment_amount: usize = sga_data.addr() - clone_data.addr();
+        let adjustment_amount = sga_data.addr() - clone_data.addr();
         clone.adjust(adjustment_amount)?;
 
         // An adjustment above would have reduced clone.len() by the adjustment amount.
@@ -173,7 +173,7 @@ fn check_demi_buf_limits(sga_seg: &demi_sgaseg_t, clone: &mut DemiBuffer) -> Res
         debug_assert_eq!(clone_len, clone.len());
 
         // Trim the clone down to size.
-        let trim_amount: usize = clone_len - sga_len;
+        let trim_amount = clone_len - sga_len;
         clone.trim(trim_amount)?;
     }
     Ok(())
