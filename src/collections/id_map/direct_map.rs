@@ -27,9 +27,9 @@ impl<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Cop
 
     #[inline(always)]
     pub fn insert_with_new_id(&mut self, internal_id: I) -> Option<E> {
-        let higher_order_bits: u64 = self.generate_id() as u64;
+        let higher_order_bits = self.generate_id() as u64;
         // Use random number for higher order bits and the offset for lower order bits.
-        let external_id: u64 = higher_order_bits << 32 | <I as Into<u64>>::into(internal_id);
+        let external_id = higher_order_bits << 32 | <I as Into<u64>>::into(internal_id);
         Some(external_id.into())
     }
 
@@ -39,7 +39,7 @@ impl<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Cop
     }
 
     fn mask_id(external_id: &E) -> I {
-        let masked_id: u32 = <E as Into<u64>>::into(*external_id) as u32;
+        let masked_id = <E as Into<u64>>::into(*external_id) as u32;
         <I as From<u64>>::from(masked_id as u64)
     }
 }
