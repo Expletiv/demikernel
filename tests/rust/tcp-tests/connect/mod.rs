@@ -73,7 +73,7 @@ fn connect_unbound_socket(libos: &mut LibOS, remote: &SocketAddr) -> Result<()> 
 
     // Succeed to close socket.
     libos.close(sockqd)?;
-    // Poll again to check that the connect() co-routine returns an err, either canceled or refused.
+    // Wait again to check that the connect() co-routine returns an err, either canceled or refused.
     match libos.wait(qt, None) {
         Ok(qr) if check_for_network_error(&qr) => Ok(()),
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!(
@@ -104,7 +104,7 @@ fn connect_to_bad_remote(libos: &mut LibOS) -> Result<()> {
     // Succeed to connect socket.
     let qt: QToken = libos.connect(sockqd, remote)?;
 
-    // Poll for enough time to get the connection refused.
+    // Wait for enough time to get the connection refused.
     match libos.wait(qt, Some(Duration::from_secs(75))) {
         Ok(qr) if check_for_network_error(&qr) => {},
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!(
@@ -139,7 +139,7 @@ fn connect_bound_socket(libos: &mut LibOS, local: &SocketAddr, remote: &SocketAd
     // Succeed to close socket.
     libos.close(sockqd)?;
 
-    // Poll again to check that the connect() co-routine returns an err, either canceled or refused.
+    // Wait again to check that the connect() co-routine returns an err, either canceled or refused.
     match libos.wait(qt, None) {
         Ok(qr) if check_for_network_error(&qr) => Ok(()),
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!(
@@ -192,7 +192,7 @@ fn connect_connecting_socket(libos: &mut LibOS, remote: &SocketAddr) -> Result<(
     // Succeed to close socket.
     libos.close(sockqd)?;
 
-    // Poll again to check that the connect() co-routine returns an err, either canceled or refused.
+    // Wait again to check that the connect() co-routine returns an err, either canceled or refused.
     match libos.wait(qt, None) {
         Ok(qr) if check_for_network_error(&qr) => Ok(()),
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!(
@@ -228,7 +228,7 @@ fn connect_accepting_socket(libos: &mut LibOS, local: &SocketAddr, remote: &Sock
     // Succeed to close socket.
     libos.close(sockqd)?;
 
-    // Poll again to check that the accept() co-routine completed with an error and was properly canceled.
+    // Wait again to check that the accept() co-routine completed with an error and was properly canceled.
     match libos.wait(qt, None) {
         Ok(qr) if check_for_network_error(&qr) => Ok(()),
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!(

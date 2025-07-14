@@ -182,7 +182,6 @@ impl SharedEngine {
         self.libos.get_transport().clone()
     }
 
-    // Just poll the scheduler to process some packets.
     fn run_scheduler(&mut self) {
         match self.get_runtime().wait_any(&[], Duration::ZERO) {
             Ok(_) => unreachable!("Should not have completed a task without qtokens passed in"),

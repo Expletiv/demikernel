@@ -83,11 +83,11 @@ impl SharedInetStack {
             runtime: runtime.clone(),
             layer4_endpoint,
         }));
-        runtime.insert_io_polling_coroutine("bgc::inetstack::poll", Box::pin(me.clone().poll().fuse()))?;
+        runtime.schedule_polling_coroutine("bgc::inetstack::poll", Box::pin(me.clone().poll().fuse()))?;
         Ok(me)
     }
 
-    /// Scheduler will poll all futures that are ready to make progress.
+    /// Scheduler will run all futures that are ready to make progress.
     /// Then ask the runtime to receive new data which we will forward to the engine to parse and
     /// route to the correct protocol.
     pub async fn poll(mut self) {

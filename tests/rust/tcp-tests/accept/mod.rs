@@ -106,7 +106,7 @@ fn accept_listening_socket(libos: &mut LibOS, local: &SocketAddr) -> Result<()> 
     // Succeed to close socket.
     libos.close(sockqd)?;
 
-    // Poll again to check that the accept() returns an err.
+    // Wait again to check that the accept() returns an err.
     match libos.wait(qt, None) {
         Ok(qr) if check_for_network_error(&qr) => {},
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!(
@@ -140,7 +140,7 @@ fn accept_connecting_socket(libos: &mut LibOS, remote: &SocketAddr) -> Result<()
     // Succeed to close socket.
     libos.close(sockqd)?;
 
-    // Poll again to check that the connect() returns an err.
+    // Wait again to check that the connect() returns an err.
     match libos.wait(qt, None) {
         Ok(qr) if check_for_network_error(&qr) => Ok(()),
         Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_FAILED => anyhow::bail!(

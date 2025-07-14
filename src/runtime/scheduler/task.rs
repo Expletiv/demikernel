@@ -43,9 +43,9 @@ use ::std::{
 /// Task runs a single coroutine to completion and stores the result for later. Thus, it implements Future but
 /// never directly returns anything.
 pub trait Task: FusedFuture<Output = ()> + Unpin + Any + Debug {
-    fn get_name(&self) -> &'static str;
+    fn name(&self) -> &'static str;
     fn as_any(self: Box<Self>) -> Box<dyn Any>;
-    fn get_id(&self) -> Option<u64>;
+    fn id(&self) -> Option<u64>;
     fn set_id(&mut self, id: u64);
 }
 
@@ -108,7 +108,7 @@ impl<R: Unpin + Clone + Any> TryFrom<Box<dyn Any>> for TaskWithResult<R> {
 
 impl<R: Unpin + Clone + Any> Task for TaskWithResult<R> {
     // The coroutine type that this task will run.
-    fn get_name(&self) -> &'static str {
+    fn name(&self) -> &'static str {
         self.name
     }
 
@@ -116,7 +116,7 @@ impl<R: Unpin + Clone + Any> Task for TaskWithResult<R> {
         self
     }
 
-    fn get_id(&self) -> Option<u64> {
+    fn id(&self) -> Option<u64> {
         self.task_id
     }
 
@@ -127,7 +127,7 @@ impl<R: Unpin + Clone + Any> Task for TaskWithResult<R> {
 
 impl<R: Unpin + Clone + Any> Debug for TaskWithResult<R> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.get_name())
+        f.write_str(self.name())
     }
 }
 
@@ -137,12 +137,12 @@ impl<R: Unpin + Clone + Any> Future for TaskWithResult<R> {
 
     /// Polls the coroutine.
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<()> {
-        let self_: &mut Self = self.get_mut();
+        let self_ = self.get_mut();
         if self_.result.is_some() {
             debug!("Task cancelled before complete");
             return Poll::Ready(());
         }
-        let result: <Self as TaskWith>::ResultType = match Future::poll(self_.coroutine.as_mut(), ctx) {
+        let result = match Future::poll(self_.coroutine.as_mut(), ctx) {
             Poll::Pending => return Poll::Pending,
             Poll::Ready(r) => r,
         };

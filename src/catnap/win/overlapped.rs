@@ -474,9 +474,7 @@ mod tests {
         })
         .fuse();
 
-        let server_task = runtime
-            .insert_nonpolling_coroutine("ioc_server", Box::pin(server))
-            .unwrap();
+        let server_task = runtime.schedule_coroutine("ioc_server", Box::pin(server)).unwrap();
         post_completion(&iocp, overlapped.as_mut().marshal(), COMPLETION_KEY)?;
 
         iocp.process_events()?;
@@ -584,7 +582,7 @@ mod tests {
         );
 
         let mut runtime = SharedDemiRuntime::default();
-        let server_task = runtime.insert_nonpolling_coroutine("ioc_server", server).unwrap();
+        let server_task = runtime.schedule_coroutine("ioc_server", server).unwrap();
 
         let mut wait_for_state = |state| -> Result<(), Fail> {
             while server_state_view.load(Ordering::Relaxed) < state {
@@ -689,9 +687,7 @@ mod tests {
         .fuse();
 
         let mut runtime = SharedDemiRuntime::default();
-        let server_task = runtime
-            .insert_nonpolling_coroutine("ioc_server", Box::pin(server))
-            .unwrap();
+        let server_task = runtime.schedule_coroutine("ioc_server", Box::pin(server)).unwrap();
 
         ensure_eq!(
             server_state_view.load(Ordering::Relaxed),
@@ -702,7 +698,6 @@ mod tests {
         let iocp_ref = unsafe { &mut *iocp.get() };
         iocp_ref.process_events()?;
 
-        // Poll the runtime again, which
         let result = loop {
             // Move time forward, which should time out the operation.
             runtime.advance_clock(Instant::now());

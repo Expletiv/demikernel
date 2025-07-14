@@ -71,7 +71,7 @@ impl WakerPage {
     /// The reference count for the target page is left unmodified.
     pub fn clear(&self, ix: usize) {
         debug_assert!(ix < WAKER_BIT_LENGTH);
-        let mask: u64 = !(1 << ix);
+        let mask = !(1 << ix);
         self.notified.fetch_and(mask);
     }
 
@@ -90,7 +90,7 @@ impl WakerPage {
 
     /// Gets the reference count of the target [WakerPage].
     #[cfg(test)]
-    pub fn refcount_get(&self) -> u64 {
+    pub fn refcount(&self) -> u64 {
         self.refcount.load()
     }
 }
@@ -129,27 +129,27 @@ mod tests {
 
     #[bench]
     fn notify_bench(b: &mut Bencher) {
-        let pg: WakerPage = WakerPage::default();
-        let x: usize = rand::thread_rng().gen_range(0..WAKER_BIT_LENGTH);
+        let page = WakerPage::default();
+        let x = rand::thread_rng().gen_range(0..WAKER_BIT_LENGTH);
 
         b.iter(|| {
-            let ix: usize = black_box(x);
-            pg.notify(ix);
+            let ix = black_box(x);
+            page.notify(ix);
         });
     }
 
     #[bench]
     fn take_notified_bench(b: &mut Bencher) {
-        let pg: WakerPage = WakerPage::default();
+        let page = WakerPage::default();
 
         // Initialize 8 random bits.
         for _ in 0..8 {
-            let ix: usize = rand::thread_rng().gen_range(0..WAKER_BIT_LENGTH);
-            pg.initialize(ix);
+            let ix = rand::thread_rng().gen_range(0..WAKER_BIT_LENGTH);
+            page.initialize(ix);
         }
 
         b.iter(|| {
-            let x: u64 = pg.take_notified();
+            let x = page.take_notified();
             black_box(x);
         });
     }
