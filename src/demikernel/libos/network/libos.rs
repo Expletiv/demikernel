@@ -162,7 +162,7 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
             let coroutine = Box::pin(self.clone().accept_coroutine(qd).fuse());
             self.runtime
                 .clone()
-                .insert_coroutine("ioc::network::libos::accept", coroutine)
+                .schedule_coroutine("ioc::network::libos::accept", coroutine)
         };
 
         queue.accept(coroutine_constructor)
@@ -213,7 +213,7 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
             let coroutine = Box::pin(self.clone().connect_coroutine(qd, remote).fuse());
             self.runtime
                 .clone()
-                .insert_coroutine("ioc::network::libos::connect", coroutine)
+                .schedule_coroutine("ioc::network::libos::connect", coroutine)
         };
 
         queue.connect(coroutine_constructor)
@@ -253,7 +253,7 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
             let coroutine = Box::pin(self.clone().close_coroutine(qd).fuse());
             self.runtime
                 .clone()
-                .insert_coroutine("ioc::network::libos::close", coroutine)
+                .schedule_coroutine("ioc::network::libos::close", coroutine)
         };
 
         queue.close(coroutine_constructor)
@@ -322,7 +322,7 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
             let coroutine = Box::pin(self.clone().push_coroutine(qd, bufs, None).fuse());
             self.runtime
                 .clone()
-                .insert_coroutine("ioc::network::libos::push", coroutine)
+                .schedule_coroutine("ioc::network::libos::push", coroutine)
         };
 
         queue.push(coroutine_constructor)
@@ -370,7 +370,7 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
             let coroutine = Box::pin(self.clone().push_coroutine(qd, bufs, Some(remote)).fuse());
             self.runtime
                 .clone()
-                .insert_coroutine("ioc::network::libos::pushto", coroutine)
+                .schedule_coroutine("ioc::network::libos::pushto", coroutine)
         };
 
         queue.push(coroutine_constructor)
@@ -390,7 +390,7 @@ impl<T: NetworkTransport> SharedNetworkLibOS<T> {
             let coroutine = Box::pin(self.clone().pop_coroutine(qd, size).fuse());
             self.runtime
                 .clone()
-                .insert_coroutine("ioc::network::libos::pop", coroutine)
+                .schedule_coroutine("ioc::network::libos::pop", coroutine)
         };
 
         queue.pop(coroutine_constructor)

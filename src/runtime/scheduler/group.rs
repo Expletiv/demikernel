@@ -17,7 +17,7 @@ use crate::{
     runtime::scheduler::{
         page::{WakerPageRef, WakerRef},
         waker64::{WAKER_BIT_LENGTH, WAKER_BIT_LENGTH_SHIFT},
-        InsertResult, Task,
+        ScheduleResult, Task,
     },
 };
 use ::bit_iter::BitIter;
@@ -49,7 +49,6 @@ pub struct TaskGroup {
 //======================================================================================================================
 
 impl TaskGroup {
-    /// Remove task by handle.
     pub fn remove(&mut self, idx: usize) -> Option<Box<dyn Task>> {
         let (page_idx, offset) = self.locate(idx)?;
         self.pages[page_idx].clear(offset);
@@ -68,7 +67,7 @@ impl TaskGroup {
         }
     }
 
-    pub fn insert(&mut self, task: Box<dyn Task>) -> Option<InsertResult> {
+    pub fn schedule(&mut self, task: Box<dyn Task>) -> Option<ScheduleResult> {
         let name = task.name();
         let idx = self.tasks.insert(task)?;
 
@@ -77,11 +76,11 @@ impl TaskGroup {
         let (page_idx, offset) = self.locate(idx)?;
         self.pages[page_idx].initialize(offset);
 
-        trace!("insert(): name={:?}, idx={:?}", name, idx);
+        trace!("schedule(): name={:?}, idx={:?}", name, idx);
 
         match self.run_task(idx) {
-            Some(task) => Some(InsertResult::Completed(task)),
-            None => Some(InsertResult::Inserted(idx.into())),
+            Some(task) => Some(ScheduleResult::Completed(task)),
+            None => Some(ScheduleResult::Scheduled(idx.into())),
         }
     }
 

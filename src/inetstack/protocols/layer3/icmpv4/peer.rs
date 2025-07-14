@@ -99,7 +99,7 @@ impl SharedIcmpv4Peer {
             rng,
             inflight: HashMap::<(u16, u16), InflightRequest>::new(),
         }));
-        runtime.insert_coroutine("bgc::inetstack::icmp::background", Box::pin(peer.clone().poll().fuse()))?;
+        runtime.schedule_coroutine("bgc::inetstack::icmp::background", Box::pin(peer.clone().poll().fuse()))?;
         Ok(peer)
     }
 

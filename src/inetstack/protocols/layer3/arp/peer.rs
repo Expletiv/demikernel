@@ -82,7 +82,7 @@ impl SharedArpPeer {
             recv_queue: AsyncQueue::<DemiBuffer>::default(),
         }));
         // This is a future returned by the async function.
-        runtime.insert_coroutine("bgc::inetstack::arp::background", Box::pin(peer.clone().poll().fuse()))?;
+        runtime.schedule_coroutine("bgc::inetstack::arp::background", Box::pin(peer.clone().poll().fuse()))?;
         Ok(peer.clone())
     }
 

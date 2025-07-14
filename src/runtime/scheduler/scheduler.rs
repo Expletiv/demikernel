@@ -39,10 +39,10 @@ pub struct SchedulerId(pub usize);
 #[derive(Clone, Default)]
 pub struct SharedScheduler(SharedObject<Scheduler>);
 
-/// Possible outcomes for inserting a task.
+/// Possible outcomes for scheduling a task.
 #[derive(Debug)]
-pub enum InsertResult {
-    Inserted(SchedulerId),
+pub enum ScheduleResult {
+    Scheduled(SchedulerId),
     Completed(Box<dyn Task>),
 }
 
@@ -59,8 +59,8 @@ impl Scheduler {
         self.groups.get_mut(id.into())
     }
 
-    pub fn insert<T: Task>(&mut self, group_id: SchedulerId, task: T) -> Option<InsertResult> {
-        self.get_group_mut(group_id)?.insert(Box::new(task))
+    pub fn schedule<T: Task>(&mut self, group_id: SchedulerId, task: T) -> Option<ScheduleResult> {
+        self.get_group_mut(group_id)?.schedule(Box::new(task))
     }
 
     pub fn get_task_mut(&mut self, group_id: SchedulerId, task_id: SchedulerId) -> Option<Pin<&mut Box<dyn Task>>> {
@@ -128,7 +128,7 @@ impl From<SchedulerId> for u64 {
 #[cfg(test)]
 mod tests {
     use crate::runtime::scheduler::{
-        scheduler::{InsertResult, Scheduler, SchedulerId},
+        scheduler::{ScheduleResult, Scheduler, SchedulerId},
         task::TaskWithResult,
     };
     use ::anyhow::Result;
@@ -174,13 +174,13 @@ mod tests {
         let mut scheduler = Scheduler::default();
         let group_id = scheduler.create_group();
 
-        // Insert a single future in the scheduler. This future shall complete with a single poll operation.
+        // Schedule a single future in the scheduler. This future shall complete with a single poll operation.
         let task = DummyTask::new("testing", Box::pin(DummyCoroutine::new(1).fuse()));
-        let Some(InsertResult::Inserted(_)) = scheduler.insert(group_id, task) else {
-            anyhow::bail!("insert() failed")
+        let Some(ScheduleResult::Scheduled(_)) = scheduler.schedule(group_id, task) else {
+            anyhow::bail!("schedule() failed")
         };
 
-        // All futures are inserted in the scheduler with notification flag set.
+        // All futures are scheduled in the scheduler with notification flag set.
         // By polling once, our future should complete.
         if scheduler.run_once(group_id, None).pop().is_none() {
             anyhow::bail!("task should have completed")
@@ -194,14 +194,14 @@ mod tests {
         let mut scheduler = Scheduler::default();
         let group_id = scheduler.create_group();
 
-        // Insert a single future in the scheduler. This future shall complete
+        // Schedule a single future in the scheduler. This future shall complete
         // with two poll operations.
         let task = DummyTask::new("testing", Box::pin(DummyCoroutine::new(2).fuse()));
-        let Some(InsertResult::Inserted(_)) = scheduler.insert(group_id, task) else {
-            anyhow::bail!("insert() failed")
+        let Some(ScheduleResult::Scheduled(_)) = scheduler.schedule(group_id, task) else {
+            anyhow::bail!("schedule() failed")
         };
 
-        // All futures are inserted in the scheduler with notification flag set.
+        // All futures are scheduled in the scheduler with notification flag set.
         // By polling once, this future should make a transition.
         let result = scheduler.run_once(group_id, None).pop();
         crate::ensure_eq!(result.is_some(), false);
@@ -219,13 +219,13 @@ mod tests {
         let mut scheduler = Scheduler::default();
         let group_id = scheduler.create_group();
 
-        // Insert a single future in the scheduler. This future shall complete with a single poll operation.
+        // Schedule a single future in the scheduler. This future shall complete with a single poll operation.
         let task = DummyTask::new("testing", Box::pin(DummyCoroutine::new(1).fuse()));
-        let Some(InsertResult::Inserted(_)) = scheduler.insert(group_id, task) else {
-            anyhow::bail!("insert() failed")
+        let Some(ScheduleResult::Scheduled(_)) = scheduler.schedule(group_id, task) else {
+            anyhow::bail!("schedule() failed")
         };
 
-        // All futures are inserted in the scheduler with notification flag set.
+        // All futures are scheduled in the scheduler with notification flag set.
         // By polling until the task completes, our future should complete.
         if scheduler.run(group_id, None).pop().is_none() {
             anyhow::bail!("task should have completed")
@@ -235,14 +235,14 @@ mod tests {
     }
 
     #[bench]
-    fn insert_bench(b: &mut Bencher) {
+    fn schedule_bench(b: &mut Bencher) {
         let mut scheduler = Scheduler::default();
         let group_id = scheduler.create_group();
 
         b.iter(|| {
             let task = DummyTask::new("testing", Box::pin(black_box(DummyCoroutine::new(1).fuse())));
-            let Some(InsertResult::Inserted(task_id)) = scheduler.insert(group_id, task) else {
-                panic!("couldn't insert future in scheduler");
+            let Some(ScheduleResult::Scheduled(task_id)) = scheduler.schedule(group_id, task) else {
+                panic!("couldn't schedule future in scheduler");
             };
             black_box(task_id);
         });
@@ -258,10 +258,10 @@ mod tests {
 
         for val in 1..NUM_TASKS {
             let task = DummyTask::new("testing", Box::pin(DummyCoroutine::new(val).fuse()));
-            match scheduler.insert(group_id, task) {
-                Some(InsertResult::Completed(_)) => panic!("task should not have completed"),
-                Some(InsertResult::Inserted(task_id)) => task_ids.push(task_id),
-                None => panic!("insert() failed"),
+            match scheduler.schedule(group_id, task) {
+                Some(ScheduleResult::Completed(_)) => panic!("task should not have completed"),
+                Some(ScheduleResult::Scheduled(task_id)) => task_ids.push(task_id),
+                None => panic!("schedule() failed"),
             };
         }
 
@@ -280,10 +280,10 @@ mod tests {
 
         for val in 1..NUM_TASKS {
             let task = DummyTask::new("testing", Box::pin(DummyCoroutine::new(val).fuse()));
-            match scheduler.insert(group_id, task) {
-                Some(InsertResult::Completed(_)) => panic!("task should not have completed"),
-                Some(InsertResult::Inserted(task_id)) => task_ids.push(task_id),
-                None => panic!("insert() failed"),
+            match scheduler.schedule(group_id, task) {
+                Some(ScheduleResult::Completed(_)) => panic!("task should not have completed"),
+                Some(ScheduleResult::Scheduled(task_id)) => task_ids.push(task_id),
+                None => panic!("schedule() failed"),
             };
         }
 

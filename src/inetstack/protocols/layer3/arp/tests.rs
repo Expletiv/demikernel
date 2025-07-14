@@ -154,7 +154,10 @@ fn arp_cache_timeout() -> Result<()> {
     let mut engine = new_engine(now, test_helpers::ALICE_CONFIG_PATH)?;
     let mut inetstack = engine.get_transport();
     let coroutine = Box::pin(async move { inetstack.arp_query(other_remote_ipv4).await }.fuse());
-    let _qt = engine.get_runtime().clone().insert_coroutine("arp query", coroutine)?;
+    let _qt = engine
+        .get_runtime()
+        .clone()
+        .schedule_coroutine("arp query", coroutine)?;
 
     for _ in 0..(ARP_RETRY_COUNT + 1) {
         engine.get_runtime().run_foreground_tasks();

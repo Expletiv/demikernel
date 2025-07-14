@@ -41,7 +41,7 @@ use crate::{
         network::{socket::SocketId, SocketIdToQDescMap},
         poll::PollFuture,
         queue::{IoQueue, IoQueueTable},
-        scheduler::{InsertResult, SharedScheduler, TaskWithResult},
+        scheduler::{ScheduleResult, SharedScheduler, TaskWithResult},
     },
 };
 use ::futures::{future::FusedFuture, select_biased, Future, FutureExt};
@@ -73,7 +73,7 @@ const DEFAULT_RESULT_STORAGE_CAPACITY: usize = 1024;
 
 pub struct DemiRuntime {
     qtable: IoQueueTable,
-    // Holds the mapping between qtoken and task id. Initialized to invalid id until we insert the task into the
+    // Holds the mapping between qtoken and task id. Initialized to invalid id until we schedule the task into the
     // scheduler and get the real id.
     qtoken_to_scheduler_id: Id64Map<QToken, SchedulerId>,
     scheduler: SharedScheduler,
@@ -132,15 +132,15 @@ impl SharedDemiRuntime {
     }
 
     /// There should only be one of these.
-    pub fn insert_polling_coroutine<F: FusedFuture<Output = ()> + 'static>(
+    pub fn schedule_polling_coroutine<F: FusedFuture<Output = ()> + 'static>(
         &mut self,
         task_name: &'static str,
         coroutine: Pin<Box<F>>,
     ) -> Result<QToken, Fail> {
-        self.insert_coroutine_inner(task_name, self.background_group_id, coroutine)
+        self.schedule_coroutine_inner(task_name, self.background_group_id, coroutine)
     }
 
-    pub fn insert_coroutine<F: FusedFuture + 'static>(
+    pub fn schedule_coroutine<F: FusedFuture + 'static>(
         &mut self,
         task_name: &'static str,
         coroutine: Pin<Box<F>>,
@@ -148,11 +148,11 @@ impl SharedDemiRuntime {
     where
         F::Output: Unpin + Clone + Any,
     {
-        self.insert_coroutine_inner(task_name, self.foreground_group_id, coroutine)
+        self.schedule_coroutine_inner(task_name, self.foreground_group_id, coroutine)
     }
 
-    /// Inserts a coroutine of type T and task and runs it once.
-    fn insert_coroutine_inner<F: FusedFuture + 'static>(
+    /// Schedules a coroutine of type T and task and runs it once.
+    fn schedule_coroutine_inner<F: FusedFuture + 'static>(
         &mut self,
         task_name: &'static str,
         group_id: SchedulerId,
@@ -161,12 +161,12 @@ impl SharedDemiRuntime {
     where
         F::Output: Unpin + Clone + Any,
     {
-        trace!("Inserting coroutine: {:?}", task_name);
+        trace!("Scheduling coroutine: {:?}", task_name);
         #[cfg(feature = "profiler")]
         let coroutine = coroutine_timer!(task_name, coroutine);
         let task = TaskWithResult::<F::Output>::new(task_name, coroutine);
-        match self.scheduler.insert(group_id, task) {
-            Some(InsertResult::Inserted(task_id)) => {
+        match self.scheduler.schedule(group_id, task) {
+            Some(ScheduleResult::Scheduled(task_id)) => {
                 let qt = self.qtoken_to_scheduler_id.insert_with_new_id(task_id).unwrap();
                 self.scheduler
                     .get_task_mut(group_id, task_id)
@@ -175,8 +175,8 @@ impl SharedDemiRuntime {
                 // Stash the newly allocated qtoken in the task.
                 Ok(qt)
             },
-            Some(InsertResult::Completed(mut boxed_task)) => {
-                trace!("Completed while inserting coroutine: {:?}", boxed_task.name());
+            Some(ScheduleResult::Completed(mut boxed_task)) => {
+                trace!("Completed while scheduling coroutine: {:?}", boxed_task.name());
                 // Place into id map so that the application can retrive the result later.
                 let qt = self.qtoken_to_scheduler_id.insert_with_new_id(0_u64.into()).unwrap();
                 boxed_task.set_id(qt.into());
@@ -192,7 +192,7 @@ impl SharedDemiRuntime {
             },
             None => {
                 let cause = format!("cannot schedule coroutine (task_name={:?})", &task_name);
-                error!("insert_coroutine(): {}", cause);
+                error!("schedule_coroutine(): {}", cause);
                 Err(Fail::new(libc::EAGAIN, &cause))
             },
         }
@@ -279,7 +279,7 @@ impl SharedDemiRuntime {
                 self.run_scheduler();
             }
             while let Some(mut task) = self.completed_tasks.pop_front() {
-                let qt = expect_some!(task.id(), "should have been set on insert").into();
+                let qt = expect_some!(task.id(), "should have been set on schedule").into();
                 let (qd, result) = expect_some!(task.get_result(), "coroutine not finished");
                 self.qtoken_to_scheduler_id.remove(&qt);
 
@@ -413,7 +413,7 @@ impl SharedDemiRuntime {
             .run(id, Some(TIMER_RESOLUTION))
             .into_iter()
             .filter_map(|task| -> Option<OperationTask> {
-                let qt: QToken = expect_some!(task.id(), "should have been set on insert").into();
+                let qt: QToken = expect_some!(task.id(), "should have been set on schedule").into();
                 trace!("Completed coroutine (qt={:?}): {:?}", qt, task.name());
                 OperationTask::try_from(task.as_any()).ok()
             })
@@ -607,12 +607,12 @@ mod tests {
     }
 
     #[test]
-    fn insert_and_wait_for_first_task() -> Result<()> {
+    fn schedule_and_wait_for_first_task() -> Result<()> {
         let mut runtime = SharedDemiRuntime::default();
 
-        let qt = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
-        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
-        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
+        let qt = runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
+        let _ = runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
+        let _ = runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
 
         let task = runtime.wait(qt, Duration::ZERO)?;
         ensure_eq!(task.0, QDesc::from(0));
@@ -620,12 +620,12 @@ mod tests {
     }
 
     #[test]
-    fn insert_and_wait_for_middle_task() -> Result<()> {
+    fn schedule_and_wait_for_middle_task() -> Result<()> {
         let mut runtime = SharedDemiRuntime::default();
 
-        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
-        let qt2 = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
-        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
+        let _ = runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
+        let qt2 = runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
+        let _ = runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
 
         let task = runtime.wait(qt2, Duration::ZERO)?;
         ensure_eq!(task.0, QDesc::from(1));
@@ -633,12 +633,12 @@ mod tests {
     }
 
     #[test]
-    fn insert_and_wait_for_last_task() -> Result<()> {
+    fn schedule_and_wait_for_last_task() -> Result<()> {
         let mut runtime = SharedDemiRuntime::default();
 
-        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
-        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
-        let qt3 = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
+        let _ = runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
+        let _ = runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
+        let qt3 = runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
 
         let task = runtime.wait(qt3, Duration::ZERO)?;
         ensure_eq!(task.0, QDesc::from(2));
@@ -646,12 +646,12 @@ mod tests {
     }
 
     #[test]
-    fn insert_and_wait_any_for_first_tasks() -> Result<()> {
+    fn schedule_and_wait_any_for_first_tasks() -> Result<()> {
         let mut runtime = SharedDemiRuntime::default();
 
-        let qt = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
-        let qt2 = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
-        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
+        let qt = runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
+        let qt2 = runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
+        let _ = runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
         let qts = vec![qt, qt2];
         let task = runtime.wait_any(&qts, Duration::ZERO)?;
         ensure_eq!(task.2, QDesc::from(0));
@@ -659,12 +659,12 @@ mod tests {
     }
 
     #[test]
-    fn insert_and_wait_any_for_last_tasks() -> Result<()> {
+    fn schedule_and_wait_any_for_last_tasks() -> Result<()> {
         let mut runtime = SharedDemiRuntime::default();
 
-        let _ = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
-        let qt2 = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
-        let qt3 = runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
+        let _ = runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(0)).fuse()))?;
+        let qt2 = runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(1)).fuse()))?;
+        let qt3 = runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(1, QDesc::from(2)).fuse()))?;
         let qts = vec![qt2, qt3];
         let task = runtime.wait_any(&qts, Duration::ZERO)?;
         ensure_eq!(task.2, QDesc::from(1));
@@ -672,18 +672,18 @@ mod tests {
     }
 
     #[bench]
-    fn insert_background_coroutine_bench(b: &mut Bencher) {
+    fn schedule_background_coroutine_bench(b: &mut Bencher) {
         let mut runtime = SharedDemiRuntime::default();
 
-        b.iter(|| runtime.insert_coroutine("dummy coroutine", Box::pin(dummy_coroutine(10, QDesc::from(0)).fuse())));
+        b.iter(|| runtime.schedule_coroutine("dummy coroutine", Box::pin(dummy_coroutine(10, QDesc::from(0)).fuse())));
     }
 
     #[bench]
-    fn insert_coroutine_bench(b: &mut Bencher) {
+    fn schedule_coroutine_bench(b: &mut Bencher) {
         let mut runtime = SharedDemiRuntime::default();
 
         b.iter(|| {
-            runtime.insert_coroutine(
+            runtime.schedule_coroutine(
                 "dummy background coroutine",
                 Box::pin(dummy_background_coroutine().fuse()),
             )
@@ -695,14 +695,14 @@ mod tests {
         const NUM_TASKS: usize = 1024;
         let mut qts = [QToken::from(0); NUM_TASKS];
         let mut runtime = SharedDemiRuntime::default();
-        // Insert a large number of coroutines.
+        // Schedule a large number of coroutines.
         for qt in qts.iter_mut().take(NUM_TASKS) {
             *qt = expect_ok!(
-                runtime.insert_coroutine(
+                runtime.schedule_coroutine(
                     "dummy coroutine",
                     Box::pin(dummy_coroutine(1000000000, QDesc::from(0)).fuse())
                 ),
-                "should be able to insert tasks"
+                "should be able to schedule tasks"
             );
         }
 
@@ -715,14 +715,14 @@ mod tests {
         const NUM_TASKS: usize = 1024;
         let mut qts = [QToken::from(0); NUM_TASKS];
         let mut runtime = SharedDemiRuntime::default();
-        // Insert a large number of coroutines.
+        // Schedule a large number of coroutines.
         for qt in qts.iter_mut().take(NUM_TASKS) {
             *qt = expect_ok!(
-                runtime.insert_polling_coroutine(
+                runtime.schedule_polling_coroutine(
                     "dummy background coroutine",
                     Box::pin(dummy_background_coroutine().fuse()),
                 ),
-                "should be able to insert tasks"
+                "should be able to schedule tasks"
             );
         }
 

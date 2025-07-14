@@ -83,7 +83,7 @@ impl SharedInetStack {
             runtime: runtime.clone(),
             layer4_endpoint,
         }));
-        runtime.insert_polling_coroutine("bgc::inetstack::poll", Box::pin(me.clone().poll().fuse()))?;
+        runtime.schedule_polling_coroutine("bgc::inetstack::poll", Box::pin(me.clone().poll().fuse()))?;
         Ok(me)
     }
 
