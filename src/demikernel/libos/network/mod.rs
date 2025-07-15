@@ -120,7 +120,7 @@ impl NetworkLibOSWrapper {
 
     /// Marks a socket as a passive one.
     pub fn listen(&mut self, sockqd: QDesc, mut backlog: usize) -> Result<(), Fail> {
-        // Truncate backlog length.
+        // Limit backlog length.
         if backlog > SOMAXCONN as usize {
             debug!(
                 "listen(): backlog length is too large, truncating (qd={:?}, backlog={:?})",
