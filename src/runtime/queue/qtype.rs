@@ -19,7 +19,6 @@ pub enum QType {
 // Trait Implementations
 //======================================================================================================================
 
-/// From Trait Implementation for IO Queue Types
 impl From<QType> for u32 {
     fn from(value: QType) -> Self {
         match value {
@@ -31,7 +30,6 @@ impl From<QType> for u32 {
     }
 }
 
-/// From Trait Implementation for IO Queue Types
 impl TryFrom<u32> for QType {
     type Error = &'static str;
 

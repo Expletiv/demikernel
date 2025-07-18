@@ -203,7 +203,7 @@ macro_rules! expect_ok {
 macro_rules! timer {
     ($name:expr) => {
         #[cfg(feature = "profiler")]
-        let _guard = $crate::perftools::profiler::PROFILER.with(|p| p.clone().create_and_enter_sync_scope($name));
+        let _guard = $crate::perftools::profiler::PROFILER.with(|p| p.clone().enter_sync($name));
     };
 }
 

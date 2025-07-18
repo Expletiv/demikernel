@@ -23,18 +23,18 @@ fn test_multiple_roots() -> Result<()> {
     }
 
     profiler::PROFILER.with(|p| -> Result<()> {
-        crate::ensure_eq!(p.root_scopes.len(), 2);
+        crate::ensure_eq!(p.roots.len(), 2);
 
-        for root in p.root_scopes.iter() {
-            crate::ensure_eq!(root.parent_scope.is_none(), true);
-            crate::ensure_eq!(root.children_scopes.is_empty(), true);
+        for root in p.roots.iter() {
+            crate::ensure_eq!(root.parent.is_none(), true);
+            crate::ensure_eq!(root.children.is_empty(), true);
         }
 
-        crate::ensure_eq!(p.root_scopes[0].name, "b");
-        crate::ensure_eq!(p.root_scopes[1].name, "a");
+        crate::ensure_eq!(p.roots[0].name, "b");
+        crate::ensure_eq!(p.roots[1].name, "a");
 
-        crate::ensure_eq!(p.root_scopes[0].num_calls, 6);
-        crate::ensure_eq!(p.root_scopes[1].num_calls, 1);
+        crate::ensure_eq!(p.roots[0].num_calls, 6);
+        crate::ensure_eq!(p.roots[1].num_calls, 1);
 
         Ok(())
     })
@@ -51,21 +51,21 @@ fn test_succ_reuse() -> Result<()> {
         }
     }
 
-    crate::ensure_eq!(profiler::PROFILER.with(|p| p.root_scopes.len()), 1);
+    crate::ensure_eq!(profiler::PROFILER.with(|p| p.roots.len()), 1);
 
     profiler::PROFILER.with(|p| -> Result<()> {
-        crate::ensure_eq!(p.root_scopes.len(), 1);
+        crate::ensure_eq!(p.roots.len(), 1);
 
-        let root = p.root_scopes[0].clone();
+        let root = p.roots[0].clone();
         crate::ensure_eq!(root.name, "a");
-        crate::ensure_eq!(root.parent_scope.is_none(), true);
-        crate::ensure_eq!(root.children_scopes.len(), 1);
+        crate::ensure_eq!(root.parent.is_none(), true);
+        crate::ensure_eq!(root.children.len(), 1);
         crate::ensure_eq!(root.num_calls, 6);
 
-        let child = root.children_scopes[0].clone();
+        let child = root.children[0].clone();
         crate::ensure_eq!(child.name, "b");
-        crate::ensure_eq!(child.parent_scope.clone().unwrap().name, p.root_scopes[0].clone().name);
-        crate::ensure_eq!(child.children_scopes.is_empty(), true);
+        crate::ensure_eq!(child.parent.clone().unwrap().name, p.roots[0].clone().name);
+        crate::ensure_eq!(child.children.is_empty(), true);
         crate::ensure_eq!(child.num_calls, 3);
 
         Ok(())
@@ -85,15 +85,15 @@ fn test_reset_during_frame() -> Result<()> {
                 profiler::reset();
             }
 
-            crate::ensure_eq!(profiler::PROFILER.with(|p| p.current_sync_scope.is_some()), true);
+            crate::ensure_eq!(profiler::PROFILER.with(|p| p.current_sync.is_some()), true);
 
             timer!("d");
         }
     }
 
     profiler::PROFILER.with(|p| -> Result<()> {
-        crate::ensure_eq!(p.root_scopes.is_empty(), true);
-        crate::ensure_eq!(p.current_sync_scope.is_none(), true);
+        crate::ensure_eq!(p.roots.is_empty(), true);
+        crate::ensure_eq!(p.current_sync.is_none(), true);
         Ok(())
     })
 }
@@ -107,9 +107,9 @@ impl Future for DummyCoroutine {
 
     fn poll(self: Pin<&mut Self>, _ctx: &mut Context) -> Poll<Self::Output> {
         match profiler::PROFILER.with(|p| -> Result<()> {
-            crate::ensure_eq!(p.root_scopes.len(), 1);
+            crate::ensure_eq!(p.roots.len(), 1);
 
-            let root = p.root_scopes[0].clone();
+            let root = p.roots[0].clone();
             crate::ensure_eq!(root.name, "dummy");
             crate::ensure_eq!(root.num_calls, self.as_ref().iterations);
             Ok(())

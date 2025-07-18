@@ -39,7 +39,7 @@ impl<E: Eq + Hash + From<u64> + Into<u64> + Copy, I: From<u64> + Into<u64> + Cop
     pub fn insert_with_new_id(&mut self, internal_id: I) -> Option<E> {
         // Otherwise, allocate a new external id.
         for _ in 0..MAX_RETRIES_ID_ALLOC {
-            let external_id: E = E::from(self.generate_id());
+            let external_id = E::from(self.generate_id());
             if let Entry::Vacant(e) = self.ids.entry(external_id) {
                 e.insert(internal_id);
                 return Some(external_id);
@@ -76,7 +76,7 @@ impl<E: Eq + Hash + From<u32> + Into<u32> + Copy, I: From<u32> + Into<u32> + Cop
     /// until we find an unused id (up to a maximum number of tries).
     pub fn insert_with_new_id(&mut self, internal_id: I) -> Option<E> {
         for _ in 0..MAX_RETRIES_ID_ALLOC {
-            let external_id: E = E::from(self.generate_id());
+            let external_id = E::from(self.generate_id());
             if let Entry::Vacant(e) = self.ids.entry(external_id) {
                 e.insert(internal_id);
                 return Some(external_id);

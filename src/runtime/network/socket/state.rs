@@ -89,7 +89,7 @@ impl SocketStateMachine {
     }
 
     pub fn listen(&mut self) {
-        let new_state: SocketState = match self.current.get() {
+        let new_state = match self.current.get() {
             SocketState::Bound(local) => SocketState::PassiveListening { local },
             _ => return,
         };
@@ -131,7 +131,7 @@ impl SocketStateMachine {
     }
 
     pub fn connecting(&mut self, remote: SocketAddr) {
-        let local: Option<SocketAddr> = match self.current.get() {
+        let local = match self.current.get() {
             SocketState::Bound(local) => Some(local),
             _ => None,
         };
@@ -139,7 +139,7 @@ impl SocketStateMachine {
     }
 
     pub fn connected(&mut self, remote: SocketAddr) {
-        let local: Option<SocketAddr> = match self.current.get() {
+        let local = match self.current.get() {
             SocketState::Bound(local) => Some(local),
             SocketState::ActiveConnecting { local, remote: _ } => local,
             _ => None,

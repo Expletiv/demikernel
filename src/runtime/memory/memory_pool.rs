@@ -81,14 +81,10 @@ impl MemoryPool {
 
     /// Get one buffer from the pool. If no buffers remain, returns None.
     pub fn get(self: &Rc<Self>) -> Option<PoolBuf> {
-        let buffers: &mut Vec<NonNull<[MaybeUninit<u8>]>> = unsafe { &mut *self.buffers.get() };
-        let pool: Rc<Self> = self.clone();
+        let buffers = unsafe { &mut *self.buffers.get() };
+        let pool = self.clone();
         buffers.pop().map(|buffer: NonNull<[MaybeUninit<u8>]>| {
-            trace!(
-                "get: buffer = {:?}, pool = {:?}",
-                buffer.as_ptr(),
-                self.as_ref() as *const _
-            );
+            trace!("get = {:?}, pool = {:?}", buffer.as_ptr(), self.as_ref() as *const _);
             PoolBuf { buffer, pool }
         })
     }
@@ -96,14 +92,14 @@ impl MemoryPool {
     /// Return a buffer to the pool.
     fn return_buffer(self: &Rc<Self>, buffer: NonNull<[MaybeUninit<u8>]>) {
         trace!(
-            "return_buffer: buffer = {:?}, pool = {:?}",
+            "return_buffer = {:?}, pool = {:?}",
             buffer.as_ptr(),
             self.as_ref() as *const _
         );
 
         // Safety: buffers is only granted a &mut alias during the methods of this class. As long as these methods are
         // neither called asynchronously nor nested, aliasing is obeyed.
-        let buffers: &mut Vec<NonNull<[MaybeUninit<u8>]>> = unsafe { &mut *self.buffers.get() };
+        let buffers = unsafe { &mut *self.buffers.get() };
         buffers.push(buffer);
     }
 
@@ -118,11 +114,11 @@ impl MemoryPool {
         mut buffer: NonNull<[MaybeUninit<u8>]>,
         page_size: NonZeroUsize,
     ) -> Result<NonNull<[MaybeUninit<u8>]>, Fail> {
-        let mut iter: PackingIterator = PackingIterator::new(unsafe { buffer.as_mut() }, page_size, self.buf_layout)?;
+        let mut iter = PackingIterator::new(unsafe { buffer.as_mut() }, page_size, self.buf_layout)?;
 
         // Safety: buffers is only granted a &mut alias during the methods of this class. As long as these methods are
         // neither called asynchronously nor nested, aliasing is obeyed.
-        let buffers: &mut Vec<NonNull<[MaybeUninit<u8>]>> = unsafe { &mut *self.buffers.get() };
+        let buffers = unsafe { &mut *self.buffers.get() };
         buffers.extend(std::iter::from_fn(|| iter.next()).map(NonNull::from));
 
         Ok(NonNull::from(iter.into_slice()))
@@ -132,7 +128,7 @@ impl MemoryPool {
     pub fn len(self: &Rc<Self>) -> usize {
         // Safety: buffers is only granted a &mut alias during the methods of this class. As long as these methods are
         // neither called asynchronously nor nested, aliasing is obeyed.
-        let buffers: &Vec<NonNull<[MaybeUninit<u8>]>> = unsafe { &*self.buffers.get() };
+        let buffers = unsafe { &*self.buffers.get() };
         buffers.len()
     }
 
@@ -155,10 +151,10 @@ impl PoolBuf {
     ///
     /// Note that this is an associated function to match idioms in e.g., [`Box::into_raw`].
     pub fn into_raw(b: PoolBuf) -> (NonNull<[MaybeUninit<u8>]>, Rc<MemoryPool>) {
-        let b: ManuallyDrop<Self> = ManuallyDrop::new(b);
+        let b = ManuallyDrop::new(b);
 
         // Safety: pool field is valid and readable.
-        let pool: Rc<MemoryPool> = unsafe { std::ptr::read(&b.pool) };
+        let pool = unsafe { std::ptr::read(&b.pool) };
         (b.buffer, pool)
     }
 
@@ -197,10 +193,10 @@ impl BufferCursor {
     pub fn take_at_most<'a>(&mut self, bytes: usize) -> &'a mut [MaybeUninit<u8>] {
         debug_assert!(bytes <= isize::MAX as usize);
 
-        let bytes: usize = std::cmp::min(bytes, self.len);
+        let bytes = std::cmp::min(bytes, self.len);
 
         // Safety: the offset from cursor is within the originally allocated span and not larger than isize::MAX.
-        let result: &mut [MaybeUninit<u8>] = unsafe { std::slice::from_raw_parts_mut(self.cursor.as_ptr(), bytes) };
+        let result = unsafe { std::slice::from_raw_parts_mut(self.cursor.as_ptr(), bytes) };
         self.cursor = unsafe { NonNull::new_unchecked(self.cursor.as_ptr().add(bytes)) };
         self.len -= bytes;
         result
@@ -215,7 +211,7 @@ impl BufferCursor {
     /// Align the cursor to `align`, skipping at most align bytes. Returns true iff the cursor is aligned to `align` and
     /// points to at least one byte.
     pub fn skip_to_align(&mut self, align: usize) -> bool {
-        let bytes: usize = self.cursor.as_ptr().align_offset(align);
+        let bytes = self.cursor.as_ptr().align_offset(align);
         self.skip(bytes)
     }
 
@@ -299,7 +295,7 @@ impl<'a> Iterator for PackingIterator<'a> {
 
     fn next(&mut self) -> Option<&'a mut [MaybeUninit<u8>]> {
         // Reborrow cursor into a temporary so we can back out our changes if we fail.
-        let mut temp: BufferCursor = self.cursor.reborrow();
+        let mut temp = self.cursor.reborrow();
 
         if !temp.skip_to_align(self.layout.align()) {
             return None;
@@ -307,7 +303,7 @@ impl<'a> Iterator for PackingIterator<'a> {
 
         // The number of bytes required to be in a page to span the minimum number of pages. The algorithm here
         // prioritizes minimizing the number of pages per object, which can result in sparse "packing".
-        let req_bytes_in_page: usize = self.layout.size() % self.page_size;
+        let req_bytes_in_page = self.layout.size() % self.page_size;
 
         // Check how many bytes left in the page; see if we need to realign to reduce page spanning.
         match temp.next_align_offset(self.page_size) {
@@ -340,10 +336,9 @@ impl<'a> Iterator for PackingIterator<'a> {
 // Unit Tests
 //======================================================================================================================
 
-// Unit tests for `BufferPool` type.
 #[cfg(test)]
 mod tests {
-    use std::{mem::MaybeUninit, num::NonZeroUsize, ptr::NonNull, rc::Rc};
+    use std::{mem::MaybeUninit, num::NonZeroUsize, ptr::NonNull};
 
     use ::anyhow::{anyhow, Result};
     use anyhow::ensure;
@@ -360,7 +355,7 @@ mod tests {
         store.reserve(total_size);
         store.extend(std::iter::repeat_n(MaybeUninit::<u8>::zeroed(), total_size));
 
-        let align_bytes: usize = store.as_ptr().align_offset(page_size);
+        let align_bytes = store.as_ptr().align_offset(page_size);
         assert!(align_bytes + alloc_size <= store.len());
         &mut store.as_mut_slice()[align_bytes..alloc_size + align_bytes]
     }
@@ -378,23 +373,23 @@ mod tests {
     }
 
     fn run_basic_test(settings: BasicTestSettings, results: BasicTestResults) -> Result<()> {
-        let page_size: NonZeroUsize = NonZeroUsize::new(settings.page_size).ok_or(anyhow!("bad page size"))?;
-        let buf_size_ea: NonZeroUsize = NonZeroUsize::new(settings.buf_size_ea).ok_or(anyhow!("bad buffer size"))?;
-        let buf_align: NonZeroUsize = NonZeroUsize::new(settings.buf_align).ok_or(anyhow!("bad buffer alignment"))?;
+        let page_size = NonZeroUsize::new(settings.page_size).ok_or(anyhow!("bad page size"))?;
+        let buf_size_ea = NonZeroUsize::new(settings.buf_size_ea).ok_or(anyhow!("bad buffer size"))?;
+        let buf_align = NonZeroUsize::new(settings.buf_align).ok_or(anyhow!("bad buffer alignment"))?;
 
-        let mut store: Vec<MaybeUninit<u8>> = Vec::new();
-        let buffer: &mut [MaybeUninit<u8>] = alloc_page_buf(settings.page_size, settings.pool_size, &mut store);
-        let pool: Rc<MemoryPool> = MemoryPool::new(buf_size_ea, buf_align)?;
+        let mut store = Vec::new();
+        let buffer = alloc_page_buf(settings.page_size, settings.pool_size, &mut store);
+        let pool = MemoryPool::new(buf_size_ea, buf_align)?;
 
         ensure_eq!(pool.len(), 0);
         ensure!(pool.get().is_none());
 
-        let remaining: &mut [MaybeUninit<u8>] = unsafe { pool.populate(NonNull::from(buffer), page_size)?.as_mut() };
+        let remaining = unsafe { pool.populate(NonNull::from(buffer), page_size)?.as_mut() };
         ensure_eq!(remaining.len(), results.bytes_left_over);
 
         ensure_eq!(pool.len(), results.number_of_buffers);
 
-        let mut bufs: Vec<Option<PoolBuf>> = Vec::from_iter(std::iter::from_fn(|| Some(pool.get())).take(pool.len()));
+        let mut bufs = Vec::from_iter(std::iter::from_fn(|| Some(pool.get())).take(pool.len()));
 
         ensure_eq!(bufs.len(), results.number_of_buffers);
         ensure!(bufs.iter().all(|o: &Option<_>| o.is_some()));
@@ -410,16 +405,16 @@ mod tests {
 
         // NB if the buffer size is a factor or multiple of the page size, no bytes will be wasted at the end of the
         // page.
-        let span: usize = if settings.buf_size_ea.is_power_of_two() {
+        let span = if settings.buf_size_ea.is_power_of_two() {
             0
         } else {
             settings.buf_size_ea % settings.page_size
         };
-        let align: usize = std::cmp::max(settings.buf_size_ea, settings.buf_align);
-        let mut last_buffer_ptr: usize = bufs[0].as_ref().unwrap().as_ptr().addr() - align;
+        let align = std::cmp::max(settings.buf_size_ea, settings.buf_align);
+        let mut last_buffer_ptr = bufs[0].as_ref().unwrap().as_ptr().addr() - align;
 
         for buf_holder in bufs.iter_mut() {
-            let mut buf: PoolBuf = buf_holder.take().unwrap();
+            let mut buf = buf_holder.take().unwrap();
             ensure_eq!(buf.len(), buf_size_ea.get());
 
             ensure!(
@@ -434,7 +429,7 @@ mod tests {
 
             // NB MemoryPool does not guarantee LIFO, but since the pool only has one buffer in it, it must be the same
             // buffer.
-            let buf: PoolBuf = pool.get().ok_or(anyhow!("pool should not be empty"))?;
+            let buf = pool.get().ok_or(anyhow!("pool should not be empty"))?;
             ensure_eq!(expected, unsafe {
                 std::slice::from_raw_parts(buf.as_ptr().cast::<u8>(), buf.len())
             });

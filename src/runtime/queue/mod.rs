@@ -58,12 +58,10 @@ pub struct IoQueueTable {
 // Associated Functions
 //======================================================================================================================
 
-/// Associated functions for I/O queue descriptors tables.
 impl IoQueueTable {
-    /// Allocates a new entry in the target I/O queue descriptors table.
     pub fn alloc<T: IoQueue>(&mut self, queue: T) -> QDesc {
-        let index: usize = self.table.insert(Box::new(queue));
-        let qd: QDesc = expect_some!(
+        let index = self.table.insert(Box::new(queue));
+        let qd = expect_some!(
             self.qd_to_offset.insert_with_new_id(InternalId(index)),
             "should be able to allocate an id"
         );
@@ -71,7 +69,6 @@ impl IoQueueTable {
         qd
     }
 
-    /// Gets the type of the queue.
     pub fn get_type(&self, qd: &QDesc) -> Result<QType, Fail> {
         Ok(self.get_queue_ref(qd)?.get_qtype())
     }
@@ -88,10 +85,10 @@ impl IoQueueTable {
 
     /// Releases the entry associated with an I/O queue descriptor.
     pub fn free<T: IoQueue>(&mut self, qd: &QDesc) -> Result<T, Fail> {
-        let internal_id: InternalId = match self.qd_to_offset.remove(qd) {
+        let internal_id = match self.qd_to_offset.remove(qd) {
             Some(id) => id,
             None => {
-                let cause: String = format!("invalid queue descriptor (qd={:?})", qd);
+                let cause = format!("invalid queue descriptor (qd={:?})", qd);
                 error!("free(): {}", &cause);
                 return Err(Fail::new(libc::EBADF, &cause));
             },
@@ -116,7 +113,7 @@ impl IoQueueTable {
             }
         }
 
-        let cause: String = format!("invalid queue descriptor (qd={:?})", qd);
+        let cause = format!("invalid queue descriptor (qd={:?})", qd);
         error!("get(): {}", &cause);
         Err(Fail::new(libc::EBADF, &cause))
     }
@@ -128,7 +125,7 @@ impl IoQueueTable {
             }
         }
 
-        let cause: String = format!("invalid queue descriptor (qd={:?})", qd);
+        let cause = format!("invalid queue descriptor (qd={:?})", qd);
         error!("get(): {}", &cause);
         Err(Fail::new(libc::EBADF, &cause))
     }
@@ -141,14 +138,14 @@ impl IoQueueTable {
 /// Downcasts a [IoQueue] reference to a concrete queue type reference `&T`.
 pub fn downcast_queue_ptr<T: IoQueue>(boxed_queue_ptr: &Box<dyn IoQueue>) -> Result<&T, Fail> {
     // 1. Get reference to queue inside the box.
-    let queue_ptr: &dyn IoQueue = boxed_queue_ptr.as_ref();
+    let queue_ptr = boxed_queue_ptr.as_ref();
     // 2. Cast that reference to a void pointer for downcasting.
-    let void_ptr: &dyn Any = queue_ptr.as_any_ref();
+    let void_ptr = queue_ptr.as_any_ref();
     // 3. Downcast to concrete type T
     match void_ptr.downcast_ref::<T>() {
         Some(ptr) => Ok(ptr),
         None => {
-            let cause: &'static str = "invalid queue type";
+            let cause = "invalid queue type";
             error!("downcast_queue_ptr(): {}", cause);
             Err(Fail::new(libc::EINVAL, cause))
         },
@@ -157,14 +154,14 @@ pub fn downcast_queue_ptr<T: IoQueue>(boxed_queue_ptr: &Box<dyn IoQueue>) -> Res
 
 pub fn downcast_mut_ptr<T: IoQueue>(boxed_queue_ptr: &mut Box<dyn IoQueue>) -> Result<&mut T, Fail> {
     // 1. Get reference to queue inside the box.
-    let queue_ptr: &mut dyn IoQueue = boxed_queue_ptr.as_mut();
+    let queue_ptr = boxed_queue_ptr.as_mut();
     // 2. Cast that reference to a void pointer for downcasting.
-    let void_ptr: &mut dyn Any = queue_ptr.as_any_mut();
+    let void_ptr = queue_ptr.as_any_mut();
     // 3. Downcast to concrete type T
     match void_ptr.downcast_mut::<T>() {
         Some(ptr) => Ok(ptr),
         None => {
-            let cause: &'static str = "invalid queue type";
+            let cause = "invalid queue type";
             error!("downcast_mut_ptr(): {}", cause);
             Err(Fail::new(libc::EINVAL, cause))
         },
@@ -177,7 +174,7 @@ pub fn downcast_queue<T: IoQueue>(boxed_queue: Box<dyn IoQueue>) -> Result<T, Fa
     match boxed_queue.as_any().downcast::<T>() {
         Ok(queue) => Ok(*queue),
         Err(_) => {
-            let cause: &'static str = "invalid queue type";
+            let cause = "invalid queue type";
             error!("downcast_queue(): {}", cause);
             Err(Fail::new(libc::EINVAL, cause))
         },
@@ -238,7 +235,7 @@ mod tests {
     use crate::{
         expect_ok,
         runtime::{IoQueue, IoQueueTable},
-        QDesc, QType,
+        QType,
     };
     use ::std::any::Any;
     use ::test::{black_box, Bencher};
@@ -264,12 +261,12 @@ mod tests {
 
     #[bench]
     fn alloc_free_bench(b: &mut Bencher) {
-        let mut ioqueue_table: IoQueueTable = IoQueueTable::default();
+        let mut ioqueue_table = IoQueueTable::default();
 
         b.iter(|| {
-            let qd: QDesc = ioqueue_table.alloc::<TestQueue>(TestQueue {});
+            let qd = ioqueue_table.alloc::<TestQueue>(TestQueue {});
             black_box(qd);
-            let queue: TestQueue = expect_ok!(ioqueue_table.free::<TestQueue>(&qd), "must be TestQueue");
+            let queue = expect_ok!(ioqueue_table.free::<TestQueue>(&qd), "must be TestQueue");
             black_box(queue);
         });
     }
