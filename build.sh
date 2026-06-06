@@ -18,13 +18,15 @@ export CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback
 echo "Compiling $LIBOS..."
 make LIBOS="$LIBOS"
 
-OUT_DIR="$DEMI_DIR/bin/examples/rust"
-echo ""
-echo "Build complete. The compiled executables are located in: $OUT_DIR"
+OUT_DIR="$DEMI_DIR/bin/examples"
+BUILD_DIR="$DEMI_DIR/build"
 
-# Automatic config detection based on the hostname in the local config directory
-NODE_NAME=$(hostname)
-CONFIG_FILE="$DEMI_DIR/config/${NODE_NAME}.yaml"
+cp -r "$OUT_DIR/"* "$BUILD_DIR/"
+
+echo ""
+echo "Build complete. The compiled executables are located in: $BUILD_DIR"
+
+CONFIG_FILE="$DEMI_DIR/config/nodeXX.yaml"
 
 echo ""
 echo "================================================="

@@ -1,0 +1,1 @@
+rsync -avz build config test-scripts node81:~/demikernel/
