@@ -3,9 +3,9 @@
 
 demikernel:
   local_ipv4_addr: 10.0.0.82
-  local_link_addr: "00:00:10:27:fe:80:00:00:00:00:00:00:0c:42:a1:03:00:54:77:92"
+  local_link_addr: "0c:42:a1:54:77:92"
 raw_socket:
-  linux_interface_name: "ibp101s0"
+  linux_interface_name: "enp101s0np0"
   xdp_interface_index: 0
   xdp_cohost_mode: false
   xdp_always_poke_tx: false
@@ -31,7 +31,14 @@ raw_socket:
   # The number of entries in each RX producer/consumer ring for each RSS queue; must be a power of 2.
   rx_ring_size: 128
 dpdk:
-  eal_init: ["", "-c", "0xff", "-n", "4", "-a", "WW:WW.W","--proc-type=auto"]
+  eal_init: [
+    "",
+    "-c", "0xff",
+    "-n", "4",
+    "-a", "0000:65:00.0",
+    "-d", "/demikernel/lib/x86_64-linux-gnu/dpdk/pmds-23.0",
+    "--proc-type=auto"
+  ]
 tcp_socket_options:
   keepalive:
     enabled: false
@@ -48,7 +55,7 @@ inetstack_config:
   udp_checksum_offload: false
   tcp_checksum_offload: false
   arp_table:
-    "00:00:08:27:fe:80:00:00:00:00:00:00:0c:42:a1:03:00:54:74:ca": "10.0.0.81"
+    "0c:42:a1:54:74:ca": "10.0.0.81"
   arp_request_retries: 5
   arp_request_timeout: 20
   arp_cache_ttl: 15

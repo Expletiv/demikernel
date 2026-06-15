@@ -5,7 +5,7 @@ DEMI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 
 # If an argument is passed (e.g., ./build_demi.sh catpowder), use it.
 # Otherwise, default to 'catnap'.
-LIBOS="${1:-catnap}"
+LIBOS="${1:-catnip}"
 
 echo "================================================="
 echo "Starting Demikernel build for LIBOS: $LIBOS"
