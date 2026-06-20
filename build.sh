@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DEMI_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-LIBOS="${1:-catpowder}"
+LIBOS="${1:-catnap}"
 BUILD_ROOT="${DEMI_DIR}/build/${LIBOS}"
 
 echo "================================================="
@@ -26,4 +26,4 @@ echo
 echo "Runtime defaults for the server side:"
 echo "  export DEMI_DIR=/demikernel"
 echo "  export LIBOS=${LIBOS}"
-echo "  export CONFIG_PATH=/demikernel/config/\$(hostname).yaml"
+echo "  export CONFIG_PATH=/demikernel/config/${LIBOS}/\$(hostname).yaml"

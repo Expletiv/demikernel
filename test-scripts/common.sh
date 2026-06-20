@@ -2,9 +2,9 @@
 set -euo pipefail
 
 DEMI_DIR="${DEMI_DIR:-/demikernel}"
-LIBOS="${LIBOS:-catpowder}"
+LIBOS="${LIBOS:-catnap}"
 HOST_CONFIG="${HOST_CONFIG:-$(hostname).yaml}"
-CONFIG_PATH="${CONFIG_PATH:-${DEMI_DIR}/config/${HOST_CONFIG}}"
+CONFIG_PATH="${CONFIG_PATH:-${DEMI_DIR}/config/${LIBOS}/${HOST_CONFIG}}"
 BUILD_DIR="${BUILD_DIR:-${DEMI_DIR}/build/${LIBOS}}"
 
 export LIBOS
@@ -21,6 +21,5 @@ fi
 
 if [ ! -x "${BUILD_DIR}/rust/tcp-echo.elf" ]; then
   echo "Missing executable ${BUILD_DIR}/rust/tcp-echo.elf" >&2
-  echo "Run ./build.sh ${LIBOS} on the build VM and ./sync.sh first." >&2
   exit 1
 fi

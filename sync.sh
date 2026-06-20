@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-LIBOS="${LIBOS:-catpowder}"
+LIBOS="${LIBOS:-catnap}"
 REMOTE_DIR="${REMOTE_DIR:-/demikernel}"
 HOSTS=("$@")
 
@@ -18,6 +18,6 @@ for host in "${HOSTS[@]}"; do
   echo "Syncing ${LIBOS} runtime files to ${host}:${REMOTE_DIR}/"
   ssh "${host}" "mkdir -p '${REMOTE_DIR}/build' '${REMOTE_DIR}/config' '${REMOTE_DIR}/test-scripts'"
   rsync -avz "build/${LIBOS}" "${host}:${REMOTE_DIR}/build/"
-  rsync -avz config/ "${host}:${REMOTE_DIR}/config/"
+  rsync -avz "config/${LIBOS}" "${host}:${REMOTE_DIR}/config/"
   rsync -avz test-scripts/ "${host}:${REMOTE_DIR}/test-scripts/"
 done

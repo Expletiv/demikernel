@@ -5,7 +5,7 @@ demikernel:
   local_ipv4_addr: 10.0.0.81
   local_link_addr: "0c:42:a1:54:74:ca"
 raw_socket:
-  linux_interface_name: "ibp101s0"
+  linux_interface_name: "enp101s0np0"
   xdp_interface_index: 0
   xdp_cohost_mode: false
   xdp_always_poke_tx: false
@@ -14,6 +14,15 @@ raw_socket:
   rx_buffer_count: 4096
   tx_ring_size: 128
   rx_ring_size: 128
+dpdk:
+  eal_init: [
+     "",
+     "-c", "0xff",
+     "-n", "4",
+     "-a", "0000:65:00.0",
+     "-d", "/demikernel/lib/x86_64-linux-gnu/dpdk/pmds-23.0",
+     "--proc-type=auto"
+  ]
 tcp_socket_options:
   keepalive:
     enabled: false
