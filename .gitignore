@@ -39,3 +39,6 @@ Cargo.lock
 .coverage
 coverage.xml
 coverage.info
+
+# build artifacts
+!build/**/*.elf
