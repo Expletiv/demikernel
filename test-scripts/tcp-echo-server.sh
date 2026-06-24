@@ -9,10 +9,13 @@ PORT="${PORT:-12345}"
 THREADS="${THREADS:-1}"
 LOG_INTERVAL="${LOG_INTERVAL:-5}"
 
-echo "Starting ${LIBOS} TCP echo server on ${SERVER_IP}:${PORT}"
+CORE_ID="${CORE_ID:-2}"
+OS_TUNING="nice -n -20 chrt -f 99 taskset -c ${CORE_ID}"
+
+echo "Starting ${LIBOS} TCP echo server on ${SERVER_IP}:${PORT} (Pinned to core ${CORE_ID})"
 echo "CONFIG_PATH=${CONFIG_PATH}"
 
-exec "${BUILD_DIR}/rust/tcp-echo.elf" \
+exec ${OS_TUNING} "${BUILD_DIR}/rust/tcp-echo.elf" \
   --peer server \
   --address "${SERVER_IP}:${PORT}" \
   --nthreads "${THREADS}" \
