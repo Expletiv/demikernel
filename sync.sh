@@ -10,7 +10,7 @@ if [ "${#HOSTS[@]}" -eq 0 ]; then
 fi
 
 if [ ! -d "build/${LIBOS}" ]; then
-  echo "Missing build/${LIBOS}. Run ./build.sh ${LIBOS} on the build machine first." >&2
+  echo "Missing build/${LIBOS}." >&2
   exit 1
 fi
 

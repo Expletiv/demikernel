@@ -18,8 +18,3 @@ if [ ! -f "${CONFIG_PATH}" ]; then
   echo "Missing CONFIG_PATH=${CONFIG_PATH}" >&2
   exit 1
 fi
-
-if [ ! -x "${BUILD_DIR}/rust/tcp-echo.elf" ]; then
-  echo "Missing executable ${BUILD_DIR}/rust/tcp-echo.elf" >&2
-  exit 1
-fi
