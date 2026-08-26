@@ -5,7 +5,8 @@
 * `test-scripts`: Enthält Shell-Skripte zum Ausführen der Testanwendungen.
 * `build`: Enthält die kompilierten Testanwendungen mit den verschiedenen libOSes (catnap, catnip, catpowder).
 * `config`: Enthält die Konfigurationsdateien für Demikernel mit einer Konfigurationsdatei für node81 und node82 für jedes libOS.
-* `examples`: Enthält den Code der Testanwendungen (identisch zum Demikernel Repository, mit Ausnahme der udp-echo- und udp-ping-pong-Anwendungen).
+* `examples`: Enthält den Code der Testanwendungen (identisch zum Demikernel Repository, mit Ausnahme der udp-ping-pong-Anwendung).
+* `results`: Enthält die rohen Messergebnisse (Konsolen-Outputs) der durchgeführten Latenz-Benchmarks (5 Runs pro Test) für die verschiedenen libOS-Varianten und DPDK.
 * `build.sh`: Zum Kompilieren der Testanwendungen für ein gewähltes libOS.
 * `sync.sh`: Zum Kopieren von `test-scripts`, `build` und `config` auf node81 und node82.
 
@@ -142,7 +143,7 @@ sudo LIBOS=catnip /demikernel/test-scripts/tcp-echo-client.sh
 
 ### 4.2 UDP-Echo Anwendung ausführen
 
-Für UDP-Echo werden die leicht veränderte Testanwendung ```udp-ping-pong``` und ```udp-echo``` aus dem Demikernel Repository verwendet.
+Für UDP-Echo wird die leicht veränderte Testanwendung ```udp-ping-pong``` aus dem Demikernel Repository verwendet.
 
 ```bash
 sudo LIBOS=catnip /demikernel/test-scripts/udp-echo-server.sh
@@ -212,3 +213,10 @@ Pktgen:> page latency
 
 Pktgen:> start 0
 ```
+
+## 6. Messergebnisse (Rohdaten)
+
+Die Konsolen-Outputs der fünf durchgeführten Benchmarkläufe befinden sich im Ordner `results`.
+Dort sind die Ergebnisse jeweils nach dem genutzten libOS (`catnap`, `catnip`, `catpowder`) und dem verwendeten Protokoll (`tcp.md`, `udp.md`) strukturiert.
+Die in den Logs ausgegebenen Latenzen (z. B. das Feld `p50` für den Median) sind in Nanosekunden angegeben.
+Zusätzlich befinden sich die Ergebnisse für den reinen DPDK-Benchmark in `results/raw-dpdk`.
