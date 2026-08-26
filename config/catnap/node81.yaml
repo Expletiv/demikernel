@@ -1,0 +1,38 @@
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT license.
+
+demikernel:
+  local_ipv4_addr: 10.0.0.81
+  local_link_addr: "0c:42:a1:54:74:ca"
+raw_socket:
+  linux_interface_name: "enp101s0np0"
+  xdp_interface_index: 0
+  xdp_cohost_mode: false
+  xdp_always_poke_tx: false
+  xdp_always_send_on_vf: false
+  tx_buffer_count: 4096
+  rx_buffer_count: 4096
+  tx_ring_size: 128
+  rx_ring_size: 128
+tcp_socket_options:
+  keepalive:
+    enabled: false
+    time_millis: 0
+    interval: 0
+  linger:
+    enabled: true
+    time_seconds: 0
+  nodelay: true
+inetstack_config:
+  mtu: 1500
+  mss: 1500
+  enable_jumbo_frames: false
+  udp_checksum_offload: false
+  tcp_checksum_offload: false
+  arp_table:
+    "0c:42:a1:54:77:92": "10.0.0.82"
+  arp_request_retries: 5
+  arp_request_timeout: 20
+  arp_cache_ttl: 15
+
+# vim: set tabstop=2 shiftwidth=2

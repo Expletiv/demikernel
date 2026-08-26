@@ -7,7 +7,8 @@
 
 use ::anyhow::Result;
 use ::demikernel::{demi_sgarray_t, runtime::types::demi_opcode_t, LibOS, LibOSName, QDesc};
-use ::std::{env, net::SocketAddr, slice, str::FromStr, time::Duration};
+use histogram::Histogram;
+use ::std::{env, net::SocketAddr, slice, str::FromStr, time::{Duration, Instant}};
 
 #[cfg(target_os = "windows")]
 pub const AF_INET: i32 = windows::Win32::Networking::WinSock::AF_INET.0 as i32;
@@ -26,12 +27,12 @@ pub const SOCK_DGRAM: i32 = libc::SOCK_DGRAM;
 //======================================================================================================================
 
 const BUFSIZE_BYTES: usize = 64;
-const FILL_CHAR: u8 = 0x65;
-const NUM_PINGS: usize = 64;
+const NUM_PINGS: usize = 1_000_000;
 const TIMEOUT_SECONDS: Duration = Duration::from_secs(60);
 const RETRY_TIMEOUT_SECONDS: Duration = Duration::from_secs(1);
+const LOG_INTERVAL_SECONDS: u64 = 5;
 
-fn mksga(libos: &mut LibOS, size: usize, value: u8) -> Result<demi_sgarray_t> {
+fn mksga(libos: &mut LibOS, size: usize, timestamp: u64) -> Result<demi_sgarray_t> {
     let sga = match libos.sgaalloc(size) {
         Ok(sga) => sga,
         Err(e) => anyhow::bail!("failed to allocate scatter-gather array: {:?}", e),
@@ -47,11 +48,18 @@ fn mksga(libos: &mut LibOS, size: usize, value: u8) -> Result<demi_sgarray_t> {
             seglen
         );
     }
+
     // Fill in the array.
     let ptr = sga.segments[0].data_buf_ptr as *mut u8;
     let len = sga.segments[0].data_len_bytes as usize;
     let slice = unsafe { slice::from_raw_parts_mut(ptr, len) };
-    slice.fill(value);
+
+    // Write the timestamp into the first 8 bytes.
+    let ts_bytes = timestamp.to_le_bytes();
+    slice[0..8].copy_from_slice(&ts_bytes);
+
+    // Zero out the remaining payload space.
+    slice[8..].fill(0);
 
     Ok(sga)
 }
@@ -98,7 +106,7 @@ impl UdpServer {
         return Ok(Self { libos, sockqd });
     }
 
-    pub fn run(&mut self, local_addr: SocketAddr, remote_addr: SocketAddr, fill_char: u8) -> Result<()> {
+    pub fn run(&mut self, local_addr: SocketAddr, remote_addr: SocketAddr) -> Result<()> {
         if let Err(e) = self.libos.bind(self.sockqd, local_addr) {
             anyhow::bail!("bind failed: {:?}", e)
         };
@@ -118,15 +126,6 @@ impl UdpServer {
                 Err(e) => anyhow::bail!("operation failed: {:?}", e),
             };
 
-            // Sanity check received data.
-            let ptr = sga.segments[0].data_buf_ptr as *mut u8;
-            let len = sga.segments[0].data_len_bytes as usize;
-            let slice = unsafe { slice::from_raw_parts_mut(ptr, len) };
-            for x in slice {
-                if *x != fill_char {
-                    anyhow::bail!("fill check failed: expected={:?} received={:?}", fill_char, *x);
-                }
-            }
             issue_pushto(&mut self.libos, self.sockqd, remote_addr, &sga)?;
             self.libos.sgafree(sga)?;
             received_responses += 1;
@@ -162,7 +161,6 @@ impl UdpClient {
         &mut self,
         local_addr: SocketAddr,
         remote_addr: SocketAddr,
-        fill_char: u8,
         bufsize_bytes: usize,
         num_pings: usize,
     ) -> Result<()> {
@@ -170,9 +168,20 @@ impl UdpClient {
             anyhow::bail!("bind failed: {:?}", e)
         };
 
-        let mut received_responses = 0;
-        while received_responses < num_pings {
-            let sga = mksga(&mut self.libos, bufsize_bytes, fill_char)?;
+        let mut total_received = 0;
+        let mut interval_received = 0;
+
+        let start_time = Instant::now();
+        let mut last_log_time = Instant::now();
+        let mut stats = Histogram::new(7, 64)?;
+
+        println!("HEADERS:tx,rx,rps,p50,p90,p99,p99.9,p99.99,p99.999,p99.9999,p100");
+
+        while total_received < num_pings {
+            // Encode the timestamp
+            let timestamp = Instant::now().duration_since(start_time).as_nanos() as u64;
+            let sga = mksga(&mut self.libos, bufsize_bytes, timestamp)?;
+
             // Send packet and wait for response.
             let returned_sga = loop {
                 issue_pushto(&mut self.libos, self.sockqd, remote_addr, &sga)?;
@@ -186,29 +195,54 @@ impl UdpClient {
                 match self.libos.wait(qt, Some(RETRY_TIMEOUT_SECONDS)) {
                     Ok(qr) if qr.qr_opcode == demi_opcode_t::DEMI_OPC_POP => break unsafe { qr.qr_value.sga },
                     Ok(_) => anyhow::bail!("unexpected result"),
-                    // Retry if we didn't receive a response in a second.
-                    Err(e) if e.errno == libc::ETIMEDOUT => {
-                        println!("Did not receive a response to last request in 1 second. Retrying ...");
-                        continue;
-                    },
+                    Err(e) if e.errno == libc::ETIMEDOUT => continue,
                     Err(e) => anyhow::bail!("operation failed: {:?}", e),
                 };
             };
+
             // Free the sent sga.
             self.libos.sgafree(sga)?;
-            // Sanity check received data.
-            let ptr = returned_sga.segments[0].data_buf_ptr as *mut u8;
-            let len = returned_sga.segments[0].data_len_bytes as usize;
-            let slice = unsafe { slice::from_raw_parts_mut(ptr, len) };
-            for x in slice {
-                if *x != fill_char {
-                    anyhow::bail!("fill check failed: expected={:?} received={:?}", fill_char, *x);
-                }
-            }
+
+            // Decode the timestamp
+            let ptr = returned_sga.segments[0].data_buf_ptr as *const u8;
+            let slice = unsafe { slice::from_raw_parts(ptr, 8) };
+            let mut ts_bytes = [0u8; 8];
+            ts_bytes.copy_from_slice(slice);
+            let echoed_timestamp = u64::from_le_bytes(ts_bytes);
+
+            // Log elapsed time
+            let now = Instant::now().duration_since(start_time).as_nanos() as u64;
+            let elapsed = now - echoed_timestamp;
+            stats.increment(elapsed).unwrap_or(());
+
             // Free returned sga.
             self.libos.sgafree(returned_sga)?;
-            received_responses += 1;
-            println!("ping {:?}", received_responses);
+            total_received += 1;
+            interval_received += 1;
+
+            // Dump statistics periodically
+            if last_log_time.elapsed() >= Duration::from_secs(LOG_INTERVAL_SECONDS) {
+                let time_elapsed = last_log_time.elapsed().as_secs_f64();
+                let rps = interval_received as f64 / time_elapsed;
+
+                println!(
+                    "METRICS:{:?},{:?},{:.1},{:?},{:?},{:?},{:?},{:?},{:?},{:?},{:?}",
+                    total_received,
+                    total_received,
+                    rps,
+                    stats.percentile(50.0)?.unwrap().start(),
+                    stats.percentile(90.0)?.unwrap().start(),
+                    stats.percentile(99.0)?.unwrap().start(),
+                    stats.percentile(99.9)?.unwrap().start(),
+                    stats.percentile(99.99)?.unwrap().start(),
+                    stats.percentile(99.999)?.unwrap().start(),
+                    stats.percentile(99.9999)?.unwrap().start(),
+                    stats.percentile(100.0)?.unwrap().start(),
+                );
+
+                last_log_time = Instant::now();
+                interval_received = 0;
+            }
         }
 
         Ok(())
@@ -246,10 +280,10 @@ pub fn main() -> Result<()> {
 
         if args[1] == "--server" {
             let mut server = UdpServer::new(libos)?;
-            return server.run(local_addr, remote_addr, FILL_CHAR);
+            return server.run(local_addr, remote_addr);
         } else if args[1] == "--client" {
             let mut client = UdpClient::new(libos)?;
-            return client.run(local_addr, remote_addr, FILL_CHAR, BUFSIZE_BYTES, NUM_PINGS);
+            return client.run(local_addr, remote_addr, BUFSIZE_BYTES, NUM_PINGS);
         }
     }
 
